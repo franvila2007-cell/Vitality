@@ -32,8 +32,12 @@ export async function proxy(request: NextRequest) {
   // /auth/* (invite/magic-link callback + set-password) must stay reachable
   // both signed-out (callback exchanges the link for a session) and
   // signed-in (set-password runs right after that exchange) — only /login
-  // itself should bounce an already-signed-in user away.
-  const isPublicRoute = path.startsWith('/login') || path.startsWith('/auth');
+  // itself should bounce an already-signed-in user away. /api/auth/* must
+  // stay reachable signed-out too — /api/auth/set-session is literally how
+  // the very first session gets established, so gating it on `user` already
+  // existing is a chicken-and-egg lockout (it 302s to /login, which only
+  // accepts GET, turning the POST into a 405).
+  const isPublicRoute = path.startsWith('/login') || path.startsWith('/auth') || path.startsWith('/api/auth');
   const isLoginRoute = path.startsWith('/login');
   const isCoachRoute = path.startsWith('/coach');
 
