@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 // Temporary diagnostic — reveals only length + first/last few characters of
 // the public env vars (never the full secret) to confirm what value the
 // deployed function actually sees. Delete once the auth flow is confirmed
@@ -13,6 +16,8 @@ export async function GET() {
     last6: s.slice(-6),
     hasBullet: s.includes('•'),
   });
-  return NextResponse.json({ url: describe(url), key: describe(key) });
+  return NextResponse.json(
+    { url: describe(url), key: describe(key), checkedAt: new Date().toISOString() },
+    { headers: { 'Cache-Control': 'no-store, max-age=0' } }
+  );
 }
-// recheck 1786362744
