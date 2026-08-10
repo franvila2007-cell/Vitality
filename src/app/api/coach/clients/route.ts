@@ -50,4 +50,3 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ id: clientId, email: invited.user.email });
 }
-// service key updated 1786399513
