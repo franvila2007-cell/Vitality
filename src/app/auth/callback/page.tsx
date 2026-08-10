@@ -10,21 +10,22 @@ import { createClient } from '@/lib/supabase/client';
 // *hash fragment* (#access_token=...) — hash fragments are never sent to a
 // server, only visible to browser JS.
 //
-// @supabase/ssr's createBrowserClient hardcodes flowType: 'pkce', which
-// means its built-in detectSessionInUrl logic only looks for a `?code=`
-// param and does NOT consume implicit-flow hash tokens — so we can't just
-// mount the client and let it auto-detect. Instead, the hash is parsed by
-// hand here and the session is set explicitly via setSession(), which
-// works regardless of the client's configured flow type. The `?code=`
-// (PKCE) and `?token_hash=&type=` cases are also handled explicitly, in
-// case the project's email flow ever changes.
+// Two library quirks stack here, both confirmed by direct testing:
+// 1. @supabase/ssr's createBrowserClient hardcodes flowType: 'pkce', so its
+//    built-in detectSessionInUrl only looks for a `?code=` param and never
+//    consumes implicit-flow hash tokens — the hash has to be parsed by hand.
+// 2. Calling setSession() directly on that same browser client then throws
+//    "AuthSessionMissingError" even with genuinely valid tokens (reproduced
+//    with the exact tokens against both the browser and server clients —
+//    only the browser client's setSession() fails). So instead of setting
+//    the session client-side, the tokens are POSTed to a server route
+//    (/api/auth/set-session) where the *server* client's setSession() sets
+//    the cookies directly on the response — that path works reliably.
 export default function AuthCallbackPage() {
   const router = useRouter();
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    const supabase = createClient();
-
     async function run() {
       const params = new URLSearchParams(window.location.search);
       const code = params.get('code');
@@ -35,21 +36,25 @@ export default function AuthCallbackPage() {
       const refreshToken = hashParams.get('refresh_token');
 
       if (accessToken && refreshToken) {
-        const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-        if (error) { setError(true); return; }
-      } else if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) { setError(true); return; }
-      } else if (tokenHash && type) {
-        const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: type as 'invite' | 'magiclink' | 'recovery' | 'email' });
-        if (error) { setError(true); return; }
+        const res = await fetch('/api/auth/set-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ access_token: accessToken, refresh_token: refreshToken }),
+        });
+        if (!res.ok) { setError(true); return; }
+      } else if (code || (tokenHash && type)) {
+        const supabase = createClient();
+        if (code) {
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) { setError(true); return; }
+        } else {
+          const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash!, type: type as 'invite' | 'magiclink' | 'recovery' | 'email' });
+          if (error) { setError(true); return; }
+        }
       } else {
         setError(true);
         return;
       }
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { setError(true); return; }
 
       router.replace('/auth/set-password');
     }
