@@ -10,6 +10,7 @@ export const revalidate = 0;
 export async function GET() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const keyRenamed = process.env.SUPABASE_ANON_KEY_PUBLIC || '';
   const describe = (s: string) => ({
     length: s.length,
     first12: s.slice(0, 12),
@@ -17,7 +18,7 @@ export async function GET() {
     hasBullet: s.includes('•'),
   });
   return NextResponse.json(
-    { url: describe(url), key: describe(key), checkedAt: new Date().toISOString() },
+    { url: describe(url), key: describe(key), keyRenamed: describe(keyRenamed), checkedAt: new Date().toISOString() },
     { headers: { 'Cache-Control': 'no-store, max-age=0' } }
   );
 }
