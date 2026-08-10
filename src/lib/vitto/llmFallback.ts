@@ -37,3 +37,56 @@ export async function llmAssistParse(text: string, apiKey: string): Promise<stri
     return null; // graceful degradation — caller falls back to the local "ask for calories" flow
   }
 }
+
+// Last-resort fallback: reached only when a food is genuinely not in the
+// local database (or any typo/slang variant of something that is) — a
+// restaurant item, a home-cooked dish, a branded product. Rather than
+// refusing and asking the client for a manual calorie estimate, this asks
+// Claude to estimate macros directly from its own nutrition knowledge, the
+// same way a knowledgeable coach would ballpark an unfamiliar meal. Every
+// entry logged this way is marked `estimated: true` with a capped
+// confidence so it's visibly distinct from the coach's verified database —
+// never silently presented as exact.
+export type EstimatedFoodItem = { label: string; cal: number; protein_g: number; carbs_g: number; fat_g: number };
+
+const ESTIMATE_SYSTEM_PROMPT = `You are a nutrition estimation assistant inside a food-logging app. The user's message describes food/drink that a local nutrition database did NOT recognize — it may be a restaurant or chain menu item, a home-cooked dish, a branded product, or something described in enough detail to estimate.
+
+For each distinct food/drink item in the message:
+- Identify a sensible label (include the brand/restaurant name if given).
+- Infer a reasonable portion from context, or assume one typical serving if no amount is given.
+- Estimate calories, protein (g), carbs (g), and fat (g) for that portion using your best available nutrition knowledge. Reasonable, honest estimates are expected — this is not a request for a precise lab measurement.
+
+Respond with ONLY a JSON object, no other text, in this exact shape:
+{"items": [{"label": "string", "cal": number, "protein_g": number, "carbs_g": number, "fat_g": number}]}
+
+If nothing in the message is actually food or drink, respond with {"items": []}.`;
+
+export async function llmEstimateFoods(text: string, apiKey: string): Promise<EstimatedFoodItem[] | null> {
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      temperature: 0,
+      system: ESTIMATE_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: text }],
+    });
+    const block = msg.content[0];
+    if (!block || block.type !== 'text') return null;
+    const parsed = JSON.parse(block.text.trim()) as { items?: unknown };
+    if (!Array.isArray(parsed.items)) return null;
+    const items = parsed.items.filter(
+      (it): it is EstimatedFoodItem =>
+        !!it && typeof it === 'object' &&
+        typeof (it as EstimatedFoodItem).label === 'string' &&
+        typeof (it as EstimatedFoodItem).cal === 'number' &&
+        typeof (it as EstimatedFoodItem).protein_g === 'number' &&
+        typeof (it as EstimatedFoodItem).carbs_g === 'number' &&
+        typeof (it as EstimatedFoodItem).fat_g === 'number'
+    );
+    return items.length > 0 ? items : null;
+  } catch (err) {
+    console.error('llmEstimateFoods failed', err);
+    return null; // graceful degradation — caller falls back to the local "ask for calories" flow
+  }
+}
