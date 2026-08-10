@@ -1,8 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { localDateStr, addDays } from '@/lib/date';
+import LoadingScreen from '@/components/LoadingScreen';
 import type { Database } from '@/lib/supabase/database.types';
 
 type Meal = Database['public']['Tables']['food_log_entries']['Row'];
@@ -26,6 +28,7 @@ export default function TodayClient() {
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -69,6 +72,10 @@ export default function TodayClient() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [chat, sending]);
 
   async function sendChat() {
     const text = chatInput.trim();
@@ -116,7 +123,7 @@ export default function TodayClient() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  if (loading) return <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-neutral-400">Loading…</div>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
@@ -134,7 +141,7 @@ export default function TodayClient() {
       {/* Vitto chat */}
       <div className="bg-surface border border-border rounded-2xl p-4">
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 rounded-full bg-brand-light flex items-center justify-center text-sm">🥑</div>
+          <Image src="/vitto-avatar.png" alt="" width={32} height={32} className="rounded-full bg-brand-light flex-shrink-0" />
           <div>
             <p className="text-sm font-medium">Vitto</p>
             <p className="text-[11px] text-neutral-400">Your Vitality AI food logger</p>
@@ -142,17 +149,24 @@ export default function TodayClient() {
         </div>
         <div className="flex flex-col gap-2 mb-3 max-h-72 overflow-y-auto">
           {chat.map((m) => (
-            <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div key={m.id} className={`flex items-end gap-1.5 animate-[fade-in_0.15s_ease] ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              {m.role === 'bot' && <Image src="/vitto-avatar.png" alt="" width={20} height={20} className="rounded-full flex-shrink-0" />}
               <div className={`px-3 py-2 rounded-2xl text-[13px] max-w-[85%] ${m.role === 'user' ? 'bg-brand text-white rounded-br-sm' : 'bg-neutral-100 text-neutral-800 rounded-bl-sm'}`}>
                 {m.text}
               </div>
             </div>
           ))}
           {sending && (
-            <div className="flex justify-start">
-              <div className="px-3 py-2 rounded-2xl rounded-bl-sm bg-neutral-100 text-neutral-400 text-[13px]">…</div>
+            <div className="flex items-end gap-1.5 justify-start">
+              <Image src="/vitto-avatar.png" alt="" width={20} height={20} className="rounded-full flex-shrink-0" />
+              <div className="px-3 py-2 rounded-2xl rounded-bl-sm bg-neutral-100 text-neutral-400 text-[13px] flex gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce" />
+              </div>
             </div>
           )}
+          <div ref={chatEndRef} />
         </div>
         <div className="flex gap-2">
           <input
@@ -160,9 +174,9 @@ export default function TodayClient() {
             onChange={(e) => setChatInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') sendChat(); }}
             placeholder="Add whatever you want to log..."
-            className="flex-1 min-w-0 rounded-full border border-border bg-neutral-50 px-4 py-2 text-sm outline-none focus:border-brand"
+            className="flex-1 min-w-0 rounded-full border border-border bg-neutral-50 px-4 py-2 text-sm outline-none focus:border-brand transition-colors"
           />
-          <button onClick={sendChat} disabled={sending} className="w-10 h-10 rounded-full bg-brand text-white flex items-center justify-center disabled:opacity-50">➤</button>
+          <button onClick={sendChat} disabled={sending} className="w-10 h-10 rounded-full bg-brand text-white flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95">➤</button>
         </div>
       </div>
 
@@ -189,9 +203,9 @@ export default function TodayClient() {
           <div className="flex flex-col gap-1.5">
             {meals.map((m) => (
               <div key={m.id} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2">
-                <span className="flex-1 text-sm">{m.name}</span>
-                <span className="text-[11px] text-neutral-400 whitespace-nowrap">{Math.round(m.calories)} kcal · {Math.round(m.protein_g)}p {Math.round(m.carbs_g)}c {Math.round(m.fat_g)}f</span>
-                <button onClick={() => deleteMeal(m.id)} className="text-neutral-300 hover:text-red-500 text-sm">✕</button>
+                <span className="flex-1 min-w-0 text-sm truncate">{m.name}</span>
+                <span className="flex-shrink-0 text-[11px] text-neutral-400 whitespace-nowrap">{Math.round(m.calories)} kcal · {Math.round(m.protein_g)}p {Math.round(m.carbs_g)}c {Math.round(m.fat_g)}f</span>
+                <button onClick={() => deleteMeal(m.id)} className="flex-shrink-0 text-neutral-300 hover:text-red-500 text-sm transition-colors">✕</button>
               </div>
             ))}
           </div>
@@ -229,7 +243,7 @@ function MacroBar({ label, value, target, color }: { label: string; value: numbe
       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
       <span className="text-xs text-neutral-500 w-14 flex-shrink-0">{label}</span>
       <div className="flex-1 h-1.5 bg-neutral-100 rounded-full overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+        <div className="h-full rounded-full transition-[width] duration-300 ease-out" style={{ width: `${pct}%`, background: color }} />
       </div>
       <span className="text-[11px] text-neutral-600 w-16 text-right flex-shrink-0">{Math.round(value)}/{target}g</span>
     </div>

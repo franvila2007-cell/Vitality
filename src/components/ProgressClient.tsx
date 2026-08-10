@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getProjections, computeMonthColors, type GoalType } from '@/lib/progress';
+import LoadingScreen from '@/components/LoadingScreen';
 import type { Database } from '@/lib/supabase/database.types';
 
 type ClientProfile = Database['public']['Tables']['client_profiles']['Row'];
@@ -47,7 +48,7 @@ export default function ProgressClient() {
     load();
   }
 
-  if (loading) return <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-neutral-400">Loading…</div>;
+  if (loading) return <LoadingScreen />;
   if (!profile) return <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-neutral-400">Your coach hasn&rsquo;t set up your program yet.</div>;
 
   const pace = (profile.pace_config as Record<string, number[]>)?.[profile.goal_type] || [1.5, 1.5, 1.5, 1.5, 1.5, 1.5];
@@ -82,11 +83,11 @@ export default function ProgressClient() {
       <div className="bg-surface border border-border rounded-2xl p-4">
         <p className="text-sm font-medium mb-3">Log a monthly checkpoint</p>
         <div className="flex gap-2">
-          <select value={newMonth} onChange={(e) => setNewMonth(Number(e.target.value))} className="rounded-lg border border-border px-2 py-2 text-sm">
+          <select value={newMonth} onChange={(e) => setNewMonth(Number(e.target.value))} className="flex-shrink-0 rounded-lg border border-border px-2 py-2 text-sm">
             {[2, 3, 4, 5, 6].map((m) => <option key={m} value={m}>Month {m}</option>)}
           </select>
-          <input value={newWeight} onChange={(e) => setNewWeight(e.target.value)} type="number" step="0.1" placeholder="Weight (kg)" className="flex-1 rounded-lg border border-border px-3 py-2 text-sm" />
-          <button onClick={saveCheckpoint} className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium">Save</button>
+          <input value={newWeight} onChange={(e) => setNewWeight(e.target.value)} type="number" step="0.1" placeholder="Weight (kg)" className="flex-1 min-w-0 rounded-lg border border-border px-3 py-2 text-sm" />
+          <button onClick={saveCheckpoint} className="flex-shrink-0 rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium transition-transform active:scale-95">Save</button>
         </div>
       </div>
     </div>
