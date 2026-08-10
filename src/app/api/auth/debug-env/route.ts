@@ -15,3 +15,4 @@ export async function GET() {
   });
   return NextResponse.json({ url: describe(url), key: describe(key) });
 }
+// recheck 1786362744
