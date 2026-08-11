@@ -243,7 +243,7 @@ export default function TodayClient() {
             {!rankOverride && <span className="text-white/60 font-normal">· auto</span>}
           </span>
         </div>
-        <p className="relative text-2xl font-medium mb-4">{firstName}</p>
+        <p className="relative text-2xl font-medium mb-4">Welcome to Vitality, {firstName}</p>
         <div className="relative flex gap-6 mb-4">
           <div>
             <div className="text-xl font-medium flex items-center gap-1"><span className="text-base">🔥</span>{streak}</div>
@@ -402,7 +402,7 @@ export default function TodayClient() {
       {/* Note from your coach */}
       {coachNote && (
         <div className="bg-brand-light border border-brand/20 rounded-2xl p-4">
-          <p className="text-[10px] uppercase tracking-wide text-brand-dark/60 mb-1.5">A note from your coach</p>
+          <p className="text-[10px] uppercase tracking-wide text-brand-dark/60 mb-1.5">A note from Francesco</p>
           <p className="text-sm text-brand-dark leading-relaxed">{coachNote}</p>
         </div>
       )}
