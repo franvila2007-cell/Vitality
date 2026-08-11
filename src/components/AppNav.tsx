@@ -26,10 +26,10 @@ export default function AppNav() {
   return (
     <div className="sticky top-0 z-10 bg-surface border-b border-border">
       <div className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <Link href="/" className="flex items-center gap-2 transition-opacity hover:opacity-70">
           <Image src="/vitality-logo.png" alt="" width={28} height={22} priority />
-          <span className="font-medium text-lg text-brand-dark">Vitality</span>
-        </div>
+          <span className="font-medium text-lg text-brand-dark" style={{ fontFamily: 'var(--font-inter)' }}>Vitality</span>
+        </Link>
         <button onClick={signOut} className="text-xs text-neutral-400 hover:text-neutral-600 transition-colors">
           Sign out
         </button>

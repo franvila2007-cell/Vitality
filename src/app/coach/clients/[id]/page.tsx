@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import TargetsEditor from '@/components/coach/TargetsEditor';
 import RankOverride from '@/components/coach/RankOverride';
+import CoachNoteEditor from '@/components/coach/CoachNoteEditor';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
@@ -107,6 +108,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         )}
 
         <TargetsEditor userId={id} initial={targets} />
+
+        {clientProfile && <CoachNoteEditor userId={id} initial={clientProfile.coach_note} />}
 
         {latestDate && (mealsByDate.get(latestDate)?.length ?? 0) > 0 && (
           <div className="bg-surface border border-border rounded-2xl p-4">

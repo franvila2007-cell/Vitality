@@ -69,10 +69,10 @@ export default async function CoachPage() {
     <div className="min-h-screen">
       <div className="sticky top-0 z-10 bg-surface border-b border-border">
         <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <Link href="/coach" className="flex items-center gap-2 transition-opacity hover:opacity-70">
             <Image src="/vitality-logo.png" alt="" width={28} height={22} priority />
-            <span className="font-medium text-lg text-brand-dark">Vitality — Coach</span>
-          </div>
+            <span className="font-medium text-lg text-brand-dark" style={{ fontFamily: 'var(--font-inter)' }}>Vitality — Coach</span>
+          </Link>
           <SignOutButton />
         </div>
       </div>

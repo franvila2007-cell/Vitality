@@ -43,7 +43,9 @@ export default function TodayClient() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [doneHabitIds, setDoneHabitIds] = useState<Set<string>>(new Set());
   const [streak, setStreak] = useState(0);
+  const [weekHistory, setWeekHistory] = useState<{ date: string; hit: boolean }[]>([]);
   const [rankOverride, setRankOverride] = useState<Rank | null>(null);
+  const [coachNote, setCoachNote] = useState('');
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -70,6 +72,15 @@ export default function TodayClient() {
     let s = 0, cursor = today;
     while (mealDates.has(cursor) && habitDates.has(cursor)) { s++; cursor = addDays(cursor, -1); }
     setStreak(s);
+
+    // Same underlying data, just the last 7 days instead of walking back
+    // until the streak breaks — for the week-at-a-glance bar.
+    const week: { date: string; hit: boolean }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = addDays(today, -i);
+      week.push({ date: d, hit: mealDates.has(d) && habitDates.has(d) });
+    }
+    setWeekHistory(week);
   }, [supabase, today]);
 
   const load = useCallback(async () => {
@@ -78,8 +89,9 @@ export default function TodayClient() {
 
     // All independent of each other — fired together instead of the streak
     // window waiting on the first batch to resolve first.
-    const [profileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes] = await Promise.all([
+    const [profileRes, clientProfileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes] = await Promise.all([
       supabase.from('profiles').select('full_name').eq('id', user.id).single(),
+      supabase.from('client_profiles').select('coach_note').eq('user_id', user.id).maybeSingle(),
       supabase.from('targets').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('food_log_entries').select('*').eq('user_id', user.id).eq('date', today).order('logged_at', { ascending: true }),
       supabase.from('habits').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
@@ -89,6 +101,7 @@ export default function TodayClient() {
     ]);
 
     setFullName(profileRes.data?.full_name || '');
+    setCoachNote(clientProfileRes.data?.coach_note || '');
     if (targetsRes.data) setTargets(targetsRes.data);
     else await supabase.from('targets').insert({ user_id: user.id, ...DEFAULT_TARGETS, updated_by: 'client' });
     setMeals(mealsRes.data || []);
@@ -203,6 +216,7 @@ export default function TodayClient() {
   const firstName = fullName.trim().split(/\s+/)[0] || 'there';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const greetingEmoji = hour < 17 ? '☀️' : '🌙';
   const rank = rankOverride ?? computeDayRank({
     habitsTotal: habits.length,
     habitsDone: doneHabitIds.size,
@@ -215,25 +229,65 @@ export default function TodayClient() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
       {/* Welcome card */}
-      <div className="bg-brand rounded-2xl p-5 text-white">
-        <div className="flex items-start justify-between mb-1">
-          <p className="text-xs text-white/70">{greeting}</p>
-          <span className={`text-xs font-medium rounded-full px-2 py-1 border border-white/20 bg-white/10`}>
+      <div
+        className="relative overflow-hidden rounded-2xl p-5 text-white"
+        style={{ background: 'linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%)' }}
+      >
+        <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+        <div className="absolute -bottom-12 -left-8 w-32 h-32 rounded-full bg-black/10 blur-2xl pointer-events-none" />
+
+        <div className="relative flex items-start justify-between mb-1">
+          <p className="text-xs text-white/70">{greeting} {greetingEmoji}</p>
+          <span className="text-xs font-medium rounded-full px-2.5 py-1 border border-white/20 bg-white/10 flex items-center gap-1" title={rankOverride ? 'Confirmed by your coach' : "Auto — your coach confirms your final rank at day's end"}>
             {RANK_META[rank].emoji} {RANK_META[rank].label}
+            {!rankOverride && <span className="text-white/60 font-normal">· auto</span>}
           </span>
         </div>
-        <p className="text-2xl font-medium mb-3">{firstName}</p>
-        <div className="flex gap-6">
-          <div><div className="text-xl font-medium">{streak}</div><div className="text-[10px] uppercase text-white/50">Streak</div></div>
-          <div><div className="text-xl font-medium">{doneHabitIds.size}/{habits.length}</div><div className="text-[10px] uppercase text-white/50">Habits today</div></div>
-          <div><div className="text-xl font-medium">{Math.round(totals.cal)}</div><div className="text-[10px] uppercase text-white/50">Kcal logged</div></div>
+        <p className="relative text-2xl font-medium mb-4">{firstName}</p>
+        <div className="relative flex gap-6 mb-4">
+          <div>
+            <div className="text-xl font-medium flex items-center gap-1"><span className="text-base">🔥</span>{streak}</div>
+            <div className="text-[10px] uppercase text-white/50 mt-0.5">Streak</div>
+          </div>
+          <div>
+            <div className="text-xl font-medium flex items-center gap-1"><span className="text-base">✅</span>{doneHabitIds.size}/{habits.length}</div>
+            <div className="text-[10px] uppercase text-white/50 mt-0.5">Habits today</div>
+          </div>
+          <div>
+            <div className="text-xl font-medium flex items-center gap-1"><span className="text-base">🍽️</span>{Math.round(totals.cal)}</div>
+            <div className="text-[10px] uppercase text-white/50 mt-0.5">Kcal logged</div>
+          </div>
+        </div>
+
+        {/* This week */}
+        <div className="relative border-t border-white/15 pt-3">
+          <p className="text-[10px] uppercase text-white/50 mb-1.5">This week</p>
+          <div className="flex gap-1.5">
+            {weekHistory.map(({ date, hit }) => {
+              const [y, m, d] = date.split('-').map(Number);
+              const label = new Date(y, m - 1, d).toLocaleDateString('en', { weekday: 'narrow' });
+              const isToday = date === today;
+              return (
+                <div key={date} className="flex-1 flex flex-col items-center gap-1">
+                  <div
+                    className={`w-full aspect-square rounded-lg flex items-center justify-center text-xs ${
+                      hit ? 'bg-white text-brand-dark font-medium' : isToday ? 'border border-white/40 text-white/60' : 'bg-white/10 text-white/30'
+                    }`}
+                  >
+                    {hit ? '✓' : ''}
+                  </div>
+                  <span className={`text-[9px] ${isToday ? 'text-white' : 'text-white/40'}`}>{label}</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
       {/* Vitto chat */}
       <div className="bg-surface border border-border rounded-2xl p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Image src="/vitto-avatar.png" alt="" width={32} height={32} className="rounded-full bg-brand-light flex-shrink-0" />
+        <div className="flex items-center gap-3 mb-3">
+          <Image src="/vitto-avatar.png" alt="" width={56} height={56} className="flex-shrink-0" />
           <div>
             <p className="text-sm font-medium">Vitto</p>
             <p className="text-[11px] text-neutral-400">Your Vitality AI food logger</p>
@@ -344,6 +398,14 @@ export default function TodayClient() {
           })}
         </div>
       </div>
+
+      {/* Note from your coach */}
+      {coachNote && (
+        <div className="bg-brand-light border border-brand/20 rounded-2xl p-4">
+          <p className="text-[10px] uppercase tracking-wide text-brand-dark/60 mb-1.5">A note from your coach</p>
+          <p className="text-sm text-brand-dark leading-relaxed">{coachNote}</p>
+        </div>
+      )}
 
       {scanning && <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setScanning(false)} />}
 
