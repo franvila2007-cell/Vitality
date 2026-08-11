@@ -90,3 +90,45 @@ export async function llmEstimateFoods(text: string, apiKey: string): Promise<Es
     return null; // graceful degradation — caller falls back to the local "ask for calories" flow
   }
 }
+
+// Rates food quality (whole/minimally processed vs. junk/ultra-processed)
+// for the daily gold/silver/bronze rank — run once per message on every
+// logged item, whether it matched the local database or was LLM-estimated,
+// so the rank's quality component always has a real signal. Judged from the
+// name alone (not calories/portion), since the rubric is about the kind of
+// food, not how much of it was eaten.
+const QUALITY_SYSTEM_PROMPT = `You rate the nutritional quality of food/drink items for a fitness coaching app, on a 0-100 scale:
+- 85-100: whole, minimally processed foods (plain meat/fish/eggs, vegetables, fruit, whole grains, plain dairy)
+- 60-84: balanced/lightly processed (home-cooked mixed meals, whole-grain bread, plain pasta, nuts)
+- 35-59: moderately processed (fast food, fried food, sugary cereal, white bread, sweetened drinks)
+- 0-34: ultra-processed/junk (candy, chips, soda, pastries, deep-fried fast food, alcohol)
+
+Judge each item on its own, based on the typical preparation implied by its name — not on portion size or calorie count.
+
+Respond with ONLY a JSON object, no other text, in this exact shape:
+{"scores": [number, ...]}
+One integer 0-100 per input item, in the same order given.`;
+
+export async function llmRateFoodQuality(foodNames: string[], apiKey: string): Promise<number[] | null> {
+  if (foodNames.length === 0) return null;
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 150,
+      temperature: 0,
+      system: QUALITY_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: foodNames.map((name, i) => `${i + 1}. ${name}`).join('\n') }],
+    });
+    const block = msg.content[0];
+    if (!block || block.type !== 'text') return null;
+    const parsed = JSON.parse(block.text.trim()) as { scores?: unknown };
+    if (!Array.isArray(parsed.scores) || parsed.scores.length !== foodNames.length) return null;
+    const scores = parsed.scores.map((s) => Math.max(0, Math.min(100, Math.round(Number(s)))));
+    if (scores.some((s) => Number.isNaN(s))) return null;
+    return scores;
+  } catch (err) {
+    console.error('llmRateFoodQuality failed', err);
+    return null; // graceful degradation — quality_score stays null, excluded from the rank average
+  }
+}

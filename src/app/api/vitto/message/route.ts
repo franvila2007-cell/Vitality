@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { processVittoMessage, parseFoodText, type VittoContext, type VittoAction, type MealEntry, type PendingState } from '@/lib/vitto/parser';
 import type { FoodEntry } from '@/lib/vitto/foodDb';
-import { llmAssistParse, llmEstimateFoods } from '@/lib/vitto/llmFallback';
+import { llmAssistParse, llmEstimateFoods, llmRateFoodQuality } from '@/lib/vitto/llmFallback';
 
 export const runtime = 'nodejs';
 
@@ -114,21 +114,36 @@ export async function POST(req: Request) {
     }
   }
 
-  await applyActions(supabase, user.id, date, result.actions);
+  await applyActions(supabase, user.id, date, result.actions, process.env.ANTHROPIC_API_KEY);
 
   const { data: freshMeals } = await supabase.from('food_log_entries').select('*').eq('user_id', user.id).eq('date', date).order('logged_at', { ascending: true });
 
   return NextResponse.json({ reply: result.reply, meals: freshMeals || [] });
 }
 
-async function applyActions(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, date: string, actions: VittoAction[]) {
+async function applyActions(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, date: string, actions: VittoAction[], apiKey?: string) {
+  // Batched once per message rather than per action — rates every food
+  // logged this turn (matched or estimated) in a single small LLM call, so
+  // the rank's quality component has a real signal without adding a call
+  // per item. Left null (excluded from the rank average) if it fails or no
+  // API key is configured.
+  const addMealActions = actions.filter((a): a is Extract<VittoAction, { kind: 'add_meal' }> => a.kind === 'add_meal');
+  let qualityScores: (number | null)[] = addMealActions.map(() => null);
+  if (apiKey && addMealActions.length > 0) {
+    const rated = await llmRateFoodQuality(addMealActions.map((a) => a.entry.name), apiKey);
+    if (rated) qualityScores = rated;
+  }
+
+  let mealIdx = 0;
   for (const action of actions) {
     if (action.kind === 'add_meal') {
       const e = action.entry;
+      const qualityScore = qualityScores[mealIdx] ?? null;
+      mealIdx++;
       await supabase.from('food_log_entries').insert({
         user_id: userId, date, name: e.name, calories: e.cal, protein_g: e.prot, carbs_g: e.carb, fat_g: e.fat,
         original_text: e.originalText ?? null, matched_food: e.matchedFood ?? null, amount: e.amount ?? null, unit: e.unit ?? null,
-        estimated: e.estimated ?? false, confidence: e.confidence ?? null, source: 'chat',
+        estimated: e.estimated ?? false, confidence: e.confidence ?? null, source: 'chat', quality_score: qualityScore,
       });
     } else if (action.kind === 'remove_meal') {
       await supabase.from('food_log_entries').delete().eq('id', action.id).eq('user_id', userId);

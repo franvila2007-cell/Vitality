@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import TargetsEditor from '@/components/coach/TargetsEditor';
+import RankOverride from '@/components/coach/RankOverride';
+import { computeDayRank, RANK_META } from '@/lib/ranking';
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -11,25 +13,52 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (me?.role !== 'coach') redirect('/');
 
-  const [profileRes, clientProfileRes, targetsRes, checkpointsRes, historyRes] = await Promise.all([
+  const [profileRes, clientProfileRes, targetsRes, checkpointsRes, historyRes, habitsRes, habitCompletionsRes] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', id).single(),
     supabase.from('client_profiles').select('*').eq('user_id', id).maybeSingle(),
     supabase.from('targets').select('*').eq('user_id', id).maybeSingle(),
     supabase.from('weight_checkpoints').select('*').eq('user_id', id).order('month_index'),
-    supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g').eq('user_id', id).order('date', { ascending: false }).limit(500),
+    supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', id).order('date', { ascending: false }).limit(500),
+    supabase.from('habits').select('id').eq('user_id', id),
+    // Retroactively scoring past days assumes today's habit list and targets
+    // applied then too — a reasonable approximation, since this app doesn't
+    // track historical versions of either.
+    supabase.from('habit_completions').select('date').eq('user_id', id).eq('completed', true).order('date', { ascending: false }).limit(2000),
   ]);
 
   if (profileRes.error || !profileRes.data) notFound();
   const clientProfile = clientProfileRes.data;
   const targets = targetsRes.data;
+  const habitsTotal = habitsRes.data?.length ?? 0;
+  const rankTargets = targets ? { calories: targets.calories, protein_g: targets.protein_g, carbs_g: targets.carbs_g, fat_g: targets.fat_g } : null;
 
-  const byDate = new Map<string, { cal: number; prot: number; carb: number; fat: number; count: number }>();
-  for (const row of historyRes.data || []) {
-    const cur = byDate.get(row.date) || { cal: 0, prot: 0, carb: 0, fat: 0, count: 0 };
-    cur.cal += row.calories; cur.prot += row.protein_g; cur.carb += row.carbs_g; cur.fat += row.fat_g; cur.count += 1;
-    byDate.set(row.date, cur);
+  const habitsDoneByDate = new Map<string, number>();
+  for (const row of habitCompletionsRes.data || []) {
+    habitsDoneByDate.set(row.date, (habitsDoneByDate.get(row.date) ?? 0) + 1);
   }
-  const historyDays = [...byDate.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).slice(0, 30);
+
+  const mealsByDate = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null }[]>();
+  for (const row of historyRes.data || []) {
+    const arr = mealsByDate.get(row.date) || [];
+    arr.push({ calories: row.calories, protein_g: row.protein_g, carbs_g: row.carbs_g, fat_g: row.fat_g, quality_score: row.quality_score });
+    mealsByDate.set(row.date, arr);
+  }
+  const historyDates = [...mealsByDate.keys()].sort((a, b) => (a < b ? 1 : -1)).slice(0, 30);
+  const historyDays = historyDates.map((date) => {
+    const meals = mealsByDate.get(date)!;
+    const t = meals.reduce((a, m) => ({ cal: a.cal + m.calories, prot: a.prot + m.protein_g, carb: a.carb + m.carbs_g, fat: a.fat + m.fat_g }), { cal: 0, prot: 0, carb: 0, fat: 0 });
+    const rank = computeDayRank({ habitsTotal, habitsDone: habitsDoneByDate.get(date) ?? 0, meals, targets: rankTargets }).rank;
+    return { date, t, count: meals.length, rank };
+  });
+
+  const latestDate = historyRes.data?.[0]?.date ?? null;
+  let rankBreakdown = null as ReturnType<typeof computeDayRank> | null;
+  let currentOverride: 'gold' | 'silver' | 'bronze' | null = null;
+  if (latestDate) {
+    const overrideRes = await supabase.from('rank_overrides').select('rank').eq('user_id', id).eq('date', latestDate).maybeSingle();
+    rankBreakdown = computeDayRank({ habitsTotal, habitsDone: habitsDoneByDate.get(latestDate) ?? 0, meals: mealsByDate.get(latestDate) ?? [], targets: rankTargets });
+    currentOverride = overrideRes.data?.rank ?? null;
+  }
 
   return (
     <div className="min-h-screen">
@@ -68,15 +97,20 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
         <TargetsEditor userId={id} initial={targets} />
 
+        {rankBreakdown && latestDate && (
+          <RankOverride userId={id} date={latestDate} breakdown={rankBreakdown} initialOverride={currentOverride} />
+        )}
+
         <div className="bg-surface border border-border rounded-2xl p-4">
           <p className="text-sm font-medium mb-3">Daily intake history</p>
           {historyDays.length === 0 && <p className="text-sm text-neutral-400">No entries logged yet.</p>}
           <div className="flex flex-col divide-y divide-border">
-            {historyDays.map(([date, t]) => (
-              <div key={date} className="flex items-center justify-between py-2 text-sm">
-                <span className="text-neutral-500">{date}</span>
-                <span className="text-neutral-700">{Math.round(t.cal)} kcal · {Math.round(t.prot)}p {Math.round(t.carb)}c {Math.round(t.fat)}f</span>
-                <span className="text-[11px] text-neutral-400">{t.count} {t.count === 1 ? 'entry' : 'entries'}</span>
+            {historyDays.map(({ date, t, count, rank }) => (
+              <div key={date} className="flex items-center justify-between py-2 text-sm gap-2">
+                <span className="text-neutral-500 flex-shrink-0">{date}</span>
+                <span className="text-neutral-700 flex-1 min-w-0 truncate text-right">{Math.round(t.cal)} kcal · {Math.round(t.prot)}p {Math.round(t.carb)}c {Math.round(t.fat)}f</span>
+                <span className="text-[11px] text-neutral-400 flex-shrink-0">{count} {count === 1 ? 'entry' : 'entries'}</span>
+                <span className="flex-shrink-0" title={RANK_META[rank].label}>{RANK_META[rank].emoji}</span>
               </div>
             ))}
           </div>

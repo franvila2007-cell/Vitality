@@ -58,18 +58,21 @@ export type Database = {
           calories: number; protein_g: number; carbs_g: number; fat_g: number;
           original_text: string | null; matched_food: string | null; amount: number | null; unit: string | null;
           estimated: boolean; confidence: number | null; source: 'chat' | 'manual' | 'template';
+          quality_score: number | null;
         },
         {
           id?: string; user_id: string; date: string; logged_at?: string; name: string;
           calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number;
           original_text?: string | null; matched_food?: string | null; amount?: number | null; unit?: string | null;
           estimated?: boolean; confidence?: number | null; source?: 'chat' | 'manual' | 'template';
+          quality_score?: number | null;
         },
         {
           id?: string; user_id?: string; date?: string; logged_at?: string; name?: string;
           calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number;
           original_text?: string | null; matched_food?: string | null; amount?: number | null; unit?: string | null;
           estimated?: boolean; confidence?: number | null; source?: 'chat' | 'manual' | 'template';
+          quality_score?: number | null;
         }
       >;
       daily_metrics: Table<
@@ -121,6 +124,11 @@ export type Database = {
         { user_id: string; waist: number | null; chest: number | null; hips: number | null; arm: number | null; thigh: number | null; bench: number | null; squat: number | null; deadlift: number | null; ohp: number | null; updated_at: string },
         { user_id: string; waist?: number | null; chest?: number | null; hips?: number | null; arm?: number | null; thigh?: number | null; bench?: number | null; squat?: number | null; deadlift?: number | null; ohp?: number | null; updated_at?: string },
         { user_id?: string; waist?: number | null; chest?: number | null; hips?: number | null; arm?: number | null; thigh?: number | null; bench?: number | null; squat?: number | null; deadlift?: number | null; ohp?: number | null; updated_at?: string }
+      >;
+      rank_overrides: Table<
+        { user_id: string; date: string; rank: 'gold' | 'silver' | 'bronze'; set_by: string; set_at: string },
+        { user_id: string; date: string; rank: 'gold' | 'silver' | 'bronze'; set_by: string; set_at?: string },
+        { user_id?: string; date?: string; rank?: 'gold' | 'silver' | 'bronze'; set_by?: string; set_at?: string }
       >;
     };
   };

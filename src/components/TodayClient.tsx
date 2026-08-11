@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { localDateStr, addDays } from '@/lib/date';
 import LoadingScreen from '@/components/LoadingScreen';
+import { computeDayRank, RANK_META, type Rank } from '@/lib/ranking';
 import type { Database } from '@/lib/supabase/database.types';
 
 type Meal = Database['public']['Tables']['food_log_entries']['Row'];
@@ -25,6 +26,7 @@ export default function TodayClient() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [doneHabitIds, setDoneHabitIds] = useState<Set<string>>(new Set());
   const [streak, setStreak] = useState(0);
+  const [rankOverride, setRankOverride] = useState<Rank | null>(null);
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -34,12 +36,13 @@ export default function TodayClient() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const [profileRes, targetsRes, mealsRes, habitsRes, completionsRes] = await Promise.all([
+    const [profileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes] = await Promise.all([
       supabase.from('profiles').select('full_name').eq('id', user.id).single(),
       supabase.from('targets').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('food_log_entries').select('*').eq('user_id', user.id).eq('date', today).order('logged_at', { ascending: true }),
       supabase.from('habits').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
       supabase.from('habit_completions').select('habit_id').eq('user_id', user.id).eq('date', today).eq('completed', true),
+      supabase.from('rank_overrides').select('rank').eq('user_id', user.id).eq('date', today).maybeSingle(),
     ]);
 
     setFullName(profileRes.data?.full_name || '');
@@ -48,6 +51,7 @@ export default function TodayClient() {
     setMeals(mealsRes.data || []);
     setHabits(habitsRes.data || []);
     setDoneHabitIds(new Set((completionsRes.data || []).map((c) => c.habit_id)));
+    setRankOverride(overrideRes.data?.rank ?? null);
 
     // streak: walk back from today while both a meal and a completed habit exist for the day
     const windowStart = addDays(today, -90);
@@ -122,6 +126,12 @@ export default function TodayClient() {
   const firstName = fullName.trim().split(/\s+/)[0] || 'there';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const rank = rankOverride ?? computeDayRank({
+    habitsTotal: habits.length,
+    habitsDone: doneHabitIds.size,
+    meals: meals.map((m) => ({ calories: m.calories, protein_g: m.protein_g, carbs_g: m.carbs_g, fat_g: m.fat_g, quality_score: m.quality_score })),
+    targets,
+  }).rank;
 
   if (loading) return <LoadingScreen />;
 
@@ -129,7 +139,12 @@ export default function TodayClient() {
     <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
       {/* Welcome card */}
       <div className="bg-brand rounded-2xl p-5 text-white">
-        <p className="text-xs text-white/70 mb-1">{greeting}</p>
+        <div className="flex items-start justify-between mb-1">
+          <p className="text-xs text-white/70">{greeting}</p>
+          <span className={`text-xs font-medium rounded-full px-2 py-1 border border-white/20 bg-white/10`}>
+            {RANK_META[rank].emoji} {RANK_META[rank].label}
+          </span>
+        </div>
         <p className="text-2xl font-medium mb-3">{firstName}</p>
         <div className="flex gap-6">
           <div><div className="text-xl font-medium">{streak}</div><div className="text-[10px] uppercase text-white/50">Streak</div></div>

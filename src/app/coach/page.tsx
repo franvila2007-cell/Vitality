@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getProjections, computeMonthColors, type GoalType } from '@/lib/progress';
+import { computeDayRank, RANK_META } from '@/lib/ranking';
 
 export default async function CoachPage() {
   const supabase = await createClient();
@@ -15,7 +16,7 @@ export default async function CoachPage() {
 
   const rows = await Promise.all(
     (clients || []).map(async (c) => {
-      const [profRes, targetsRes, recentMealsRes, cpRes] = await Promise.all([
+      const [profRes, targetsRes, recentMealsRes, cpRes, habitsRes] = await Promise.all([
         supabase.from('client_profiles').select('*').eq('user_id', c.id).maybeSingle(),
         supabase.from('targets').select('*').eq('user_id', c.id).maybeSingle(),
         // Server time and a client's own local "today" can disagree by a day
@@ -23,8 +24,9 @@ export default async function CoachPage() {
         // UTC date directly, pull recent rows and use whichever date is
         // actually the client's most recent — that's always the day they'd
         // call "today" themselves.
-        supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g').eq('user_id', c.id).order('date', { ascending: false }).limit(100),
+        supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', c.id).order('date', { ascending: false }).limit(100),
         supabase.from('weight_checkpoints').select('*').eq('user_id', c.id),
+        supabase.from('habits').select('id').eq('user_id', c.id),
       ]);
       const latestDate = recentMealsRes.data?.[0]?.date ?? null;
       const latestMeals = (recentMealsRes.data || []).filter((m) => m.date === latestDate);
@@ -40,7 +42,24 @@ export default async function CoachPage() {
         status = [...colors].reverse().find((c) => c !== null) || null;
       }
 
-      return { client: c, profile: profRes.data, targets: targetsRes.data, totals, status, latestDate };
+      let rank = null as ReturnType<typeof computeDayRank>['rank'] | null;
+      let rankOverridden = false;
+      if (latestDate) {
+        const [completionsRes, overrideRes] = await Promise.all([
+          supabase.from('habit_completions').select('habit_id').eq('user_id', c.id).eq('date', latestDate).eq('completed', true),
+          supabase.from('rank_overrides').select('rank').eq('user_id', c.id).eq('date', latestDate).maybeSingle(),
+        ]);
+        const breakdown = computeDayRank({
+          habitsTotal: habitsRes.data?.length ?? 0,
+          habitsDone: completionsRes.data?.length ?? 0,
+          meals: latestMeals.map((m) => ({ calories: m.calories, protein_g: m.protein_g, carbs_g: m.carbs_g, fat_g: m.fat_g, quality_score: m.quality_score })),
+          targets: targetsRes.data ? { calories: targetsRes.data.calories, protein_g: targetsRes.data.protein_g, carbs_g: targetsRes.data.carbs_g, fat_g: targetsRes.data.fat_g } : null,
+        });
+        rank = overrideRes.data?.rank ?? breakdown.rank;
+        rankOverridden = !!overrideRes.data;
+      }
+
+      return { client: c, profile: profRes.data, targets: targetsRes.data, totals, status, latestDate, rank, rankOverridden };
     })
   );
 
@@ -67,7 +86,7 @@ export default async function CoachPage() {
         {rows.length === 0 && <p className="text-sm text-neutral-400">No clients yet — add your first one.</p>}
 
         <div className="flex flex-col gap-2">
-          {rows.map(({ client, profile, targets, totals, status, latestDate }) => (
+          {rows.map(({ client, profile, targets, totals, status, latestDate, rank, rankOverridden }) => (
             <Link key={client.id} href={`/coach/clients/${client.id}`} className="flex items-center gap-4 bg-surface border border-border rounded-xl px-4 py-3 hover:border-brand transition-colors">
               <span
                 className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
@@ -81,6 +100,11 @@ export default async function CoachPage() {
                   {profile ? `${profile.goal_type === 'lose' ? 'Losing' : 'Gaining'} to ${profile.goal_weight}kg` : 'No program set up'}
                 </p>
               </div>
+              {rank && (
+                <span className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${RANK_META[rank].className}`} title={rankOverridden ? `${RANK_META[rank].label} (set by coach)` : RANK_META[rank].label}>
+                  {RANK_META[rank].emoji} {RANK_META[rank].label}
+                </span>
+              )}
               <div className="text-right flex-shrink-0">
                 <p className="text-sm font-medium">{Math.round(totals.cal)} / {targets?.calories ?? '—'} kcal</p>
                 <p className="text-[11px] text-neutral-400">{latestDate ? (latestDate === serverToday ? 'today' : latestDate) : 'no entries yet'}</p>
