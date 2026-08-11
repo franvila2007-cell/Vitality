@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { processVittoMessage, parseFoodText, type VittoContext, type VittoAction, type MealEntry, type PendingState } from '@/lib/vitto/parser';
 import type { FoodEntry } from '@/lib/vitto/foodDb';
-import { llmAssistParse, llmEstimateFoods, llmRateFoodQuality } from '@/lib/vitto/llmFallback';
+import { llmAssistParse, llmEstimateFoods, llmEstimateFoodInsights, type FoodInsight } from '@/lib/vitto/llmFallback';
 
 export const runtime = 'nodejs';
 
@@ -122,28 +122,36 @@ export async function POST(req: Request) {
 }
 
 async function applyActions(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, date: string, actions: VittoAction[], apiKey?: string) {
-  // Batched once per message rather than per action — rates every food
-  // logged this turn (matched or estimated) in a single small LLM call, so
-  // the rank's quality component has a real signal without adding a call
-  // per item. Left null (excluded from the rank average) if it fails or no
+  // Batched once per message rather than per action — rates quality and
+  // estimates a full micronutrient panel for every food logged this turn
+  // (matched or estimated) in a single LLM call, so the rank's quality
+  // component and micronutrient totals always have a real signal without a
+  // call per item. Left null (excluded from rank/totals) if it fails or no
   // API key is configured.
   const addMealActions = actions.filter((a): a is Extract<VittoAction, { kind: 'add_meal' }> => a.kind === 'add_meal');
-  let qualityScores: (number | null)[] = addMealActions.map(() => null);
+  let insights: (FoodInsight | null)[] = addMealActions.map(() => null);
   if (apiKey && addMealActions.length > 0) {
-    const rated = await llmRateFoodQuality(addMealActions.map((a) => a.entry.name), apiKey);
-    if (rated) qualityScores = rated;
+    const rated = await llmEstimateFoodInsights(addMealActions.map((a) => ({ name: a.entry.name, calories: a.entry.cal })), apiKey);
+    if (rated) insights = rated;
   }
 
   let mealIdx = 0;
   for (const action of actions) {
     if (action.kind === 'add_meal') {
       const e = action.entry;
-      const qualityScore = qualityScores[mealIdx] ?? null;
+      const insight = insights[mealIdx];
       mealIdx++;
       await supabase.from('food_log_entries').insert({
         user_id: userId, date, name: e.name, calories: e.cal, protein_g: e.prot, carbs_g: e.carb, fat_g: e.fat,
         original_text: e.originalText ?? null, matched_food: e.matchedFood ?? null, amount: e.amount ?? null, unit: e.unit ?? null,
-        estimated: e.estimated ?? false, confidence: e.confidence ?? null, source: 'chat', quality_score: qualityScore,
+        estimated: e.estimated ?? false, confidence: e.confidence ?? null, source: 'chat',
+        quality_score: insight?.quality_score ?? null,
+        fiber_g: insight?.fiber_g ?? null, sugar_g: insight?.sugar_g ?? null, sodium_mg: insight?.sodium_mg ?? null,
+        calcium_mg: insight?.calcium_mg ?? null, iron_mg: insight?.iron_mg ?? null, potassium_mg: insight?.potassium_mg ?? null,
+        magnesium_mg: insight?.magnesium_mg ?? null, zinc_mg: insight?.zinc_mg ?? null,
+        vitamin_a_mcg: insight?.vitamin_a_mcg ?? null, vitamin_c_mg: insight?.vitamin_c_mg ?? null, vitamin_d_mcg: insight?.vitamin_d_mcg ?? null,
+        vitamin_e_mg: insight?.vitamin_e_mg ?? null, vitamin_k_mcg: insight?.vitamin_k_mcg ?? null,
+        vitamin_b6_mg: insight?.vitamin_b6_mg ?? null, vitamin_b12_mcg: insight?.vitamin_b12_mcg ?? null, folate_mcg: insight?.folate_mcg ?? null,
       });
     } else if (action.kind === 'remove_meal') {
       await supabase.from('food_log_entries').delete().eq('id', action.id).eq('user_id', userId);

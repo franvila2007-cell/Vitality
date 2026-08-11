@@ -3,7 +3,9 @@ import { redirect, notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import TargetsEditor from '@/components/coach/TargetsEditor';
 import RankOverride from '@/components/coach/RankOverride';
+import MicronutrientPanel from '@/components/MicronutrientPanel';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
+import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
 
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -18,7 +20,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     supabase.from('client_profiles').select('*').eq('user_id', id).maybeSingle(),
     supabase.from('targets').select('*').eq('user_id', id).maybeSingle(),
     supabase.from('weight_checkpoints').select('*').eq('user_id', id).order('month_index'),
-    supabase.from('food_log_entries').select('date, name, calories, protein_g, carbs_g, fat_g, quality_score, estimated').eq('user_id', id).order('date', { ascending: false }).limit(500),
+    supabase.from('food_log_entries').select('*').eq('user_id', id).order('date', { ascending: false }).limit(500),
     supabase.from('habits').select('id').eq('user_id', id),
     // Retroactively scoring past days assumes today's habit list and targets
     // applied then too — a reasonable approximation, since this app doesn't
@@ -37,11 +39,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     habitsDoneByDate.set(row.date, (habitsDoneByDate.get(row.date) ?? 0) + 1);
   }
 
-  type DayMeal = { name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null; estimated: boolean };
+  type DayMeal = { name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null; estimated: boolean } & Record<MicronutrientKey, number | null>;
   const mealsByDate = new Map<string, DayMeal[]>();
   for (const row of historyRes.data || []) {
     const arr = mealsByDate.get(row.date) || [];
-    arr.push({ name: row.name, calories: row.calories, protein_g: row.protein_g, carbs_g: row.carbs_g, fat_g: row.fat_g, quality_score: row.quality_score, estimated: row.estimated });
+    arr.push({
+      name: row.name, calories: row.calories, protein_g: row.protein_g, carbs_g: row.carbs_g, fat_g: row.fat_g,
+      quality_score: row.quality_score, estimated: row.estimated,
+      fiber_g: row.fiber_g, sugar_g: row.sugar_g, sodium_mg: row.sodium_mg,
+      calcium_mg: row.calcium_mg, iron_mg: row.iron_mg, potassium_mg: row.potassium_mg, magnesium_mg: row.magnesium_mg, zinc_mg: row.zinc_mg,
+      vitamin_a_mcg: row.vitamin_a_mcg, vitamin_c_mg: row.vitamin_c_mg, vitamin_d_mcg: row.vitamin_d_mcg,
+      vitamin_e_mg: row.vitamin_e_mg, vitamin_k_mcg: row.vitamin_k_mcg,
+      vitamin_b6_mg: row.vitamin_b6_mg, vitamin_b12_mcg: row.vitamin_b12_mcg, folate_mcg: row.folate_mcg,
+    });
     mealsByDate.set(row.date, arr);
   }
   const historyDates = [...mealsByDate.keys()].sort((a, b) => (a < b ? 1 : -1)).slice(0, 30);
@@ -107,6 +117,21 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
         {rankBreakdown && latestDate && (
           <RankOverride userId={id} date={latestDate} breakdown={rankBreakdown} initialOverride={currentOverride} />
+        )}
+
+        {latestDate && (mealsByDate.get(latestDate)?.length ?? 0) > 0 && (
+          <details className="bg-surface border border-border rounded-2xl p-4 group">
+            <summary className="text-sm font-medium cursor-pointer list-none flex items-center justify-between [&::-webkit-details-marker]:hidden">
+              Micronutrients · {latestDate}
+              <span className="text-neutral-400 text-xs group-open:rotate-180 transition-transform">▾</span>
+            </summary>
+            <div className="mt-3">
+              <MicronutrientPanel
+                totals={computeMicroTotals(mealsByDate.get(latestDate)!)}
+                hasAnyData={mealsByDate.get(latestDate)!.some((m) => m.quality_score != null)}
+              />
+            </div>
+          </details>
         )}
 
         <div className="bg-surface border border-border rounded-2xl p-4">

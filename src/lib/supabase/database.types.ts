@@ -10,6 +10,18 @@ type Json = string | number | boolean | null | { [key: string]: Json | undefined
 // in this app selects a single table at a time.
 type Table<Row, Insert, Update> = { Row: Row; Insert: Insert; Update: Update; Relationships: [] };
 
+// The 16 micronutrient columns on food_log_entries, all nullable numeric
+// (Nullable is the "unset" type — null for Row, and also allowed on
+// Insert/Update via Partial<> at each call site).
+type MicronutrientFields<Nullable> = {
+  fiber_g: number | Nullable; sugar_g: number | Nullable; sodium_mg: number | Nullable;
+  calcium_mg: number | Nullable; iron_mg: number | Nullable; potassium_mg: number | Nullable;
+  magnesium_mg: number | Nullable; zinc_mg: number | Nullable;
+  vitamin_a_mcg: number | Nullable; vitamin_c_mg: number | Nullable; vitamin_d_mcg: number | Nullable;
+  vitamin_e_mg: number | Nullable; vitamin_k_mcg: number | Nullable;
+  vitamin_b6_mg: number | Nullable; vitamin_b12_mcg: number | Nullable; folate_mcg: number | Nullable;
+};
+
 export type Database = {
   public: {
     Views: Record<string, never>;
@@ -59,21 +71,21 @@ export type Database = {
           original_text: string | null; matched_food: string | null; amount: number | null; unit: string | null;
           estimated: boolean; confidence: number | null; source: 'chat' | 'manual' | 'template';
           quality_score: number | null;
-        },
+        } & MicronutrientFields<null>,
         {
           id?: string; user_id: string; date: string; logged_at?: string; name: string;
           calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number;
           original_text?: string | null; matched_food?: string | null; amount?: number | null; unit?: string | null;
           estimated?: boolean; confidence?: number | null; source?: 'chat' | 'manual' | 'template';
           quality_score?: number | null;
-        },
+        } & Partial<MicronutrientFields<null>>,
         {
           id?: string; user_id?: string; date?: string; logged_at?: string; name?: string;
           calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number;
           original_text?: string | null; matched_food?: string | null; amount?: number | null; unit?: string | null;
           estimated?: boolean; confidence?: number | null; source?: 'chat' | 'manual' | 'template';
           quality_score?: number | null;
-        }
+        } & Partial<MicronutrientFields<null>>
       >;
       daily_metrics: Table<
         { user_id: string; date: string; water_l: number; steps: number; sleep_hours: number },

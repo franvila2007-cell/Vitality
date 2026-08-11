@@ -100,43 +100,61 @@ export async function llmEstimateFoods(text: string, apiKey: string): Promise<Es
 }
 
 // Rates food quality (whole/minimally processed vs. junk/ultra-processed)
-// for the daily gold/silver/bronze rank — run once per message on every
+// AND estimates a full micronutrient panel — run once per message on every
 // logged item, whether it matched the local database or was LLM-estimated,
-// so the rank's quality component always has a real signal. Judged from the
-// name alone (not calories/portion), since the rubric is about the kind of
-// food, not how much of it was eaten.
-const QUALITY_SYSTEM_PROMPT = `You rate the nutritional quality of food/drink items for a fitness coaching app, on a 0-100 scale:
-- 85-100: whole, minimally processed foods (plain meat/fish/eggs, vegetables, fruit, whole grains, plain dairy)
-- 60-84: balanced/lightly processed (home-cooked mixed meals, whole-grain bread, plain pasta, nuts)
-- 35-59: moderately processed (fast food, fried food, sugary cereal, white bread, sweetened drinks)
-- 0-34: ultra-processed/junk (candy, chips, soda, pastries, deep-fried fast food, alcohol)
+// so both the rank's quality component and micronutrient totals always have
+// a real signal, in a single call rather than two. There's no nutrition
+// label to read here, just a name and portion, so the micronutrient numbers
+// are honest estimates, not lab-measured values — that caveat is surfaced
+// in the UI, not enforced here.
+const MICRO_KEYS = [
+  'fiber_g', 'sugar_g', 'sodium_mg', 'calcium_mg', 'iron_mg', 'potassium_mg', 'magnesium_mg', 'zinc_mg',
+  'vitamin_a_mcg', 'vitamin_c_mg', 'vitamin_d_mcg', 'vitamin_e_mg', 'vitamin_k_mcg',
+  'vitamin_b6_mg', 'vitamin_b12_mcg', 'folate_mcg',
+] as const;
+type MicroKey = (typeof MICRO_KEYS)[number];
+export type FoodInsight = { quality_score: number } & Record<MicroKey, number>;
 
-Judge each item on its own, based on the typical preparation implied by its name — not on portion size or calorie count.
+const INSIGHTS_SYSTEM_PROMPT = `You analyze food/drink log entries for a fitness coaching app. For each item, given its name and calorie count, provide:
+
+1. quality_score (0-100 integer): nutritional quality based on the type of food, not portion size —
+   85-100 whole/minimally processed (plain meat/fish/eggs, vegetables, fruit, whole grains, plain dairy)
+   60-84 balanced/lightly processed (home-cooked mixed meals, whole-grain bread, nuts)
+   35-59 moderately processed (fast food, fried food, sugary cereal, sweetened drinks)
+   0-34 ultra-processed/junk (candy, chips, soda, pastries, alcohol)
+
+2. A full micronutrient estimate for that specific portion, using your best nutrition knowledge (reasonable honest estimates, not a lab measurement): fiber_g, sugar_g, sodium_mg, calcium_mg, iron_mg, potassium_mg, magnesium_mg, zinc_mg, vitamin_a_mcg, vitamin_c_mg, vitamin_d_mcg, vitamin_e_mg, vitamin_k_mcg, vitamin_b6_mg, vitamin_b12_mcg, folate_mcg. Use 0 for anything genuinely negligible in that food (e.g. vitamin_c_mg: 0 for plain chicken breast) — never omit a field.
 
 Respond with ONLY a JSON object, no other text, in this exact shape:
-{"scores": [number, ...]}
-One integer 0-100 per input item, in the same order given.`;
+{"items": [{"quality_score": number, "fiber_g": number, "sugar_g": number, "sodium_mg": number, "calcium_mg": number, "iron_mg": number, "potassium_mg": number, "magnesium_mg": number, "zinc_mg": number, "vitamin_a_mcg": number, "vitamin_c_mg": number, "vitamin_d_mcg": number, "vitamin_e_mg": number, "vitamin_k_mcg": number, "vitamin_b6_mg": number, "vitamin_b12_mcg": number, "folate_mcg": number}, ...]}
+One object per input item, in the same order given.`;
 
-export async function llmRateFoodQuality(foodNames: string[], apiKey: string): Promise<number[] | null> {
-  if (foodNames.length === 0) return null;
+export async function llmEstimateFoodInsights(items: { name: string; calories: number }[], apiKey: string): Promise<FoodInsight[] | null> {
+  if (items.length === 0) return null;
   try {
     const anthropic = new Anthropic({ apiKey });
     const msg = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 150,
+      max_tokens: Math.min(4000, 300 + items.length * 250),
       temperature: 0,
-      system: QUALITY_SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: foodNames.map((name, i) => `${i + 1}. ${name}`).join('\n') }],
+      system: INSIGHTS_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: items.map((it, i) => `${i + 1}. ${it.name} — ${Math.round(it.calories)} kcal`).join('\n') }],
     });
     const block = msg.content[0];
     if (!block || block.type !== 'text') return null;
-    const parsed = parseJsonLoose(block.text) as { scores?: unknown };
-    if (!Array.isArray(parsed.scores) || parsed.scores.length !== foodNames.length) return null;
-    const scores = parsed.scores.map((s) => Math.max(0, Math.min(100, Math.round(Number(s)))));
-    if (scores.some((s) => Number.isNaN(s))) return null;
-    return scores;
+    const parsed = parseJsonLoose(block.text) as { items?: unknown };
+    if (!Array.isArray(parsed.items) || parsed.items.length !== items.length) return null;
+
+    const clean = (v: unknown) => Math.max(0, Number(v) || 0);
+    const results: FoodInsight[] = parsed.items.map((raw) => {
+      const r = raw as Record<string, unknown>;
+      const insight = { quality_score: Math.max(0, Math.min(100, Math.round(Number(r.quality_score) || 0))) } as FoodInsight;
+      for (const key of MICRO_KEYS) insight[key] = clean(r[key]);
+      return insight;
+    });
+    return results;
   } catch (err) {
-    console.error('llmRateFoodQuality failed', err);
-    return null; // graceful degradation — quality_score stays null, excluded from the rank average
+    console.error('llmEstimateFoodInsights failed', err);
+    return null; // graceful degradation — quality_score/micronutrients stay null, excluded from the rank average
   }
 }

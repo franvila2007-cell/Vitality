@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import { localDateStr, addDays } from '@/lib/date';
 import LoadingScreen from '@/components/LoadingScreen';
 import { computeDayRank, RANK_META, type Rank } from '@/lib/ranking';
+import { computeMicroTotals } from '@/lib/micronutrients';
+import MicronutrientPanel from '@/components/MicronutrientPanel';
 import type { Database } from '@/lib/supabase/database.types';
 
 type Meal = Database['public']['Tables']['food_log_entries']['Row'];
@@ -123,6 +125,7 @@ export default function TodayClient() {
 
   const totals = meals.reduce((a, m) => ({ cal: a.cal + m.calories, prot: a.prot + m.protein_g, carb: a.carb + m.carbs_g, fat: a.fat + m.fat_g }), { cal: 0, prot: 0, carb: 0, fat: 0 });
   const calPct = Math.min(100, Math.round((totals.cal / (targets.calories || 1)) * 100));
+  const microTotals = computeMicroTotals(meals);
   const firstName = fullName.trim().split(/\s+/)[0] || 'there';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -226,6 +229,17 @@ export default function TodayClient() {
           </div>
         </div>
       </div>
+
+      {/* Micronutrients */}
+      <details className="bg-surface border border-border rounded-2xl p-4 group">
+        <summary className="text-sm font-medium cursor-pointer list-none flex items-center justify-between [&::-webkit-details-marker]:hidden">
+          Micronutrients
+          <span className="text-neutral-400 text-xs group-open:rotate-180 transition-transform">▾</span>
+        </summary>
+        <div className="mt-3">
+          <MicronutrientPanel totals={microTotals} hasAnyData={meals.some((m) => m.quality_score != null)} />
+        </div>
+      </details>
 
       {/* Habits */}
       <div className="bg-surface border border-border rounded-2xl p-4">
