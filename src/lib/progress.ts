@@ -42,3 +42,19 @@ export function computeMonthColors(projections: number[], actuals: (number | nul
   });
   return colors;
 }
+
+// Colors the trend-graph line segment BETWEEN two consecutive weigh-ins —
+// a simpler, more literal signal than computeMonthColors above (which
+// judges distance from a pace-based projection curve): this only asks
+// "did this specific move go the right way for this client's goal?"
+// Direction inverts correctly for gain vs loss because it's driven by
+// goalType, not a hardcoded sign — losing weight is green for a 'lose'
+// goal and red for a 'gain' goal, and vice versa.
+const FLAT_TOLERANCE_KG = 0.2;
+
+export function segmentColor(fromWeight: number, toWeight: number, goalType: GoalType): 'green' | 'orange' | 'red' {
+  const delta = toWeight - fromWeight;
+  if (Math.abs(delta) <= FLAT_TOLERANCE_KG) return 'orange';
+  const towardGoal = goalType === 'gain' ? delta : -delta;
+  return towardGoal > 0 ? 'green' : 'red';
+}

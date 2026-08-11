@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getProjections, computeMonthColors, type GoalType } from '@/lib/progress';
 import LoadingScreen from '@/components/LoadingScreen';
+import WeightTrendGraph from '@/components/WeightTrendGraph';
 import type { Database } from '@/lib/supabase/database.types';
 
 type ClientProfile = Database['public']['Tables']['client_profiles']['Row'];
@@ -60,6 +61,9 @@ export default function ProgressClient() {
   const actuals = months.map((m) => (m === 1 ? profile.start_weight : checkpoints.find((c) => c.month_index === m)?.weight ?? null));
   const colorActuals = months.map((m) => (m === 1 ? null : checkpoints.find((c) => c.month_index === m)?.weight ?? null));
   const colors = computeMonthColors(projections, colorActuals);
+  const trendPoints = months
+    .map((m, i) => ({ month: m, weight: actuals[i] }))
+    .filter((p): p is { month: number; weight: number } => p.weight != null);
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
@@ -78,6 +82,11 @@ export default function ProgressClient() {
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="bg-surface border border-border rounded-2xl p-4">
+        <p className="text-sm font-medium mb-3">Weigh-in trend</p>
+        <WeightTrendGraph points={trendPoints} goalWeight={profile.goal_weight} goalType={profile.goal_type as GoalType} />
       </div>
 
       <div className="bg-surface border border-border rounded-2xl p-4">
