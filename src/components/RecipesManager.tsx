@@ -9,7 +9,9 @@ type Recipe = Database['public']['Tables']['custom_foods']['Row'];
 const EMPTY_FORM = { name: '', ingredientsText: '', calories: '', proteinG: '', carbsG: '', fatG: '' };
 
 export default function RecipesManager() {
-  const supabase = createClient();
+  // Memoized once — see TodayClient.tsx for why an unstable client instance
+  // here would retrigger load()'s effect on every render.
+  const [supabase] = useState(() => createClient());
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(EMPTY_FORM);

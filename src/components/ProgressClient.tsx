@@ -17,7 +17,9 @@ const COLOR_CLASSES: Record<string, string> = {
 };
 
 export default function ProgressClient() {
-  const supabase = createClient();
+  // Memoized once — see TodayClient.tsx for why an unstable client instance
+  // here would retrigger load()'s effect on every render.
+  const [supabase] = useState(() => createClient());
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ClientProfile | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);

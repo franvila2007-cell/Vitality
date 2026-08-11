@@ -19,7 +19,12 @@ type ChatMsg = { role: 'user' | 'bot'; text: string; id: string };
 const DEFAULT_TARGETS = { calories: 2000, protein_g: 150, carbs_g: 200, fat_g: 65 };
 
 export default function TodayClient() {
-  const supabase = createClient();
+  // Memoized once, not recreated every render — createClient() returns a
+  // fresh instance each call, and referencing that directly in useCallback
+  // dependency arrays (load/refreshStreak below) made those callbacks change
+  // identity on every render, which retriggered their effects, which set
+  // state, which re-rendered, forever. Found while auditing for jank.
+  const [supabase] = useState(() => createClient());
   const [today] = useState(() => localDateStr());
   const [loading, setLoading] = useState(true);
   const [fullName, setFullName] = useState('');
@@ -34,10 +39,29 @@ export default function TodayClient() {
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
+  // Isolated from load() below so toggling a habit only refetches the ~90
+  // days of dates the streak actually depends on, instead of re-running the
+  // full page load (profile/targets/meals/habits/completions) for a change
+  // that only affects one number.
+  const refreshStreak = useCallback(async (userId: string) => {
+    const windowStart = addDays(today, -90);
+    const [mealDatesRes, habitDatesRes] = await Promise.all([
+      supabase.from('food_log_entries').select('date').eq('user_id', userId).gte('date', windowStart).lte('date', today),
+      supabase.from('habit_completions').select('date').eq('user_id', userId).eq('completed', true).gte('date', windowStart).lte('date', today),
+    ]);
+    const mealDates = new Set((mealDatesRes.data || []).map((r) => r.date));
+    const habitDates = new Set((habitDatesRes.data || []).map((r) => r.date));
+    let s = 0, cursor = today;
+    while (mealDates.has(cursor) && habitDates.has(cursor)) { s++; cursor = addDays(cursor, -1); }
+    setStreak(s);
+  }, [supabase, today]);
+
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
+    // All independent of each other — fired together instead of the streak
+    // window waiting on the first batch to resolve first.
     const [profileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes] = await Promise.all([
       supabase.from('profiles').select('full_name').eq('id', user.id).single(),
       supabase.from('targets').select('*').eq('user_id', user.id).maybeSingle(),
@@ -45,6 +69,7 @@ export default function TodayClient() {
       supabase.from('habits').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
       supabase.from('habit_completions').select('habit_id').eq('user_id', user.id).eq('date', today).eq('completed', true),
       supabase.from('rank_overrides').select('rank').eq('user_id', user.id).eq('date', today).maybeSingle(),
+      refreshStreak(user.id),
     ]);
 
     setFullName(profileRes.data?.full_name || '');
@@ -54,21 +79,8 @@ export default function TodayClient() {
     setHabits(habitsRes.data || []);
     setDoneHabitIds(new Set((completionsRes.data || []).map((c) => c.habit_id)));
     setRankOverride(overrideRes.data?.rank ?? null);
-
-    // streak: walk back from today while both a meal and a completed habit exist for the day
-    const windowStart = addDays(today, -90);
-    const [mealDatesRes, habitDatesRes] = await Promise.all([
-      supabase.from('food_log_entries').select('date').eq('user_id', user.id).gte('date', windowStart).lte('date', today),
-      supabase.from('habit_completions').select('date').eq('user_id', user.id).eq('completed', true).gte('date', windowStart).lte('date', today),
-    ]);
-    const mealDates = new Set((mealDatesRes.data || []).map((r) => r.date));
-    const habitDates = new Set((habitDatesRes.data || []).map((r) => r.date));
-    let s = 0, cursor = today;
-    while (mealDates.has(cursor) && habitDates.has(cursor)) { s++; cursor = addDays(cursor, -1); }
-    setStreak(s);
-
     setLoading(false);
-  }, [supabase, today]);
+  }, [supabase, today, refreshStreak]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -120,7 +132,7 @@ export default function TodayClient() {
       { user_id: user.id, habit_id: habitId, date: today, completed: !isDone },
       { onConflict: 'user_id,habit_id,date' }
     );
-    load();
+    refreshStreak(user.id);
   }
 
   const totals = meals.reduce((a, m) => ({ cal: a.cal + m.calories, prot: a.prot + m.protein_g, carb: a.carb + m.carbs_g, fat: a.fat + m.fat_g }), { cal: 0, prot: 0, carb: 0, fat: 0 });
