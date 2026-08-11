@@ -8,6 +8,14 @@
 // locally) and keeps numbers trustworthy even when the model is used.
 import Anthropic from '@anthropic-ai/sdk';
 
+// Claude sometimes wraps a "JSON only" response in a markdown code fence
+// anyway — strip that before parsing rather than let it silently fail.
+function parseJsonLoose(text: string): unknown {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return JSON.parse(fenced ? fenced[1] : trimmed);
+}
+
 const SYSTEM_PROMPT = `You normalize messy natural-language food-log messages into clean, plain English food phrases with quantities, for a downstream keyword matcher.
 
 Rules:
@@ -73,7 +81,7 @@ export async function llmEstimateFoods(text: string, apiKey: string): Promise<Es
     });
     const block = msg.content[0];
     if (!block || block.type !== 'text') return null;
-    const parsed = JSON.parse(block.text.trim()) as { items?: unknown };
+    const parsed = parseJsonLoose(block.text) as { items?: unknown };
     if (!Array.isArray(parsed.items)) return null;
     const items = parsed.items.filter(
       (it): it is EstimatedFoodItem =>
@@ -122,7 +130,7 @@ export async function llmRateFoodQuality(foodNames: string[], apiKey: string): P
     });
     const block = msg.content[0];
     if (!block || block.type !== 'text') return null;
-    const parsed = JSON.parse(block.text.trim()) as { scores?: unknown };
+    const parsed = parseJsonLoose(block.text) as { scores?: unknown };
     if (!Array.isArray(parsed.scores) || parsed.scores.length !== foodNames.length) return null;
     const scores = parsed.scores.map((s) => Math.max(0, Math.min(100, Math.round(Number(s)))));
     if (scores.some((s) => Number.isNaN(s))) return null;
