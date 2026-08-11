@@ -173,7 +173,7 @@ function fuzzyMatchFood(lower: string, foods: VittoFoods): { phrase: string; dis
     for (const phrase of phrases) {
       // skip trivial/huge length mismatches — not worth computing distance
       if (Math.abs(cand.length - phrase.length) > 3) continue;
-      const dist = levenshtein(cand, phrase);
+      const dist = levenshtein(cand, phrase.toLowerCase());
       const budget = phrase.length <= 6 ? 1 : phrase.length <= 9 ? 2 : 3;
       if (dist <= budget && (!best || dist < best.distance)) {
         best = { phrase, distance: dist, confidence: Math.max(0.5, 1 - dist / phrase.length) };
@@ -236,8 +236,11 @@ export function parseFoodPart(part: string, foods: VittoFoods): ParsedFoodPart |
   const lower = part.toLowerCase();
   let matchedPhrase: string | null = null;
   let confidence = 1.0;
+  // Compared lowercased (the coach-taught foods DB is lowercase, but a
+  // client-saved recipe name can be typed in any case) — matchedPhrase itself
+  // keeps its original casing so it still round-trips through foods.db[phrase].
   for (const phrase of getFoodLookupPhrases(foods)) {
-    if (lower.includes(phrase)) { matchedPhrase = phrase; break; }
+    if (lower.includes(phrase.toLowerCase())) { matchedPhrase = phrase; break; }
   }
   if (!matchedPhrase) {
     // exact match failed — try fuzzy, so typos like "chikn" or "banan" still resolve
@@ -346,7 +349,7 @@ export function tryParseCustomPer100g(text: string, foods: VittoFoods) {
 
   let matchedKey: string | null = null;
   for (const phrase of getFoodLookupPhrases(foods)) {
-    if (lower.includes(phrase)) { matchedKey = resolveFoodKey(phrase, foods) || null; break; }
+    if (lower.includes(phrase.toLowerCase())) { matchedKey = resolveFoodKey(phrase, foods) || null; break; }
   }
 
   const factor = weightGrams / 100;

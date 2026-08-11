@@ -108,9 +108,9 @@ export type Database = {
         { id?: string; user_id?: string; name?: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; mealtime?: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null }
       >;
       custom_foods: Table<
-        { id: string; user_id: string; name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; default_grams: number },
-        { id?: string; user_id: string; name: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; default_grams?: number },
-        { id?: string; user_id?: string; name?: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; default_grams?: number }
+        { id: string; user_id: string; name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; default_grams: number; ingredients_text: string | null },
+        { id?: string; user_id: string; name: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; default_grams?: number; ingredients_text?: string | null },
+        { id?: string; user_id?: string; name?: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; default_grams?: number; ingredients_text?: string | null }
       >;
       foods_global: Table<
         { name: string; type: 'per100g' | 'perUnit' | 'dish'; data: Json },

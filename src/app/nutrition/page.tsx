@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import AppNav from '@/components/AppNav';
+import RecipesManager from '@/components/RecipesManager';
 
 export default async function NutritionPage() {
   const supabase = await createClient();
@@ -12,8 +13,8 @@ export default async function NutritionPage() {
   return (
     <div className="min-h-screen">
       <AppNav />
-      <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-neutral-400">
-        Saved meals &amp; extended nutrition history — coming soon. Log meals from the Today tab in the meantime.
+      <div className="max-w-2xl mx-auto px-4 py-5">
+        <RecipesManager />
       </div>
     </div>
   );
