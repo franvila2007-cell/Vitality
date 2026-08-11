@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 // Handles the link from Supabase's invite/recovery emails. This has to run
@@ -21,8 +20,17 @@ import { createClient } from '@/lib/supabase/client';
 //    the session client-side, the tokens are POSTed to a server route
 //    (/api/auth/set-session) where the *server* client's setSession() sets
 //    the cookies directly on the response — that path works reliably.
+// 3. If the browser already had a *different* signed-in session (e.g. a
+//    coach opening a client's invite link in the same browser they're
+//    signed into as coach), a background request from the old page
+//    (middleware session-refresh, a Link prefetch, etc.) can race this
+//    POST and re-write the old session's cookie right after the new one
+//    lands. A hard navigation for the final redirect — instead of the
+//    Next.js client router — keeps our own page's fetches out of that
+//    race; it doesn't fix a *different* tab actively refreshing the old
+//    session, so an invite link should still be opened somewhere not
+//    already signed in as another account.
 export default function AuthCallbackPage() {
-  const router = useRouter();
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -56,11 +64,14 @@ export default function AuthCallbackPage() {
         return;
       }
 
-      router.replace('/auth/set-password');
+      // Hard navigation, not the Next.js router: guarantees this transition
+      // sends whatever cookie the browser has right now, with no client-side
+      // prefetch/refresh request of our own racing the cookie we just set.
+      window.location.href = '/auth/set-password';
     }
 
     run();
-  }, [router]);
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">

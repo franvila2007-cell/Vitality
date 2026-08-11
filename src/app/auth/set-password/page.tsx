@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 export default function SetPasswordPage() {
@@ -9,7 +8,6 @@ export default function SetPasswordPage() {
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -30,8 +28,9 @@ export default function SetPasswordPage() {
       setError(error.message);
       return;
     }
-    router.push('/');
-    router.refresh();
+    // Hard navigation (see auth/callback's comment): avoids racing our own
+    // client-side prefetch/refresh against the session cookie we just set.
+    window.location.href = '/';
   }
 
   return (
