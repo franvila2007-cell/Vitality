@@ -30,9 +30,16 @@ export async function POST(req: Request) {
   };
   if (!email || !fullName) return NextResponse.json({ error: 'email and fullName are required' }, { status: 400 });
 
+  // Without an explicit redirectTo, Supabase sends the invite link to the
+  // project's default Site URL instead of our callback page — the link
+  // still "works" (it verifies the token), it just drops the client on
+  // whatever that default is instead of somewhere that knows how to turn
+  // the token into a session and prompt for a password.
+  const origin = new URL(req.url).origin;
   const admin = createAdminClient();
   const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {
     data: { role: 'client', full_name: fullName },
+    redirectTo: `${origin}/auth/callback`,
   });
   if (inviteErr || !invited.user) return NextResponse.json({ error: inviteErr?.message || 'invite failed' }, { status: 400 });
 
