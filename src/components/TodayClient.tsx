@@ -6,8 +6,9 @@ import { createClient } from '@/lib/supabase/client';
 import { localDateStr, addDays } from '@/lib/date';
 import LoadingScreen from '@/components/LoadingScreen';
 import { computeDayRank, RANK_META, type Rank } from '@/lib/ranking';
-import { computeMicroTotals } from '@/lib/micronutrients';
+import { computeMicroTotals, MICRONUTRIENT_KEYS, type MicronutrientKey } from '@/lib/micronutrients';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
+import BarcodeScanner from '@/components/BarcodeScanner';
 import type { Database } from '@/lib/supabase/database.types';
 
 type Meal = Database['public']['Tables']['food_log_entries']['Row'];
@@ -15,6 +16,15 @@ type Habit = Database['public']['Tables']['habits']['Row'];
 type Targets = Database['public']['Tables']['targets']['Row'];
 
 type ChatMsg = { role: 'user' | 'bot'; text: string; id: string };
+
+type BarcodeProduct = {
+  name: string;
+  brand: string | null;
+  quantity: string | null;
+  imageUrl: string | null;
+  qualityScore: number | null;
+  per100g: { calories: number; protein_g: number; carbs_g: number; fat_g: number } & Record<MicronutrientKey, number | null>;
+};
 
 const DEFAULT_TARGETS = { calories: 2000, protein_g: 150, carbs_g: 200, fat_g: 65 };
 
@@ -38,6 +48,12 @@ export default function TodayClient() {
   const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scannedProduct, setScannedProduct] = useState<BarcodeProduct | null>(null);
+  const [scanGrams, setScanGrams] = useState('100');
+  const [logging, setLogging] = useState(false);
 
   // Isolated from load() below so toggling a habit only refetches the ~90
   // days of dates the streak actually depends on, instead of re-running the
@@ -135,6 +151,52 @@ export default function TodayClient() {
     refreshStreak(user.id);
   }
 
+  async function handleBarcodeDetected(code: string) {
+    setScanning(false);
+    setScanLoading(true);
+    setScanError(null);
+    try {
+      const res = await fetch(`/api/barcode/lookup?code=${encodeURIComponent(code)}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Lookup failed');
+      setScannedProduct(data);
+      setScanGrams('100');
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : 'Lookup failed.');
+    }
+    setScanLoading(false);
+  }
+
+  async function confirmBarcodeLog() {
+    if (!scannedProduct) return;
+    const grams = parseFloat(scanGrams);
+    if (!grams || grams <= 0) return;
+    setLogging(true);
+    const factor = grams / 100;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setLogging(false); return; }
+
+    const p = scannedProduct.per100g;
+    const scaledMicros = Object.fromEntries(
+      MICRONUTRIENT_KEYS.map((k) => [k, p[k] == null ? null : Math.round(p[k]! * factor * 10) / 10])
+    ) as Record<MicronutrientKey, number | null>;
+
+    const { error } = await supabase.from('food_log_entries').insert({
+      user_id: user.id, date: today,
+      name: scannedProduct.brand ? `${scannedProduct.name} (${scannedProduct.brand})` : scannedProduct.name,
+      calories: Math.round(p.calories * factor), protein_g: Math.round(p.protein_g * factor * 10) / 10,
+      carbs_g: Math.round(p.carbs_g * factor * 10) / 10, fat_g: Math.round(p.fat_g * factor * 10) / 10,
+      amount: grams, unit: 'g', source: 'manual', estimated: false,
+      quality_score: scannedProduct.qualityScore,
+      ...scaledMicros,
+    });
+    setLogging(false);
+    if (!error) {
+      setScannedProduct(null);
+      load();
+    }
+  }
+
   const totals = meals.reduce((a, m) => ({ cal: a.cal + m.calories, prot: a.prot + m.protein_g, carb: a.carb + m.carbs_g, fat: a.fat + m.fat_g }), { cal: 0, prot: 0, carb: 0, fat: 0 });
   const calPct = Math.min(100, Math.round((totals.cal / (targets.calories || 1)) * 100));
   const microTotals = computeMicroTotals(meals);
@@ -199,6 +261,13 @@ export default function TodayClient() {
           <div ref={chatEndRef} />
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => { setScanError(null); setScanning(true); }}
+            title="Scan a barcode"
+            className="w-10 h-10 flex-shrink-0 rounded-full border border-border text-neutral-500 flex items-center justify-center transition-transform active:scale-95 hover:text-neutral-800"
+          >
+            ▤
+          </button>
           <input
             value={chatInput}
             onChange={(e) => setChatInput(e.target.value)}
@@ -208,6 +277,8 @@ export default function TodayClient() {
           />
           <button onClick={sendChat} disabled={sending} className="w-10 h-10 rounded-full bg-brand text-white flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95">➤</button>
         </div>
+        {scanLoading && <p className="text-xs text-neutral-400 mt-2">Looking up that barcode…</p>}
+        {scanError && <p className="text-xs text-red-500 mt-2">{scanError}</p>}
       </div>
 
       {/* Macro tracker */}
@@ -273,6 +344,44 @@ export default function TodayClient() {
           })}
         </div>
       </div>
+
+      {scanning && <BarcodeScanner onDetected={handleBarcodeDetected} onClose={() => setScanning(false)} />}
+
+      {scannedProduct && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl p-4 w-full max-w-sm">
+            <div className="flex items-start gap-3 mb-3">
+              {scannedProduct.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={scannedProduct.imageUrl} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0 bg-neutral-100" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{scannedProduct.name}</p>
+                {scannedProduct.brand && <p className="text-xs text-neutral-400 truncate">{scannedProduct.brand}</p>}
+              </div>
+            </div>
+            <label className="flex items-center gap-2 mb-3">
+              <span className="text-xs text-neutral-500 flex-shrink-0">Amount (g)</span>
+              <input
+                type="number" value={scanGrams} onChange={(e) => setScanGrams(e.target.value)}
+                className="flex-1 min-w-0 rounded-lg border border-border px-3 py-1.5 text-sm outline-none focus:border-brand"
+              />
+            </label>
+            <p className="text-xs text-neutral-400 mb-3">
+              {Math.round(scannedProduct.per100g.calories * ((parseFloat(scanGrams) || 0) / 100))} kcal ·{' '}
+              {Math.round(scannedProduct.per100g.protein_g * ((parseFloat(scanGrams) || 0) / 100))}p{' '}
+              {Math.round(scannedProduct.per100g.carbs_g * ((parseFloat(scanGrams) || 0) / 100))}c{' '}
+              {Math.round(scannedProduct.per100g.fat_g * ((parseFloat(scanGrams) || 0) / 100))}f
+            </p>
+            <div className="flex gap-2">
+              <button onClick={() => setScannedProduct(null)} className="flex-1 rounded-lg border border-border text-neutral-600 py-2 text-sm font-medium">Cancel</button>
+              <button onClick={confirmBarcodeLog} disabled={logging} className="flex-1 rounded-lg bg-brand text-white py-2 text-sm font-medium disabled:opacity-50">
+                {logging ? 'Logging…' : 'Log it'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
