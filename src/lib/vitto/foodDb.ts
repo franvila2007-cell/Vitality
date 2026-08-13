@@ -154,6 +154,12 @@ export const FOOD_DB: Record<string, FoodEntry> = {
   chocolate: { type: 'per100g', cal: 535, prot: 7.6, carb: 59, fat: 30, defaultGrams: 40 },
   biscuit: { type: 'perUnit', cal: 70, prot: 1, carb: 10, fat: 3, label: 'biscuit', avgGrams: 15 },
   cake: { type: 'per100g', cal: 371, prot: 5, carb: 52, fat: 16, defaultGrams: 100 },
+  // Plain rice cake, sold and eaten as discrete pieces — must be perUnit, not
+  // per100g. Without its own entry this substring-matched onto "rice" (a
+  // per100g bulk grain), and since a bare number for a per100g food is read
+  // as grams, "1 rice cake" logged as 1 GRAM of rice (~1 kcal) instead of one
+  // whole rice cake — confirmed live with a real client.
+  'rice cake': { type: 'perUnit', cal: 35, prot: 0.7, carb: 7.3, fat: 0.3, label: 'rice cake', avgGrams: 9 },
 
   // condiments & sauces
   ketchup: { type: 'per100g', cal: 101, prot: 1.2, carb: 26, fat: 0.2, defaultGrams: 20, tbspGrams: 17 },
