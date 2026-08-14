@@ -57,7 +57,13 @@ export default function RecipesManager() {
   async function saveRecipe(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const name = form.name.trim();
+    // Strip a leading count like "1 " or "2x " — the saved macros already
+    // represent one whole serving, so a leading number in the name itself
+    // is redundant, and worse, it means the recipe can only ever match if
+    // someone types that exact digit again ("1 Walnut Half" never matches
+    // "walnut half" or "2 walnut halves" as typed) — confirmed as a real
+    // cause of "Vitto doesn't recognize it" for a real client's recipes.
+    const name = form.name.trim().replace(/^\d+\s*x?\s+/i, '');
     if (!name) { setError('Give the recipe a name.'); return; }
     const calories = parseFloat(form.calories), proteinG = parseFloat(form.proteinG), carbsG = parseFloat(form.carbsG), fatG = parseFloat(form.fatG);
     if ([calories, proteinG, carbsG, fatG].some((v) => Number.isNaN(v))) { setError('Fill in all four macro totals (or calculate them from ingredients).'); return; }

@@ -227,4 +227,5 @@ export const FOOD_SYNONYMS: Record<string, string> = {
   donut: 'donut', doughnut: 'donut',
   'crisp bread': 'bread',
   benna: 'benna plus pro milk',
+  ricecake: 'rice cake', ricecakes: 'rice cake', 'rice cakes': 'rice cake',
 };

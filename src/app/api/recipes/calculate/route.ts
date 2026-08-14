@@ -27,7 +27,8 @@ export async function POST(req: Request) {
 
   const db: Record<string, FoodEntry> = {};
   for (const row of globalFoodsRes.data || []) db[row.name] = { type: row.type, ...(row.data as object) } as FoodEntry;
-  for (const cf of customFoodsRes.data || []) db[cf.name] = { type: 'per100g', cal: cf.calories, prot: cf.protein_g, carb: cf.carbs_g, fat: cf.fat_g, defaultGrams: cf.default_grams };
+  // perUnit, not per100g — see the matching comment in /api/vitto/message/route.ts.
+  for (const cf of customFoodsRes.data || []) db[cf.name] = { type: 'perUnit', cal: cf.calories, prot: cf.protein_g, carb: cf.carbs_g, fat: cf.fat_g, label: cf.name, avgGrams: cf.default_grams };
   const synonyms: Record<string, string> = {};
   for (const s of synonymsRes.data || []) synonyms[s.phrase] = s.canonical;
   const foods: VittoFoods = { db, synonyms };

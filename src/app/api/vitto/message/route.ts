@@ -37,7 +37,15 @@ export async function POST(req: Request) {
     db[row.name] = { type: row.type, ...(row.data as object) } as FoodEntry;
   }
   for (const cf of customFoodsRes.data || []) {
-    db[cf.name] = { type: 'per100g', cal: cf.calories, prot: cf.protein_g, carb: cf.carbs_g, fat: cf.fat_g, defaultGrams: cf.default_grams };
+    // perUnit, not per100g: a client-saved recipe/food's stored macros are
+    // for ONE serving/piece as they described it ("Almond" = one almond,
+    // "Yuho burger" = one burger) — treating that as "per 100g" silently
+    // divides real portions down to near-zero (a saved 7 kcal almond became
+    // "100g Almond = 7 kcal" instead of just 1 almond) and let quantity
+    // words embedded in the food's own name (e.g. "1 Walnut Half") get
+    // misread as a fraction modifier. Confirmed against a real client's
+    // logged entries before fixing.
+    db[cf.name] = { type: 'perUnit', cal: cf.calories, prot: cf.protein_g, carb: cf.carbs_g, fat: cf.fat_g, label: cf.name, avgGrams: cf.default_grams };
   }
   const synonyms: Record<string, string> = {};
   for (const s of synonymsRes.data || []) synonyms[s.phrase] = s.canonical;
