@@ -129,6 +129,8 @@ Respond with ONLY a JSON object, no other text, in this exact shape:
 {"items": [{"quality_score": number, "fiber_g": number, "sugar_g": number, "sodium_mg": number, "calcium_mg": number, "iron_mg": number, "potassium_mg": number, "magnesium_mg": number, "zinc_mg": number, "vitamin_a_mcg": number, "vitamin_c_mg": number, "vitamin_d_mcg": number, "vitamin_e_mg": number, "vitamin_k_mcg": number, "vitamin_b6_mg": number, "vitamin_b12_mcg": number, "folate_mcg": number}, ...]}
 One object per input item, in the same order given.`;
 
+export { MICRO_KEYS };
+
 export async function llmEstimateFoodInsights(items: { name: string; calories: number }[], apiKey: string): Promise<FoodInsight[] | null> {
   if (items.length === 0) return null;
   try {
@@ -156,5 +158,71 @@ export async function llmEstimateFoodInsights(items: { name: string; calories: n
   } catch (err) {
     console.error('llmEstimateFoodInsights failed', err);
     return null; // graceful degradation — quality_score/micronutrients stay null, excluded from the rank average
+  }
+}
+
+// Photo-based logging: a client photographs their plate instead of typing
+// it out. One vision call identifies every distinct item AND estimates its
+// full profile (macros + quality + micronutrients) in one pass, rather than
+// chaining into the text-based estimator — a photo has no name to hand that
+// function anyway, and this way it's a single request, not two.
+export type PhotoFoodItem = { label: string; cal: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number } & Record<MicroKey, number>;
+
+const PHOTO_SYSTEM_PROMPT = `You are a nutrition estimation assistant inside a food-logging app. You are shown a photo of a meal or food item. Identify every distinct food/drink item visible and, for each one:
+
+1. A sensible label (e.g. "grilled chicken breast", "steamed rice", "side salad").
+2. Estimate the portion size from what's visible in the photo (plate size, typical servings) and give calories, protein (g), carbs (g), fat (g) for that portion. Reasonable, honest visual estimates are expected — this is not a request for lab-precision.
+3. quality_score (0-100 integer): nutritional quality based on the type of food —
+   85-100 whole/minimally processed (plain meat/fish/eggs, vegetables, fruit, whole grains, plain dairy)
+   60-84 balanced/lightly processed (home-cooked mixed meals, whole-grain bread, nuts)
+   35-59 moderately processed (fast food, fried food, sugary cereal, sweetened drinks)
+   0-34 ultra-processed/junk (candy, chips, soda, pastries, alcohol)
+4. A full micronutrient estimate for that portion: fiber_g, sugar_g, sodium_mg, calcium_mg, iron_mg, potassium_mg, magnesium_mg, zinc_mg, vitamin_a_mcg, vitamin_c_mg, vitamin_d_mcg, vitamin_e_mg, vitamin_k_mcg, vitamin_b6_mg, vitamin_b12_mcg, folate_mcg. Use 0 for anything negligible — never omit a field.
+
+Respond with ONLY a JSON object, no other text, in this exact shape:
+{"items": [{"label": "string", "cal": number, "protein_g": number, "carbs_g": number, "fat_g": number, "quality_score": number, "fiber_g": number, "sugar_g": number, "sodium_mg": number, "calcium_mg": number, "iron_mg": number, "potassium_mg": number, "magnesium_mg": number, "zinc_mg": number, "vitamin_a_mcg": number, "vitamin_c_mg": number, "vitamin_d_mcg": number, "vitamin_e_mg": number, "vitamin_k_mcg": number, "vitamin_b6_mg": number, "vitamin_b12_mcg": number, "folate_mcg": number}, ...]}
+
+If the photo doesn't show any food or drink, respond with {"items": []}.`;
+
+export async function llmAnalyzeMealPhoto(
+  base64Data: string,
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif',
+  apiKey: string
+): Promise<PhotoFoodItem[] | null> {
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
+      temperature: 0,
+      system: PHOTO_SYSTEM_PROMPT,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
+          { type: 'text', text: 'What food/drink is in this photo?' },
+        ],
+      }],
+    });
+    const block = msg.content[0];
+    if (!block || block.type !== 'text') return null;
+    const parsed = parseJsonLoose(block.text) as { items?: unknown };
+    if (!Array.isArray(parsed.items)) return null;
+
+    const clean = (v: unknown) => Math.max(0, Number(v) || 0);
+    const items = parsed.items
+      .filter((it): it is Record<string, unknown> => !!it && typeof it === 'object' && typeof (it as Record<string, unknown>).label === 'string')
+      .map((r) => {
+        const item = {
+          label: String(r.label), cal: clean(r.cal), protein_g: clean(r.protein_g), carbs_g: clean(r.carbs_g), fat_g: clean(r.fat_g),
+          quality_score: Math.max(0, Math.min(100, Math.round(Number(r.quality_score) || 0))),
+        } as PhotoFoodItem;
+        for (const key of MICRO_KEYS) item[key] = clean(r[key]);
+        return item;
+      });
+    return items.length > 0 ? items : null;
+  } catch (err) {
+    console.error('llmAnalyzeMealPhoto failed', err);
+    return null;
   }
 }
