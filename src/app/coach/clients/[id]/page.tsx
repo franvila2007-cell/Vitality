@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import TargetsEditor from '@/components/coach/TargetsEditor';
 import RankOverride from '@/components/coach/RankOverride';
 import CoachNoteEditor from '@/components/coach/CoachNoteEditor';
+import DeleteClientButton from '@/components/coach/DeleteClientButton';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
@@ -156,6 +157,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             ))}
           </div>
         </div>
+
+        <DeleteClientButton userId={id} clientName={profileRes.data.full_name || profileRes.data.email} />
       </div>
     </div>
   );
