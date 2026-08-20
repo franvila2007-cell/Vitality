@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
 
-// Coach-only: permanently removes a client account. Every per-client table
-// (targets, food_log_entries, habits, custom_foods, etc.) has an
-// `on delete cascade` FK back to profiles.id, which itself cascades from
-// auth.users.id — so deleting the auth user is enough to wipe all of their
-// data in one call, nothing to clean up table-by-table.
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+// Coach-only: archives or restores a client. "Removing" a client sets
+// archived_at instead of deleting anything — the coach wants to always be
+// able to add a removed client back, so every row (targets, food log,
+// habits, progress) stays intact and this is just a visibility flag. A
+// plain session-scoped update (not the admin/service-role client) is enough
+// since profiles_update_self_or_coach already grants the coach write access.
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const { archived } = (await req.json()) as { archived: boolean };
+
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -18,10 +20,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
 
   const { data: target } = await supabase.from('profiles').select('role').eq('id', id).single();
   if (!target) return NextResponse.json({ error: 'not found' }, { status: 404 });
-  if (target.role !== 'client') return NextResponse.json({ error: 'cannot delete a non-client account' }, { status: 400 });
+  if (target.role !== 'client') return NextResponse.json({ error: 'cannot archive a non-client account' }, { status: 400 });
 
-  const admin = createAdminClient();
-  const { error } = await admin.auth.admin.deleteUser(id);
+  const { error } = await supabase.from('profiles').update({ archived_at: archived ? new Date().toISOString() : null }).eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
   return NextResponse.json({ ok: true });

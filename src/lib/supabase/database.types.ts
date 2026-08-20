@@ -30,9 +30,9 @@ export type Database = {
     CompositeTypes: Record<string, never>;
     Tables: {
       profiles: Table<
-        { id: string; role: 'coach' | 'client'; full_name: string; email: string; created_at: string },
-        { id: string; role?: 'coach' | 'client'; full_name?: string; email: string; created_at?: string },
-        { id?: string; role?: 'coach' | 'client'; full_name?: string; email?: string; created_at?: string }
+        { id: string; role: 'coach' | 'client'; full_name: string; email: string; created_at: string; archived_at: string | null },
+        { id: string; role?: 'coach' | 'client'; full_name?: string; email: string; created_at?: string; archived_at?: string | null },
+        { id?: string; role?: 'coach' | 'client'; full_name?: string; email?: string; created_at?: string; archived_at?: string | null }
       >;
       client_profiles: Table<
         {

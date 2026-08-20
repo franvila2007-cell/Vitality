@@ -2,8 +2,10 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { addDays } from '@/lib/date';
 import { getProjections, computeMonthColors, type GoalType } from '@/lib/progress';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
+import RestoreClientButton from '@/components/coach/RestoreClientButton';
 
 export default async function CoachPage() {
   const supabase = await createClient();
@@ -12,11 +14,15 @@ export default async function CoachPage() {
   const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (me?.role !== 'coach') redirect('/');
 
-  const { data: clients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').order('full_name');
+  const { data: clients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').is('archived_at', null).order('full_name');
+  const { data: archivedClients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').not('archived_at', 'is', null).order('full_name');
+
+  const serverToday = new Date().toISOString().slice(0, 10);
+  const weekStart = addDays(serverToday, -6);
 
   const rows = await Promise.all(
     (clients || []).map(async (c) => {
-      const [profRes, targetsRes, recentMealsRes, cpRes, habitsRes] = await Promise.all([
+      const [profRes, targetsRes, recentMealsRes, cpRes, habitsRes, weekMealsRes, weekCompletionsRes, weekOverridesRes] = await Promise.all([
         supabase.from('client_profiles').select('*').eq('user_id', c.id).maybeSingle(),
         supabase.from('targets').select('*').eq('user_id', c.id).maybeSingle(),
         // Server time and a client's own local "today" can disagree by a day
@@ -27,6 +33,14 @@ export default async function CoachPage() {
         supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', c.id).order('date', { ascending: false }).limit(100),
         supabase.from('weight_checkpoints').select('*').eq('user_id', c.id),
         supabase.from('habits').select('id').eq('user_id', c.id),
+        // Separate, explicitly date-bounded queries for the weekly gold
+        // count — the recentMeals query above intentionally has no date
+        // filter (so an inactive client's last-ever entry still surfaces),
+        // which wouldn't reliably cover "the last 7 days" for clients who
+        // log many times a day.
+        supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', c.id).gte('date', weekStart).lte('date', serverToday),
+        supabase.from('habit_completions').select('date').eq('user_id', c.id).eq('completed', true).gte('date', weekStart).lte('date', serverToday),
+        supabase.from('rank_overrides').select('date, rank').eq('user_id', c.id).gte('date', weekStart).lte('date', serverToday),
       ]);
       const latestDate = recentMealsRes.data?.[0]?.date ?? null;
       const latestMeals = (recentMealsRes.data || []).filter((m) => m.date === latestDate);
@@ -59,11 +73,34 @@ export default async function CoachPage() {
         rankOverridden = !!overrideRes.data;
       }
 
-      return { client: c, profile: profRes.data, targets: targetsRes.data, totals, status, latestDate, rank, rankOverridden };
+      // Weekly golds: same rank logic as "today," applied to each of the
+      // last 7 days — a coach-confirmed override wins where one exists,
+      // otherwise fall back to the computed breakdown for that day.
+      const habitsTotal = habitsRes.data?.length ?? 0;
+      const rankTargets = targetsRes.data ? { calories: targetsRes.data.calories, protein_g: targetsRes.data.protein_g, carbs_g: targetsRes.data.carbs_g, fat_g: targetsRes.data.fat_g } : null;
+      const weekMealsByDate = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null }[]>();
+      for (const m of weekMealsRes.data || []) {
+        const arr = weekMealsByDate.get(m.date) || [];
+        arr.push(m);
+        weekMealsByDate.set(m.date, arr);
+      }
+      const weekHabitsDoneByDate = new Map<string, number>();
+      for (const row of weekCompletionsRes.data || []) {
+        weekHabitsDoneByDate.set(row.date, (weekHabitsDoneByDate.get(row.date) ?? 0) + 1);
+      }
+      const weekOverrideByDate = new Map((weekOverridesRes.data || []).map((r) => [r.date, r.rank]));
+      let weeklyGolds = 0;
+      for (let i = 0; i <= 6; i++) {
+        const d = addDays(serverToday, -i);
+        const dayMeals = weekMealsByDate.get(d) || [];
+        if (dayMeals.length === 0 && !weekHabitsDoneByDate.has(d) && !weekOverrideByDate.has(d)) continue;
+        const dayRank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal, habitsDone: weekHabitsDoneByDate.get(d) ?? 0, meals: dayMeals, targets: rankTargets }).rank;
+        if (dayRank === 'gold') weeklyGolds++;
+      }
+
+      return { client: c, profile: profRes.data, targets: targetsRes.data, totals, status, latestDate, rank, rankOverridden, weeklyGolds };
     })
   );
-
-  const serverToday = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="min-h-screen">
@@ -86,7 +123,7 @@ export default async function CoachPage() {
         {rows.length === 0 && <p className="text-sm text-neutral-400">No clients yet — add your first one.</p>}
 
         <div className="flex flex-col gap-2">
-          {rows.map(({ client, profile, targets, totals, status, latestDate, rank, rankOverridden }) => (
+          {rows.map(({ client, profile, targets, totals, status, latestDate, rank, rankOverridden, weeklyGolds }) => (
             <Link key={client.id} href={`/coach/clients/${client.id}`} className="flex items-center gap-4 bg-surface border border-border rounded-xl px-4 py-3 hover:border-brand transition-colors">
               <span
                 className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
@@ -100,6 +137,9 @@ export default async function CoachPage() {
                   {profile ? `${profile.goal_type === 'lose' ? 'Losing' : 'Gaining'} to ${profile.goal_weight}kg` : 'No program set up'}
                 </p>
               </div>
+              <span className="flex-shrink-0 text-xs font-medium border border-amber-200 bg-amber-50 text-amber-700 rounded-full px-2 py-1" title={`${weeklyGolds} gold ${weeklyGolds === 1 ? 'day' : 'days'} in the last 7 days`}>
+                🥇 {weeklyGolds}/7 this week
+              </span>
               {rank && (
                 <span className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${RANK_META[rank].className}`} title={rankOverridden ? `${RANK_META[rank].label} (set by coach)` : RANK_META[rank].label}>
                   {RANK_META[rank].emoji} {RANK_META[rank].label}
@@ -112,6 +152,23 @@ export default async function CoachPage() {
             </Link>
           ))}
         </div>
+
+        {archivedClients && archivedClients.length > 0 && (
+          <details className="mt-6 group">
+            <summary className="text-sm font-medium text-neutral-400 cursor-pointer list-none flex items-center gap-1.5 [&::-webkit-details-marker]:hidden">
+              <span className="text-neutral-300 text-xs group-open:rotate-180 transition-transform">▾</span>
+              Removed clients ({archivedClients.length})
+            </summary>
+            <div className="flex flex-col gap-2 mt-3">
+              {archivedClients.map((c) => (
+                <div key={c.id} className="flex items-center gap-3 bg-neutral-50 border border-border rounded-xl px-4 py-3">
+                  <p className="flex-1 min-w-0 text-sm text-neutral-500 truncate">{c.full_name || c.email}</p>
+                  <RestoreClientButton userId={c.id} />
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
       </div>
     </div>
   );
