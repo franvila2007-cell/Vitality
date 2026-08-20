@@ -33,11 +33,17 @@ export default function AppNav() {
           Sign out
         </button>
       </div>
+      {/* All 4 tabs are visible together on every page, and each destination
+          is a fully dynamic, per-request Supabase-backed page — Next's
+          default viewport prefetch would otherwise fire all 4 pages' worth
+          of queries on every single page view, not just the one being
+          shown. */}
       <div className="max-w-2xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto">
         {TABS.map((t) => (
           <Link
             key={t.href}
             href={t.href}
+            prefetch={false}
             className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border ${
               pathname === t.href ? 'bg-brand text-white border-brand' : 'border-border text-neutral-500 hover:text-neutral-800'
             }`}

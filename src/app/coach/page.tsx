@@ -56,26 +56,6 @@ export default async function CoachPage() {
         status = [...colors].reverse().find((c) => c !== null) || null;
       }
 
-      let rank = null as ReturnType<typeof computeDayRank>['rank'] | null;
-      let rankOverridden = false;
-      if (latestDate) {
-        const [completionsRes, overrideRes] = await Promise.all([
-          supabase.from('habit_completions').select('habit_id').eq('user_id', c.id).eq('date', latestDate).eq('completed', true),
-          supabase.from('rank_overrides').select('rank').eq('user_id', c.id).eq('date', latestDate).maybeSingle(),
-        ]);
-        const breakdown = computeDayRank({
-          habitsTotal: habitsRes.data?.length ?? 0,
-          habitsDone: completionsRes.data?.length ?? 0,
-          meals: latestMeals.map((m) => ({ calories: m.calories, protein_g: m.protein_g, carbs_g: m.carbs_g, fat_g: m.fat_g, quality_score: m.quality_score })),
-          targets: targetsRes.data ? { calories: targetsRes.data.calories, protein_g: targetsRes.data.protein_g, carbs_g: targetsRes.data.carbs_g, fat_g: targetsRes.data.fat_g } : null,
-        });
-        rank = overrideRes.data?.rank ?? breakdown.rank;
-        rankOverridden = !!overrideRes.data;
-      }
-
-      // Weekly golds: same rank logic as "today," applied to each of the
-      // last 7 days — a coach-confirmed override wins where one exists,
-      // otherwise fall back to the computed breakdown for that day.
       const habitsTotal = habitsRes.data?.length ?? 0;
       const rankTargets = targetsRes.data ? { calories: targetsRes.data.calories, protein_g: targetsRes.data.protein_g, carbs_g: targetsRes.data.carbs_g, fat_g: targetsRes.data.fat_g } : null;
       const weekMealsByDate = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null }[]>();
@@ -89,6 +69,38 @@ export default async function CoachPage() {
         weekHabitsDoneByDate.set(row.date, (weekHabitsDoneByDate.get(row.date) ?? 0) + 1);
       }
       const weekOverrideByDate = new Map((weekOverridesRes.data || []).map((r) => [r.date, r.rank]));
+
+      let rank = null as ReturnType<typeof computeDayRank>['rank'] | null;
+      let rankOverridden = false;
+      if (latestDate) {
+        // latestDate is almost always within the 7-day window already
+        // fetched above — only fire a dedicated round trip for the rarer
+        // case of a client whose last-ever entry is older than that.
+        let habitsDone: number;
+        let override: 'gold' | 'silver' | 'bronze' | undefined;
+        if (latestDate >= weekStart) {
+          habitsDone = weekHabitsDoneByDate.get(latestDate) ?? 0;
+          override = weekOverrideByDate.get(latestDate);
+        } else {
+          const [completionsRes, overrideRes] = await Promise.all([
+            supabase.from('habit_completions').select('habit_id').eq('user_id', c.id).eq('date', latestDate).eq('completed', true),
+            supabase.from('rank_overrides').select('rank').eq('user_id', c.id).eq('date', latestDate).maybeSingle(),
+          ]);
+          habitsDone = completionsRes.data?.length ?? 0;
+          override = overrideRes.data?.rank;
+        }
+        const breakdown = computeDayRank({
+          habitsTotal, habitsDone,
+          meals: latestMeals.map((m) => ({ calories: m.calories, protein_g: m.protein_g, carbs_g: m.carbs_g, fat_g: m.fat_g, quality_score: m.quality_score })),
+          targets: rankTargets,
+        });
+        rank = override ?? breakdown.rank;
+        rankOverridden = !!override;
+      }
+
+      // Weekly golds: same rank logic as "today," applied to each of the
+      // last 7 days — a coach-confirmed override wins where one exists,
+      // otherwise fall back to the computed breakdown for that day.
       let weeklyGolds = 0;
       for (let i = 0; i <= 6; i++) {
         const d = addDays(serverToday, -i);
@@ -124,7 +136,17 @@ export default async function CoachPage() {
 
         <div className="flex flex-col gap-2">
           {rows.map(({ client, profile, targets, totals, status, latestDate, rank, rankOverridden, weeklyGolds }) => (
-            <Link key={client.id} href={`/coach/clients/${client.id}`} className="flex items-center gap-4 bg-surface border border-border rounded-xl px-4 py-3 hover:border-brand transition-colors">
+            <Link
+              key={client.id}
+              href={`/coach/clients/${client.id}`}
+              // Each client's detail page independently runs ~10 Supabase
+              // queries (500-row food history, 2000-row habit history,
+              // checkpoints, overrides...) — with default prefetch, Next
+              // fires all of them for every client the instant this list
+              // renders, not just the one the coach clicks into.
+              prefetch={false}
+              className="flex items-center gap-4 bg-surface border border-border rounded-xl px-4 py-3 hover:border-brand transition-colors"
+            >
               <span
                 className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
                   status === 'green' ? 'bg-emerald-500' : status === 'orange' ? 'bg-amber-500' : status === 'red' ? 'bg-red-500' : 'bg-neutral-300'

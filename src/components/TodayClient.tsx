@@ -136,6 +136,7 @@ export default function TodayClient() {
     }
     setQuickAdd({ recipes: recipeNames, recent: recentNames });
     setLoading(false);
+    refreshStreak(user.id);
   }, [supabase, today, refreshStreak]);
 
   useEffect(() => { load(); }, [load]);
@@ -167,7 +168,14 @@ export default function TodayClient() {
       });
       const data = await res.json();
       setChat((c) => [...c, { id: 'b' + Date.now(), role: 'bot', text: data.reply || "Sorry, something went wrong." }]);
-      if (data.meals) setMeals(data.meals);
+      if (data.meals) {
+        setMeals(data.meals);
+        // Today's streak/week-pip depend on having a meal logged, and this
+        // chat path is how most food actually gets logged — without this,
+        // the welcome card's streak stays stale until a habit gets toggled.
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) refreshStreak(user.id);
+      }
     } catch {
       setChat((c) => [...c, { id: 'e' + Date.now(), role: 'bot', text: "I couldn't reach the server just now — try again in a moment." }]);
     }
@@ -277,6 +285,8 @@ export default function TodayClient() {
   async function deleteMeal(id: string) {
     setMeals((m) => m.filter((x) => x.id !== id));
     await supabase.from('food_log_entries').delete().eq('id', id);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) refreshStreak(user.id);
   }
 
   async function toggleHabit(habitId: string) {
