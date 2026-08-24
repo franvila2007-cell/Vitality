@@ -32,13 +32,16 @@ export default function NewClientPage() {
         carbsG: parseInt(form.carbsG) || 200, fatG: parseInt(form.fatG) || 65,
       }),
     });
+    const data = await res.json().catch(() => ({}));
     setLoading(false);
     if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
       setError(data.error || 'Something went wrong.');
       return;
     }
-    router.push('/coach');
+    // A previously-removed client with this email gets restored rather than
+    // duplicated (see the API route) — land on their page either way so a
+    // restore is immediately visible as "oh, this is their existing data."
+    router.push(`/coach/clients/${data.id}`);
     router.refresh();
   }
 

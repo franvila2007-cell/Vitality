@@ -41,7 +41,29 @@ export async function POST(req: Request) {
     data: { role: 'client', full_name: fullName },
     redirectTo: `${origin}/auth/callback`,
   });
-  if (inviteErr || !invited.user) return NextResponse.json({ error: inviteErr?.message || 'invite failed' }, { status: 400 });
+
+  if (inviteErr || !invited.user) {
+    // Supabase Auth enforces a unique email — inviting an address that's
+    // already tied to a real auth.users row always fails, permanent-delete
+    // or not. That's fine for a genuinely-in-use email, but a coach who
+    // "removed" (archived, not deleted) a client and later re-adds them by
+    // the same email should get that client back, not a dead end: their
+    // account, history, and targets never went away, so bring it back
+    // instead of trying (and failing) to create a duplicate.
+    const emailTaken = inviteErr?.code === 'email_exists' || /already.*registered|already.*exists|email.*taken/i.test(inviteErr?.message || '');
+    if (emailTaken) {
+      const { data: existing } = await admin.from('profiles').select('id, role, archived_at, full_name').ilike('email', email).maybeSingle();
+      if (existing?.role === 'client' && existing.archived_at) {
+        await admin.from('profiles').update({ archived_at: null }).eq('id', existing.id);
+        return NextResponse.json({ id: existing.id, email, restored: true });
+      }
+      if (existing?.role === 'client') {
+        return NextResponse.json({ error: `${existing.full_name || email} already has an active account — find them in your client list instead of adding a new one.` }, { status: 400 });
+      }
+      return NextResponse.json({ error: 'That email is already in use by another account.' }, { status: 400 });
+    }
+    return NextResponse.json({ error: inviteErr?.message || 'invite failed' }, { status: 400 });
+  }
 
   const clientId = invited.user.id;
   const today = new Date().toISOString().slice(0, 10);
@@ -55,5 +77,5 @@ export async function POST(req: Request) {
     admin.from('habits').insert(DEFAULT_HABITS.map((h, i) => ({ user_id: clientId, key: h.key, label: h.label, tag: h.tag, sort_order: i }))),
   ]);
 
-  return NextResponse.json({ id: clientId, email: invited.user.email });
+  return NextResponse.json({ id: clientId, email: invited.user.email, restored: false });
 }
