@@ -60,6 +60,12 @@ export async function POST(req: Request) {
       if (existing?.role === 'client') {
         return NextResponse.json({ error: `${existing.full_name || email} already has an active account — find them in your client list instead of adding a new one.` }, { status: 400 });
       }
+      if (existing?.role === 'coach') {
+        // Supabase enforces one account per email platform-wide — a coach
+        // login and a client login can never share an address, so this
+        // isn't a state to recover from, just something to explain clearly.
+        return NextResponse.json({ error: `That email belongs to a coach login (${existing.full_name || 'this account'}) — a client needs a different email address than yours.` }, { status: 400 });
+      }
       return NextResponse.json({ error: 'That email is already in use by another account.' }, { status: 400 });
     }
     return NextResponse.json({ error: inviteErr?.message || 'invite failed' }, { status: 400 });
