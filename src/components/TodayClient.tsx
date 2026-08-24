@@ -67,6 +67,10 @@ export default function TodayClient() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [photoItems, setPhotoItems] = useState<PhotoItem[] | null>(null);
   const [photoLogging, setPhotoLogging] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualForm, setManualForm] = useState({ name: '', calories: '', proteinG: '', carbsG: '', fatG: '' });
+  const [manualError, setManualError] = useState<string | null>(null);
+  const [manualLogging, setManualLogging] = useState(false);
 
   // Isolated from load() below so toggling a habit only refetches the ~90
   // days of dates the streak actually depends on, instead of re-running the
@@ -280,6 +284,29 @@ export default function TodayClient() {
       setPhotoItems(null);
       load();
     }
+  }
+
+  async function confirmManualLog() {
+    setManualError(null);
+    const calories = parseFloat(manualForm.calories);
+    const proteinG = parseFloat(manualForm.proteinG) || 0;
+    const carbsG = parseFloat(manualForm.carbsG) || 0;
+    const fatG = parseFloat(manualForm.fatG) || 0;
+    if (!Number.isFinite(calories) || calories < 0) { setManualError('Enter at least the calories.'); return; }
+
+    setManualLogging(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setManualLogging(false); return; }
+    const { error } = await supabase.from('food_log_entries').insert({
+      user_id: user.id, date: today, name: manualForm.name.trim() || 'Manual entry',
+      calories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG,
+      source: 'manual', estimated: false,
+    });
+    setManualLogging(false);
+    if (error) { setManualError(error.message); return; }
+    setManualOpen(false);
+    setManualForm({ name: '', calories: '', proteinG: '', carbsG: '', fatG: '' });
+    load();
   }
 
   async function deleteMeal(id: string) {
@@ -546,7 +573,15 @@ export default function TodayClient() {
         </div>
 
         <div className="border-t border-border pt-3">
-          <p className="text-xs font-medium text-neutral-500 mb-2">Meal log · {meals.length} {meals.length === 1 ? 'entry' : 'entries'}</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-medium text-neutral-500">Meal log · {meals.length} {meals.length === 1 ? 'entry' : 'entries'}</p>
+            <button
+              onClick={() => { setManualError(null); setManualOpen(true); }}
+              className="text-xs font-medium text-brand-dark hover:opacity-70 transition-opacity"
+            >
+              + Enter manually
+            </button>
+          </div>
           {meals.length === 0 && <p className="text-sm text-neutral-400 text-center py-3">No meals logged yet.</p>}
           <div className="flex flex-col gap-1.5">
             {meals.map((m) => (
@@ -663,7 +698,52 @@ export default function TodayClient() {
           </div>
         </div>
       )}
+
+      {manualOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl p-4 w-full max-w-sm">
+            <p className="text-sm font-medium mb-1">Enter it manually</p>
+            <p className="text-xs text-neutral-400 mb-3">For when you already know the numbers — packaging, another app, a menu.</p>
+            <div className="flex flex-col gap-2.5">
+              <input
+                value={manualForm.name}
+                onChange={(e) => setManualForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="What was it? (optional)"
+                className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand transition-colors"
+              />
+              <div className="grid grid-cols-4 gap-2">
+                <ManualField label="Kcal" value={manualForm.calories} onChange={(v) => setManualForm((f) => ({ ...f, calories: v }))} />
+                <ManualField label="Protein" value={manualForm.proteinG} onChange={(v) => setManualForm((f) => ({ ...f, proteinG: v }))} />
+                <ManualField label="Carbs" value={manualForm.carbsG} onChange={(v) => setManualForm((f) => ({ ...f, carbsG: v }))} />
+                <ManualField label="Fat" value={manualForm.fatG} onChange={(v) => setManualForm((f) => ({ ...f, fatG: v }))} />
+              </div>
+              {manualError && <p className="text-xs text-red-600">{manualError}</p>}
+              <div className="flex gap-2 mt-1">
+                <button onClick={() => setManualOpen(false)} className="flex-1 rounded-lg border border-border text-neutral-600 py-2 text-sm font-medium">Cancel</button>
+                <button onClick={confirmManualLog} disabled={manualLogging} className="flex-1 rounded-lg bg-brand text-white py-2 text-sm font-medium disabled:opacity-50">
+                  {manualLogging ? 'Logging…' : 'Log it'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ManualField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[10px] uppercase text-neutral-400">{label}</span>
+      <input
+        type="number"
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-lg border border-border bg-neutral-50 px-2 py-1.5 text-sm outline-none focus:border-brand transition-colors"
+      />
+    </label>
   );
 }
 
