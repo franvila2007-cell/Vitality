@@ -6,6 +6,7 @@ import { addDays } from '@/lib/date';
 import { getProjections, computeMonthColors, type GoalType } from '@/lib/progress';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import RestoreClientButton from '@/components/coach/RestoreClientButton';
+import DeleteForeverButton from '@/components/coach/DeleteForeverButton';
 
 export default async function CoachPage() {
   const supabase = await createClient();
@@ -185,6 +186,7 @@ export default async function CoachPage() {
               {archivedClients.map((c) => (
                 <div key={c.id} className="flex items-center gap-3 bg-neutral-50 border border-border rounded-xl px-4 py-3">
                   <p className="flex-1 min-w-0 text-sm text-neutral-500 truncate">{c.full_name || c.email}</p>
+                  <DeleteForeverButton userId={c.id} clientName={c.full_name || c.email} />
                   <RestoreClientButton userId={c.id} />
                 </div>
               ))}

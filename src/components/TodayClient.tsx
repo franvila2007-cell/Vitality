@@ -453,7 +453,10 @@ export default function TodayClient() {
       {/* Vitto chat */}
       <div className="bg-surface border border-border rounded-2xl p-4">
         <div className="flex items-center gap-3 mb-3">
-          <Image src="/vitto-avatar.png" alt="" width={56} height={56} className="flex-shrink-0" />
+          <Image
+            src="/vitto-avatar.png" alt="" width={56} height={56}
+            className={`flex-shrink-0 rounded-full transition-shadow ${sending ? 'animate-[vitto-thinking-ring_1.2s_ease-in-out_infinite]' : 'animate-[vitto-bob_3s_ease-in-out_infinite]'}`}
+          />
           <div>
             <p className="text-sm font-medium">Vitto</p>
             <p className="text-[11px] text-neutral-400">Your Vitality AI food logger</p>
@@ -461,7 +464,10 @@ export default function TodayClient() {
         </div>
         <div className="flex flex-col gap-2 mb-3 max-h-72 overflow-y-auto">
           {chat.map((m) => (
-            <div key={m.id} className={`flex items-end gap-1.5 animate-[fade-in_0.15s_ease] ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div
+              key={m.id}
+              className={`flex items-end gap-1.5 ${m.role === 'user' ? 'justify-end animate-[fade-in_0.15s_ease]' : 'justify-start animate-[bubble-pop_0.35s_cubic-bezier(0.34,1.56,0.64,1)]'}`}
+            >
               {m.role === 'bot' && <Image src="/vitto-avatar.png" alt="" width={20} height={20} className="rounded-full flex-shrink-0" />}
               <div className={`px-3 py-2 rounded-2xl text-[13px] max-w-[85%] ${m.role === 'user' ? 'bg-brand text-white rounded-br-sm' : 'bg-neutral-100 text-neutral-800 rounded-bl-sm'}`}>
                 {m.text}
@@ -469,8 +475,8 @@ export default function TodayClient() {
             </div>
           ))}
           {sending && (
-            <div className="flex items-end gap-1.5 justify-start">
-              <Image src="/vitto-avatar.png" alt="" width={20} height={20} className="rounded-full flex-shrink-0" />
+            <div className="flex items-end gap-1.5 justify-start animate-[fade-in_0.15s_ease]">
+              <Image src="/vitto-avatar.png" alt="" width={20} height={20} className="rounded-full flex-shrink-0 animate-[vitto-bob_1s_ease-in-out_infinite]" />
               <div className="px-3 py-2 rounded-2xl rounded-bl-sm bg-neutral-100 text-neutral-400 text-[13px] flex gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce [animation-delay:-0.3s]" />
                 <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce [animation-delay:-0.15s]" />

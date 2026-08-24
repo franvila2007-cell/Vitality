@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { processVittoMessage, parseFoodText, type VittoContext, type VittoAction, type MealEntry, type PendingState } from '@/lib/vitto/parser';
 import type { FoodEntry } from '@/lib/vitto/foodDb';
-import { llmAssistParse, llmEstimateFoods, llmEstimateFoodInsights, type FoodInsight } from '@/lib/vitto/llmFallback';
+import { llmAssistParse, llmEstimateFoods, llmEstimateFoodInsights, llmAnswerQuestion, type FoodInsight } from '@/lib/vitto/llmFallback';
 
 export const runtime = 'nodejs';
 
@@ -120,6 +120,17 @@ export async function POST(req: Request) {
         };
       }
     }
+  }
+
+  // Genuine open question ("is peanut butter good for cutting?") rather than
+  // a food to log — the local parser has no pattern for these at all, so
+  // without this Vitto could only shrug, which is exactly what pushes
+  // clients to ask a general chatbot instead.
+  if (result.unhandled && process.env.ANTHROPIC_API_KEY) {
+    const t = todayMeals.reduce((a, m) => ({ cal: a.cal + m.cal, prot: a.prot + m.prot, carb: a.carb + m.carb, fat: a.fat + m.fat }), { cal: 0, prot: 0, carb: 0, fat: 0 });
+    const ctxSummary = `Client: ${firstName || 'this client'}. Today so far: ${Math.round(t.cal)}/${targets.cal} kcal, ${Math.round(t.prot)}/${targets.prot}g protein, ${Math.round(t.carb)}/${targets.carb}g carbs, ${Math.round(t.fat)}/${targets.fat}g fat. Current streak: ${streakDays} day(s).`;
+    const answer = await llmAnswerQuestion(text, ctxSummary, process.env.ANTHROPIC_API_KEY);
+    if (answer) result = { reply: answer, actions: result.actions };
   }
 
   await applyActions(supabase, user.id, date, result.actions, process.env.ANTHROPIC_API_KEY);

@@ -33,6 +33,28 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Vitto's idle "breathing" — a small constant sign of life on his avatar
+   wherever he's just sitting there, not just when a message is in flight. */
+@keyframes vitto-bob {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(-2deg); }
+}
+
+/* Bot replies pop in with a touch more personality than the plain fade-in
+   user bubbles use — a small overshoot-and-settle instead of a flat fade. */
+@keyframes bubble-pop {
+  0% { opacity: 0; transform: scale(0.85) translateY(6px); }
+  65% { opacity: 1; transform: scale(1.04) translateY(-1px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Soft pulsing ring around Vitto's avatar while he's "thinking" (a reply is
+   in flight) — pairs with the existing bouncing-dots typing indicator. */
+@keyframes vitto-thinking-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 168, 166, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(15, 168, 166, 0); }
+}
+
 a, button, input {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
 }

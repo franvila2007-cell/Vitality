@@ -75,7 +75,11 @@ export type VittoContext = {
   clientFirstName: string | null;
 };
 
-export type VittoResult = { reply: string; actions: VittoAction[] };
+// `unhandled: true` marks a genuine open question the local parser has no
+// pattern for (not food, not small talk, not an app command) — the route
+// handler uses this to decide whether to hand the message to the LLM for a
+// real nutrition-knowledge answer instead of leaving the client stuck.
+export type VittoResult = { reply: string; actions: VittoAction[]; unhandled?: boolean };
 
 // ── Quantity words ──────────────────────────────────────────────────────
 
@@ -670,7 +674,7 @@ export function processVittoMessage(text: string, ctx: VittoContext): VittoResul
     if (looksFoodLike) {
       return { reply: 'I don\'t recognise "' + trimmed + '" yet — no worries though, roughly how many calories was that? Just give me a number (like "450" or "about 500 cal") and I\'ll log it for you.', actions: [{ kind: 'set_pending', pending: { type: 'unknown_food', text: trimmed } }] };
     }
-    return { reply: "I'm not quite sure what you mean by that 🤔 You can tell me what you ate or drank, ask how many calories/protein/carbs/fat you have left, say \"undo\" to remove your last entry, or just say hi anytime!", actions: clearStalePending };
+    return { reply: "I'm not quite sure what you mean by that 🤔 You can tell me what you ate or drank, ask how many calories/protein/carbs/fat you have left, say \"undo\" to remove your last entry, or just say hi anytime!", actions: clearStalePending, unhandled: true };
   }
 
   const isFirstLogToday = ctx.todayMeals.length === 0;

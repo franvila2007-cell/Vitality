@@ -226,3 +226,38 @@ export async function llmAnalyzeMealPhoto(
     return null;
   }
 }
+
+const QUESTION_SYSTEM_PROMPT = `You are Vitto, the friendly AI nutrition assistant built into the Vitality coaching app. A client just asked you something the app's local logic can't pattern-match — a real question about nutrition, training, or how to use their numbers — instead of naming a food to log.
+
+Answer it like a knowledgeable, encouraging coach's assistant would: direct, genuinely helpful, no filler, no "as an AI" disclaimers. Use the client's own targets/progress below when it makes the answer sharper or more personal, but don't force it in if it's not relevant. Keep it to 2-4 sentences — this is a chat bubble, not an article. Plain text only, emoji sparingly and only if it fits naturally.
+
+If the question is asking for a medical diagnosis, treatment, or anything that needs a doctor or their coach's direct judgment (an injury, a medical condition, a prescription-level decision), say so briefly and suggest they bring it to their coach or a doctor — don't try to answer it yourself.`;
+
+// Reached only when the local parser found no food, no small talk, and no
+// app command to run — a genuine open question ("is peanut butter good for
+// cutting?", "how much protein do I actually need?"). Without this, Vitto
+// had no way to answer anything outside its own hardcoded patterns, which
+// is exactly the gap that sends clients to ask a general chatbot instead.
+export async function llmAnswerQuestion(
+  text: string,
+  ctxSummary: string,
+  apiKey: string
+): Promise<string | null> {
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 300,
+      temperature: 0.5,
+      system: QUESTION_SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: `${ctxSummary}\n\nClient's message: "${text}"` }],
+    });
+    const block = msg.content[0];
+    if (!block || block.type !== 'text') return null;
+    const reply = block.text.trim();
+    return reply.length > 0 ? reply : null;
+  } catch (err) {
+    console.error('llmAnswerQuestion failed', err);
+    return null;
+  }
+}
