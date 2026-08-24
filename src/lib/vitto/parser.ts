@@ -663,6 +663,22 @@ export function processVittoMessage(text: string, ctx: VittoContext): VittoResul
   const commandResult = tryAnswerQuestion(greetingStrippedLower || trimmed.toLowerCase(), ctx);
   if (commandResult) return { reply: commandResult.reply, actions: [...clearStalePending, ...commandResult.actions] };
 
+  // A message phrased as a question ("is peanut butter good for weight
+  // loss?") must never fall into food parsing just because it happens to
+  // NAME a food the database recognizes — without this, parseFoodText below
+  // would match "peanut butter" and silently log 16g of it instead of
+  // answering the actual question. A trailing "?" with no quantity/unit is
+  // a strong, simple signal this is a question, not a food statement.
+  const isQuestionShaped = /\?\s*$/.test(trimmed) && !/\d+\s*(g|grams?|kg|ml|l|oz|cal|kcal)\b/i.test(trimmed);
+  if (isQuestionShaped) {
+    const smallTalkReply = trySmallTalk(trimmed.toLowerCase(), ctx.clientFirstName);
+    if (smallTalkReply) return { reply: smallTalkReply, actions: clearStalePending };
+    // Placeholder reply — the route handler replaces this with a real
+    // answer when the LLM call succeeds; this text only ever reaches the
+    // client if that call fails or no API key is configured.
+    return { reply: "Good question — I don't have a solid answer for that right now. Try asking again in a moment, or bring it to your coach.", actions: clearStalePending, unhandled: true };
+  }
+
   const { matched, unmatched } = parseFoodText(trimmed, ctx.foods);
   if (matched.length === 0) {
     // No food found — NOW it's safe to treat this as pure conversation.
