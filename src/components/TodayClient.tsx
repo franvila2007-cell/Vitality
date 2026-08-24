@@ -451,7 +451,12 @@ export default function TodayClient() {
       </div>
 
       {/* Vitto chat */}
-      <div className="bg-surface border border-border rounded-2xl p-4">
+      {/* min-w-0: without it, a flex-column child sizes to its widest
+          descendant's natural width — the quick-add chip row below is wide
+          enough (many chips) to blow out this card, and with it the whole
+          page, into horizontal scroll on narrow screens instead of just
+          scrolling internally as intended. */}
+      <div className="bg-surface border border-border rounded-2xl p-4 min-w-0">
         <div className="flex items-center gap-3 mb-3">
           <Image
             src="/vitto-avatar.png" alt="" width={56} height={56}

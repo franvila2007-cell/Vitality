@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
 
 const TABS = [
   { href: '/', label: 'Today' },
@@ -34,22 +35,21 @@ export default function AppNav() {
         </button>
       </div>
       {/* All 4 tabs are visible together on every page, and each destination
-          is a fully dynamic, per-request Supabase-backed page — Next's
-          default viewport prefetch would otherwise fire all 4 pages' worth
-          of queries on every single page view, not just the one being
-          shown. */}
+          is a fully dynamic, per-request Supabase-backed page — default
+          prefetch would fire all 4 pages' worth of queries on every single
+          page view, not just the one being shown, so this only prefetches
+          the tab actually being touched/hovered. */}
       <div className="max-w-2xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto">
         {TABS.map((t) => (
-          <Link
+          <PrefetchOnIntentLink
             key={t.href}
             href={t.href}
-            prefetch={false}
             className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border ${
               pathname === t.href ? 'bg-brand text-white border-brand' : 'border-border text-neutral-500 hover:text-neutral-800'
             }`}
           >
             {t.label}
-          </Link>
+          </PrefetchOnIntentLink>
         ))}
       </div>
     </div>

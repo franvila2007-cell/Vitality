@@ -7,6 +7,7 @@ import { getProjections, computeMonthColors, type GoalType } from '@/lib/progres
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import RestoreClientButton from '@/components/coach/RestoreClientButton';
 import DeleteForeverButton from '@/components/coach/DeleteForeverButton';
+import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
 
 export default async function CoachPage() {
   const supabase = await createClient();
@@ -137,42 +138,46 @@ export default async function CoachPage() {
 
         <div className="flex flex-col gap-2">
           {rows.map(({ client, profile, targets, totals, status, latestDate, rank, rankOverridden, weeklyGolds }) => (
-            <Link
+            <PrefetchOnIntentLink
               key={client.id}
               href={`/coach/clients/${client.id}`}
               // Each client's detail page independently runs ~10 Supabase
               // queries (500-row food history, 2000-row habit history,
-              // checkpoints, overrides...) — with default prefetch, Next
-              // fires all of them for every client the instant this list
-              // renders, not just the one the coach clicks into.
-              prefetch={false}
-              className="flex items-center gap-4 bg-surface border border-border rounded-xl px-4 py-3 hover:border-brand transition-colors"
+              // checkpoints, overrides...) — default prefetch would fire all
+              // of them for every client the instant this list renders, not
+              // just the one the coach taps, so this only prefetches on
+              // real touch/hover intent for that one link.
+              className="flex flex-col gap-2 bg-surface border border-border rounded-xl px-4 py-3 hover:border-brand transition-colors overflow-hidden"
             >
-              <span
-                className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                  status === 'green' ? 'bg-emerald-500' : status === 'orange' ? 'bg-amber-500' : status === 'red' ? 'bg-red-500' : 'bg-neutral-300'
-                }`}
-                title={status || 'no data yet'}
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{client.full_name || client.email}</p>
-                <p className="text-xs text-neutral-400 truncate">
-                  {profile ? `${profile.goal_type === 'lose' ? 'Losing' : 'Gaining'} to ${profile.goal_weight}kg` : 'No program set up'}
-                </p>
+              <div className="flex items-center gap-3 min-w-0">
+                <span
+                  className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                    status === 'green' ? 'bg-emerald-500' : status === 'orange' ? 'bg-amber-500' : status === 'red' ? 'bg-red-500' : 'bg-neutral-300'
+                  }`}
+                  title={status || 'no data yet'}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{client.full_name || client.email}</p>
+                  <p className="text-xs text-neutral-400 truncate">
+                    {profile ? `${profile.goal_type === 'lose' ? 'Losing' : 'Gaining'} to ${profile.goal_weight}kg` : 'No program set up'}
+                  </p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-medium whitespace-nowrap">{Math.round(totals.cal)} / {targets?.calories ?? '—'} kcal</p>
+                  <p className="text-[11px] text-neutral-400 whitespace-nowrap">{latestDate ? (latestDate === serverToday ? 'today' : latestDate) : 'no entries yet'}</p>
+                </div>
               </div>
-              <span className="flex-shrink-0 text-xs font-medium border border-amber-200 bg-amber-50 text-amber-700 rounded-full px-2 py-1" title={`${weeklyGolds} gold ${weeklyGolds === 1 ? 'day' : 'days'} in the last 7 days`}>
-                🥇 {weeklyGolds}/7 this week
-              </span>
-              {rank && (
-                <span className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${RANK_META[rank].className}`} title={rankOverridden ? `${RANK_META[rank].label} (set by coach)` : RANK_META[rank].label}>
-                  {RANK_META[rank].emoji} {RANK_META[rank].label}
+              <div className="flex items-center gap-2 flex-wrap pl-[22px]">
+                <span className="flex-shrink-0 text-xs font-medium border border-amber-200 bg-amber-50 text-amber-700 rounded-full px-2 py-1" title={`${weeklyGolds} gold ${weeklyGolds === 1 ? 'day' : 'days'} in the last 7 days`}>
+                  🥇 {weeklyGolds}/7 this week
                 </span>
-              )}
-              <div className="text-right flex-shrink-0">
-                <p className="text-sm font-medium">{Math.round(totals.cal)} / {targets?.calories ?? '—'} kcal</p>
-                <p className="text-[11px] text-neutral-400">{latestDate ? (latestDate === serverToday ? 'today' : latestDate) : 'no entries yet'}</p>
+                {rank && (
+                  <span className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${RANK_META[rank].className}`} title={rankOverridden ? `${RANK_META[rank].label} (set by coach)` : RANK_META[rank].label}>
+                    {RANK_META[rank].emoji} {RANK_META[rank].label}
+                  </span>
+                )}
               </div>
-            </Link>
+            </PrefetchOnIntentLink>
           ))}
         </div>
 
