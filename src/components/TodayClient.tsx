@@ -45,7 +45,7 @@ export default function TodayClient() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [doneHabitIds, setDoneHabitIds] = useState<Set<string>>(new Set());
   const [streak, setStreak] = useState(0);
-  const [weekHistory, setWeekHistory] = useState<{ date: string; hit: boolean }[]>([]);
+  const [weekHistory, setWeekHistory] = useState<{ date: string; rank: Rank | null }[]>([]);
   const [rankOverride, setRankOverride] = useState<Rank | null>(null);
   const [coachNote, setCoachNote] = useState('');
   const [chat, setChat] = useState<ChatMsg[]>([]);
@@ -76,11 +76,24 @@ export default function TodayClient() {
   // days of dates the streak actually depends on, instead of re-running the
   // full page load (profile/targets/meals/habits/completions) for a change
   // that only affects one number.
-  const refreshStreak = useCallback(async (userId: string) => {
+  const refreshStreak = useCallback(async (
+    userId: string,
+    habitsTotal: number,
+    tgt: Pick<Targets, 'calories' | 'protein_g' | 'carbs_g' | 'fat_g'>
+  ) => {
     const windowStart = addDays(today, -90);
-    const [mealDatesRes, habitDatesRes] = await Promise.all([
+    const weekStart = addDays(today, -6);
+    const [mealDatesRes, habitDatesRes, weekMealsRes, weekCompletionsRes, weekOverridesRes] = await Promise.all([
       supabase.from('food_log_entries').select('date').eq('user_id', userId).gte('date', windowStart).lte('date', today),
       supabase.from('habit_completions').select('date').eq('user_id', userId).eq('completed', true).gte('date', windowStart).lte('date', today),
+      // Separate, week-scoped fetch with the actual macro/quality columns —
+      // the two queries above only carry dates (enough for the streak's
+      // hit/miss walk), but the week pips now show the real computed rank
+      // for each day, which needs the same shape computeDayRank uses on the
+      // coach dashboard.
+      supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', userId).gte('date', weekStart).lte('date', today),
+      supabase.from('habit_completions').select('date').eq('user_id', userId).eq('completed', true).gte('date', weekStart).lte('date', today),
+      supabase.from('rank_overrides').select('date, rank').eq('user_id', userId).gte('date', weekStart).lte('date', today),
     ]);
     const mealDates = new Set((mealDatesRes.data || []).map((r) => r.date));
     const habitDates = new Set((habitDatesRes.data || []).map((r) => r.date));
@@ -88,12 +101,26 @@ export default function TodayClient() {
     while (mealDates.has(cursor) && habitDates.has(cursor)) { s++; cursor = addDays(cursor, -1); }
     setStreak(s);
 
-    // Same underlying data, just the last 7 days instead of walking back
-    // until the streak breaks — for the week-at-a-glance bar.
-    const week: { date: string; hit: boolean }[] = [];
+    const weekMealsByDate = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null }[]>();
+    for (const m of weekMealsRes.data || []) {
+      const arr = weekMealsByDate.get(m.date) || [];
+      arr.push(m);
+      weekMealsByDate.set(m.date, arr);
+    }
+    const weekHabitsDoneByDate = new Map<string, number>();
+    for (const row of weekCompletionsRes.data || []) {
+      weekHabitsDoneByDate.set(row.date, (weekHabitsDoneByDate.get(row.date) ?? 0) + 1);
+    }
+    const weekOverrideByDate = new Map((weekOverridesRes.data || []).map((r) => [r.date, r.rank]));
+
+    const week: { date: string; rank: Rank | null }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = addDays(today, -i);
-      week.push({ date: d, hit: mealDates.has(d) && habitDates.has(d) });
+      const dayMeals = weekMealsByDate.get(d) || [];
+      const hasData = dayMeals.length > 0 || weekHabitsDoneByDate.has(d) || weekOverrideByDate.has(d);
+      if (!hasData) { week.push({ date: d, rank: null }); continue; }
+      const rank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal, habitsDone: weekHabitsDoneByDate.get(d) ?? 0, meals: dayMeals, targets: tgt }).rank;
+      week.push({ date: d, rank });
     }
     setWeekHistory(week);
   }, [supabase, today]);
@@ -140,7 +167,7 @@ export default function TodayClient() {
     }
     setQuickAdd({ recipes: recipeNames, recent: recentNames });
     setLoading(false);
-    refreshStreak(user.id);
+    refreshStreak(user.id, habitsRes.data?.length ?? 0, targetsRes.data || DEFAULT_TARGETS);
   }, [supabase, today, refreshStreak]);
 
   useEffect(() => { load(); }, [load]);
@@ -178,7 +205,7 @@ export default function TodayClient() {
         // chat path is how most food actually gets logged — without this,
         // the welcome card's streak stays stale until a habit gets toggled.
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) refreshStreak(user.id);
+        if (user) refreshStreak(user.id, habits.length, targets);
       }
     } catch {
       setChat((c) => [...c, { id: 'e' + Date.now(), role: 'bot', text: "I couldn't reach the server just now — try again in a moment." }]);
@@ -313,7 +340,7 @@ export default function TodayClient() {
     setMeals((m) => m.filter((x) => x.id !== id));
     await supabase.from('food_log_entries').delete().eq('id', id);
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) refreshStreak(user.id);
+    if (user) refreshStreak(user.id, habits.length, targets);
   }
 
   async function toggleHabit(habitId: string) {
@@ -327,7 +354,7 @@ export default function TodayClient() {
       { user_id: user.id, habit_id: habitId, date: today, completed: !isDone },
       { onConflict: 'user_id,habit_id,date' }
     );
-    refreshStreak(user.id);
+    refreshStreak(user.id, habits.length, targets);
   }
 
   async function handleBarcodeDetected(code: string) {
@@ -429,19 +456,24 @@ export default function TodayClient() {
         <div className="relative border-t border-white/15 pt-3">
           <p className="text-[10px] uppercase text-white/50 mb-1.5">This week</p>
           <div className="flex gap-1.5">
-            {weekHistory.map(({ date, hit }) => {
+            {weekHistory.map(({ date, rank }) => {
               const [y, m, d] = date.split('-').map(Number);
               const label = new Date(y, m - 1, d).toLocaleDateString('en', { weekday: 'narrow' });
               const isToday = date === today;
+              // Colored solid, not a checkmark, so the pip itself shows
+              // which rank the day landed on at a glance — gold/silver/
+              // bronze use distinct saturated fills that read against the
+              // teal card; a day with no data yet stays translucent (or
+              // outlined, if it's today and just hasn't happened yet).
+              const rankBg = rank === 'gold' ? 'bg-amber-400' : rank === 'silver' ? 'bg-zinc-300' : rank === 'bronze' ? 'bg-amber-800' : null;
               return (
                 <div key={date} className="flex-1 flex flex-col items-center gap-1">
                   <div
-                    className={`w-full aspect-square rounded-lg flex items-center justify-center text-xs ${
-                      hit ? 'bg-white text-brand-dark font-medium' : isToday ? 'border border-white/40 text-white/60' : 'bg-white/10 text-white/30'
+                    className={`w-full aspect-square rounded-lg ${
+                      rankBg ? `${rankBg} ${isToday ? 'ring-2 ring-white/70' : ''}` : isToday ? 'border border-white/40' : 'bg-white/10'
                     }`}
-                  >
-                    {hit ? '✓' : ''}
-                  </div>
+                    title={rank ? RANK_META[rank].label : isToday ? "Today — not ranked yet" : 'No data'}
+                  />
                   <span className={`text-[9px] ${isToday ? 'text-white' : 'text-white/40'}`}>{label}</span>
                 </div>
               );

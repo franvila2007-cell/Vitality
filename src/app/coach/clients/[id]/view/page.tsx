@@ -26,7 +26,7 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
   const today = localDateStr();
   const weekStart = addDays(today, -6);
 
-  const [profileRes, clientProfileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes, weekMealDatesRes, weekHabitDatesRes] = await Promise.all([
+  const [profileRes, clientProfileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes, weekMealDatesRes, weekHabitDatesRes, weekMealsRes, weekCompletionsRes, weekOverridesRes] = await Promise.all([
     supabase.from('profiles').select('full_name, email, role').eq('id', id).single(),
     supabase.from('client_profiles').select('coach_note').eq('user_id', id).maybeSingle(),
     supabase.from('targets').select('*').eq('user_id', id).maybeSingle(),
@@ -36,6 +36,12 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
     supabase.from('rank_overrides').select('rank').eq('user_id', id).eq('date', today).maybeSingle(),
     supabase.from('food_log_entries').select('date').eq('user_id', id).gte('date', weekStart).lte('date', today),
     supabase.from('habit_completions').select('date').eq('user_id', id).eq('completed', true).gte('date', weekStart).lte('date', today),
+    // Same shape as the daily-history section further down — needed to
+    // compute each of the last 7 days' actual gold/silver/bronze rank for
+    // the week-pip row, not just whether the day counted for the streak.
+    supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', id).gte('date', weekStart).lte('date', today),
+    supabase.from('habit_completions').select('date').eq('user_id', id).eq('completed', true).gte('date', weekStart).lte('date', today),
+    supabase.from('rank_overrides').select('date, rank').eq('user_id', id).gte('date', weekStart).lte('date', today),
   ]);
 
   if (profileRes.error || !profileRes.data || profileRes.data.role !== 'client') notFound();
@@ -46,9 +52,25 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
   const doneHabitIds = new Set((completionsRes.data || []).map((c) => c.habit_id));
   const mealDates = new Set((weekMealDatesRes.data || []).map((r) => r.date));
   const habitDates = new Set((weekHabitDatesRes.data || []).map((r) => r.date));
+
+  const weekMealsByDate = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null }[]>();
+  for (const m of weekMealsRes.data || []) {
+    const arr = weekMealsByDate.get(m.date) || [];
+    arr.push(m);
+    weekMealsByDate.set(m.date, arr);
+  }
+  const weekHabitsDoneByDate = new Map<string, number>();
+  for (const row of weekCompletionsRes.data || []) {
+    weekHabitsDoneByDate.set(row.date, (weekHabitsDoneByDate.get(row.date) ?? 0) + 1);
+  }
+  const weekOverrideByDate = new Map((weekOverridesRes.data || []).map((r) => [r.date, r.rank]));
   const weekHistory = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(today, -(6 - i));
-    return { date: d, hit: mealDates.has(d) && habitDates.has(d) };
+    const dayMeals = weekMealsByDate.get(d) || [];
+    const hasData = dayMeals.length > 0 || weekHabitsDoneByDate.has(d) || weekOverrideByDate.has(d);
+    if (!hasData) return { date: d, rank: null as 'gold' | 'silver' | 'bronze' | null };
+    const rank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal: habits.length, habitsDone: weekHabitsDoneByDate.get(d) ?? 0, meals: dayMeals, targets }).rank;
+    return { date: d, rank };
   });
   let streak = 0;
   let cursor = today;
@@ -109,15 +131,17 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
           <div className="relative border-t border-white/15 pt-3">
             <p className="text-[10px] uppercase text-white/50 mb-1.5">This week</p>
             <div className="flex gap-1.5">
-              {weekHistory.map(({ date, hit }) => {
+              {weekHistory.map(({ date, rank }) => {
                 const [y, m, d] = date.split('-').map(Number);
                 const label = new Date(y, m - 1, d).toLocaleDateString('en', { weekday: 'narrow' });
                 const isToday = date === today;
+                const rankBg = rank === 'gold' ? 'bg-amber-400' : rank === 'silver' ? 'bg-zinc-300' : rank === 'bronze' ? 'bg-amber-800' : null;
                 return (
                   <div key={date} className="flex-1 flex flex-col items-center gap-1">
-                    <div className={`w-full aspect-square rounded-lg flex items-center justify-center text-xs ${hit ? 'bg-white text-brand-dark font-medium' : isToday ? 'border border-white/40 text-white/60' : 'bg-white/10 text-white/30'}`}>
-                      {hit ? '✓' : ''}
-                    </div>
+                    <div
+                      className={`w-full aspect-square rounded-lg ${rankBg ? `${rankBg} ${isToday ? 'ring-2 ring-white/70' : ''}` : isToday ? 'border border-white/40' : 'bg-white/10'}`}
+                      title={rank ? RANK_META[rank].label : isToday ? 'Today — not ranked yet' : 'No data'}
+                    />
                     <span className={`text-[9px] ${isToday ? 'text-white' : 'text-white/40'}`}>{label}</span>
                   </div>
                 );
