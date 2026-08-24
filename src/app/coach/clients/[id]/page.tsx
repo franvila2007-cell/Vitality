@@ -82,9 +82,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
       </div>
 
       <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-4">
-        <div>
-          <h1 className="text-xl font-medium">{profileRes.data.full_name || profileRes.data.email}</h1>
-          <p className="text-sm text-neutral-400">{profileRes.data.email}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-medium">{profileRes.data.full_name || profileRes.data.email}</h1>
+            <p className="text-sm text-neutral-400">{profileRes.data.email}</p>
+          </div>
+          <Link href={`/coach/clients/${id}/view`} className="flex-shrink-0 rounded-lg border border-border text-neutral-600 px-3 py-2 text-xs font-medium hover:border-brand hover:text-brand-dark transition-colors">
+            👁 View their app
+          </Link>
         </div>
 
         {clientProfile ? (
