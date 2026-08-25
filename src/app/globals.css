@@ -133,31 +133,21 @@ body {
   animation: fade-in 0.2s ease;
 }
 
-/* Vitto's idle motion — several distinct beats per loop (a sway, a pause, a
-   bigger hop/stretch, another pause, a small extra wiggle) instead of one
-   repeating tick-tock, so he reads as fidgeting around rather than playing
-   one short GIF on a loop. */
+/* Vitto's idle "breathing" — deliberately subtle, just enough to read as
+   alive without drawing the eye. A busier multi-beat version of this was
+   tried and felt like constant bouncing/jumping, which read as annoying
+   rather than lively — kept minimal on purpose. */
 @keyframes vitto-idle {
-  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
-  8% { transform: translateY(-5px) rotate(-4deg) scale(1.02); }
-  16% { transform: translateY(0) rotate(3deg) scale(1); }
-  24% { transform: translateY(-2px) rotate(-2deg) scale(1.01); }
-  38% { transform: translateY(0) rotate(0deg) scale(1); }
-  50% { transform: translateY(-9px) rotate(6deg) scale(1.05); }
-  58% { transform: translateY(0) rotate(-4deg) scale(0.98); }
-  66% { transform: translateY(-3px) rotate(2deg) scale(1.02); }
-  78% { transform: translateY(0) rotate(0deg) scale(1); }
-  90% { transform: translateY(-4px) rotate(-3deg) scale(1.01); }
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-2px) rotate(-1deg); }
 }
 
-/* A real "pondering" tilt while Vitto's thinking (a reply is in flight) —
-   layered with the existing glow ring below via .vitto-thinking so waiting
-   reads as him actively considering something, not just a static glow. */
+/* A gentle "pondering" tilt while Vitto's thinking (a reply is in flight) —
+   layered with the existing glow ring below via .vitto-thinking. Kept small
+   for the same reason as vitto-idle above — a wide tilt read as bouncy. */
 @keyframes vitto-pondering {
-  0%, 100% { transform: rotate(0deg) translateY(0) scale(1); }
-  20% { transform: rotate(-8deg) translateY(-2px) scale(1.02); }
-  50% { transform: rotate(0deg) translateY(0) scale(1); }
-  75% { transform: rotate(8deg) translateY(-2px) scale(1.02); }
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-3deg); }
 }
 
 .vitto-thinking {

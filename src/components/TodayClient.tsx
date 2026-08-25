@@ -500,7 +500,7 @@ export default function TodayClient() {
           <div className="relative flex-shrink-0">
             <Image
               src="/vitto-avatar.png" alt="" width={64} height={64}
-              className={vittoReacting ? 'animate-[vitto-happy-pop_0.7s_ease]' : sending ? 'vitto-thinking' : 'animate-[vitto-idle_5s_ease-in-out_infinite]'}
+              className={vittoReacting ? 'animate-[vitto-happy-pop_0.7s_ease]' : sending ? 'vitto-thinking' : 'animate-[vitto-idle_3s_ease-in-out_infinite]'}
             />
             {vittoReacting && (
               <span className="absolute -top-1 -right-1 text-base pointer-events-none animate-[sparkle-rise_0.9s_ease-out_forwards]">✨</span>
