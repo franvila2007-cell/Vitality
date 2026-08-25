@@ -133,15 +133,41 @@ body {
   animation: fade-in 0.2s ease;
 }
 
-/* Vitto's idle "breathing" — a constant sign of life on his avatar wherever
-   he's just sitting there, not just when a message is in flight. Two peaks
-   per cycle (not one) plus a hair of scale so the loop reads as restless
-   rather than a slow single-note sway. */
-@keyframes vitto-bob {
+/* Vitto's idle motion — several distinct beats per loop (a sway, a pause, a
+   bigger hop/stretch, another pause, a small extra wiggle) instead of one
+   repeating tick-tock, so he reads as fidgeting around rather than playing
+   one short GIF on a loop. */
+@keyframes vitto-idle {
   0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
-  25% { transform: translateY(-4px) rotate(-3deg) scale(1.02); }
-  50% { transform: translateY(0) rotate(0deg) scale(1); }
-  75% { transform: translateY(-2px) rotate(3deg) scale(1.01); }
+  8% { transform: translateY(-5px) rotate(-4deg) scale(1.02); }
+  16% { transform: translateY(0) rotate(3deg) scale(1); }
+  24% { transform: translateY(-2px) rotate(-2deg) scale(1.01); }
+  38% { transform: translateY(0) rotate(0deg) scale(1); }
+  50% { transform: translateY(-9px) rotate(6deg) scale(1.05); }
+  58% { transform: translateY(0) rotate(-4deg) scale(0.98); }
+  66% { transform: translateY(-3px) rotate(2deg) scale(1.02); }
+  78% { transform: translateY(0) rotate(0deg) scale(1); }
+  90% { transform: translateY(-4px) rotate(-3deg) scale(1.01); }
+}
+
+/* A real "pondering" tilt while Vitto's thinking (a reply is in flight) —
+   layered with the existing glow ring below via .vitto-thinking so waiting
+   reads as him actively considering something, not just a static glow. */
+@keyframes vitto-pondering {
+  0%, 100% { transform: rotate(0deg) translateY(0) scale(1); }
+  20% { transform: rotate(-8deg) translateY(-2px) scale(1.02); }
+  50% { transform: rotate(0deg) translateY(0) scale(1); }
+  75% { transform: rotate(8deg) translateY(-2px) scale(1.02); }
+}
+
+.vitto-thinking {
+  animation: vitto-thinking-ring 1.2s ease-in-out infinite, vitto-pondering 1.8s ease-in-out infinite;
+}
+
+/* Small thought-bubble pop above Vitto's head while he's thinking. */
+@keyframes thought-pop {
+  0% { opacity: 0; transform: translateY(4px) scale(0.7); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 /* Bot replies pop in with a touch more personality than the plain fade-in

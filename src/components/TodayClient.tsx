@@ -500,10 +500,17 @@ export default function TodayClient() {
           <div className="relative flex-shrink-0">
             <Image
               src="/vitto-avatar.png" alt="" width={64} height={64}
-              className={vittoReacting ? 'animate-[vitto-happy-pop_0.7s_ease]' : sending ? 'animate-[vitto-thinking-ring_1.2s_ease-in-out_infinite]' : 'animate-[vitto-bob_2s_ease-in-out_infinite]'}
+              className={vittoReacting ? 'animate-[vitto-happy-pop_0.7s_ease]' : sending ? 'vitto-thinking' : 'animate-[vitto-idle_5s_ease-in-out_infinite]'}
             />
             {vittoReacting && (
               <span className="absolute -top-1 -right-1 text-base pointer-events-none animate-[sparkle-rise_0.9s_ease-out_forwards]">✨</span>
+            )}
+            {sending && (
+              <span className="absolute -top-2 -right-2 flex items-center gap-0.5 bg-white border border-border rounded-full px-1.5 py-1 shadow-sm pointer-events-none animate-[thought-pop_0.2s_ease-out]">
+                <span className="w-1 h-1 rounded-full bg-neutral-300 animate-bounce [animation-delay:-0.3s]" />
+                <span className="w-1 h-1 rounded-full bg-neutral-300 animate-bounce [animation-delay:-0.15s]" />
+                <span className="w-1 h-1 rounded-full bg-neutral-300 animate-bounce" />
+              </span>
             )}
           </div>
           <div>
@@ -525,7 +532,7 @@ export default function TodayClient() {
           ))}
           {sending && (
             <div className="flex items-end gap-1.5 justify-start animate-[fade-in_0.15s_ease]">
-              <Image src="/vitto-avatar.png" alt="" width={26} height={26} className="flex-shrink-0 animate-[vitto-bob_1s_ease-in-out_infinite]" />
+              <Image src="/vitto-avatar.png" alt="" width={26} height={26} className="flex-shrink-0 vitto-thinking" />
               <div className="px-3 py-2 rounded-2xl rounded-bl-sm bg-neutral-100 text-neutral-400 text-[13px] flex gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce [animation-delay:-0.3s]" />
                 <span className="w-1.5 h-1.5 rounded-full bg-neutral-300 animate-bounce [animation-delay:-0.15s]" />
