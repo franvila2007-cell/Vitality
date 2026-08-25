@@ -176,7 +176,7 @@ export default function TodayClient() {
 
   useEffect(() => {
     if (chat.length === 0) {
-      setChat([{ id: 'greet', role: 'bot', text: "Hi, I'm Vitto! 👋 Vitality's chatbot, here to track everything you ate today. Tell me what you had and I'll log it — you can also ask things like \"how many calories do I have left?\" or say \"undo\"." }]);
+      setChat([{ id: 'greet', role: 'bot', text: "Hi, I'm Vitto, Vitality's chatbot! 👋 Let me know what you ate and I'll log it in! You can also ask things like \"how many calories do I have left?\" or say \"undo\"." }]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -500,7 +500,7 @@ export default function TodayClient() {
           <div className="relative flex-shrink-0">
             <Image
               src="/vitto-avatar.png" alt="" width={64} height={64}
-              className={vittoReacting ? 'animate-[vitto-happy-pop_0.7s_ease]' : sending ? 'animate-[vitto-thinking-ring_1.2s_ease-in-out_infinite]' : 'animate-[vitto-bob_3s_ease-in-out_infinite]'}
+              className={vittoReacting ? 'animate-[vitto-happy-pop_0.7s_ease]' : sending ? 'animate-[vitto-thinking-ring_1.2s_ease-in-out_infinite]' : 'animate-[vitto-bob_2s_ease-in-out_infinite]'}
             />
             {vittoReacting && (
               <span className="absolute -top-1 -right-1 text-base pointer-events-none animate-[sparkle-rise_0.9s_ease-out_forwards]">✨</span>

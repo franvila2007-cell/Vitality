@@ -102,6 +102,20 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
+/* Mobile Safari/Chrome auto-zoom the whole page in when a focused input's
+   font-size is under 16px, and don't reliably zoom back out on blur — this
+   is what read as "clicking something zooms in and feels glitchy," not an
+   animation bug. Fixing it means every text input needs to render at 16px
+   on small screens; this overrides the app's normal text-sm/text-xs input
+   styling only below the tablet breakpoint, where it actually matters. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
 .bg-hero-gradient {
   background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
 }
@@ -119,11 +133,15 @@ body {
   animation: fade-in 0.2s ease;
 }
 
-/* Vitto's idle "breathing" — a small constant sign of life on his avatar
-   wherever he's just sitting there, not just when a message is in flight. */
+/* Vitto's idle "breathing" — a constant sign of life on his avatar wherever
+   he's just sitting there, not just when a message is in flight. Two peaks
+   per cycle (not one) plus a hair of scale so the loop reads as restless
+   rather than a slow single-note sway. */
 @keyframes vitto-bob {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-3px) rotate(-2deg); }
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+  25% { transform: translateY(-4px) rotate(-3deg) scale(1.02); }
+  50% { transform: translateY(0) rotate(0deg) scale(1); }
+  75% { transform: translateY(-2px) rotate(3deg) scale(1.01); }
 }
 
 /* Bot replies pop in with a touch more personality than the plain fade-in
