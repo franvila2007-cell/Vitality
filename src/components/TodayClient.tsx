@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { localDateStr, addDays } from '@/lib/date';
-import LoadingScreen from '@/components/LoadingScreen';
+import TodaySkeleton from '@/components/skeletons/TodaySkeleton';
 import { computeDayRank, RANK_META, type Rank } from '@/lib/ranking';
 import { computeMicroTotals, MICRONUTRIENT_KEYS, type MicronutrientKey } from '@/lib/micronutrients';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
@@ -417,10 +417,10 @@ export default function TodayClient() {
     targets,
   }).rank;
 
-  if (loading) return <LoadingScreen />;
+  if (loading) return <TodaySkeleton />;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
+    <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4 page-fade-in">
       {/* Welcome card */}
       <div className="relative overflow-hidden rounded-2xl p-5 text-white bg-hero-gradient">
         <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl pointer-events-none" />

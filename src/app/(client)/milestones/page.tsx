@@ -1,6 +1,4 @@
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import AppNav from '@/components/AppNav';
 import { getProjections, type GoalType } from '@/lib/progress';
 
 // Fractions of the program at which a milestone lands — same shape as the
@@ -19,22 +17,17 @@ function weightAtDay(day: number, startWeight: number, projections: number[], pe
   return periodStartWeight + (periodEndWeight - periodStartWeight) * t;
 }
 
+// Auth/role guard and <AppNav/> now live in (client)/layout.tsx — this
+// page still needs its own auth call for user.id, just not the redirects.
 export default async function MilestonesPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  if (profile?.role === 'coach') redirect('/coach');
+  if (!user) return null; // layout already redirects; this only satisfies TS
 
   const { data: cp } = await supabase.from('client_profiles').select('*').eq('user_id', user.id).maybeSingle();
 
   if (!cp) {
-    return (
-      <div className="min-h-screen">
-        <AppNav />
-        <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-neutral-400">Your coach hasn&rsquo;t set up your program yet.</div>
-      </div>
-    );
+    return <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-neutral-400 page-fade-in">Your coach hasn&rsquo;t set up your program yet.</div>;
   }
 
   const programDays = cp.program_length_days || 60;
@@ -69,25 +62,22 @@ export default async function MilestonesPage() {
   });
 
   return (
-    <div className="min-h-screen">
-      <AppNav />
-      <div className="max-w-2xl mx-auto px-4 py-5">
-        <div className="bg-surface border border-border rounded-2xl p-4">
-          <p className="text-sm font-medium mb-1">Day {dayNum} of {programDays}</p>
-          <p className="text-xs text-neutral-400 mb-4">{verb} toward {cp.goal_weight}kg ({totalChange}kg {goalType === 'lose' ? 'to lose' : 'to gain'} from {cp.start_weight}kg)</p>
-          <div className="flex flex-col gap-2">
-            {milestones.map((m) => {
-              const done = dayNum > m.day;
-              const active = !done && dayNum >= m.day - 3;
-              return (
-                <div key={m.day} className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-sm ${done ? 'border-brand bg-brand-light' : active ? 'border-amber-400 bg-amber-50' : 'border-border'}`}>
-                  <span className={done ? 'text-brand-dark' : active ? 'text-amber-600' : 'text-neutral-300'}>{done ? '✓' : '○'}</span>
-                  <span className={`flex-1 ${done ? 'text-brand-dark' : active ? 'text-amber-700' : 'text-neutral-500'}`}>{m.label}</span>
-                  <span className="text-[11px] text-neutral-400">Day {m.day}</span>
-                </div>
-              );
-            })}
-          </div>
+    <div className="max-w-2xl mx-auto px-4 py-5 page-fade-in">
+      <div className="bg-surface border border-border rounded-2xl p-4">
+        <p className="text-sm font-medium mb-1">Day {dayNum} of {programDays}</p>
+        <p className="text-xs text-neutral-400 mb-4">{verb} toward {cp.goal_weight}kg ({totalChange}kg {goalType === 'lose' ? 'to lose' : 'to gain'} from {cp.start_weight}kg)</p>
+        <div className="flex flex-col gap-2">
+          {milestones.map((m) => {
+            const done = dayNum > m.day;
+            const active = !done && dayNum >= m.day - 3;
+            return (
+              <div key={m.day} className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-sm ${done ? 'border-brand bg-brand-light' : active ? 'border-amber-400 bg-amber-50' : 'border-border'}`}>
+                <span className={done ? 'text-brand-dark' : active ? 'text-amber-600' : 'text-neutral-300'}>{done ? '✓' : '○'}</span>
+                <span className={`flex-1 ${done ? 'text-brand-dark' : active ? 'text-amber-700' : 'text-neutral-500'}`}>{m.label}</span>
+                <span className="text-2xs text-neutral-400">Day {m.day}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

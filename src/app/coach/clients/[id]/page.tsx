@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { redirect, notFound } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import TargetsEditor from '@/components/coach/TargetsEditor';
 import RankOverride from '@/components/coach/RankOverride';
@@ -9,13 +9,10 @@ import MicronutrientPanel from '@/components/MicronutrientPanel';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
 
+// Auth/role guard and the top header bar now live in coach/layout.tsx.
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  if (me?.role !== 'coach') redirect('/');
 
   const [profileRes, clientProfileRes, targetsRes, checkpointsRes, historyRes, habitsRes, habitCompletionsRes] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', id).single(),
@@ -74,14 +71,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   }
 
   return (
-    <div className="min-h-screen">
-      <div className="sticky top-0 z-10 bg-surface border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 h-16 flex items-center">
+    <>
+      <div className="border-b border-border">
+        <div className="max-w-2xl mx-auto px-4 h-12 flex items-center">
           <Link href="/coach" className="text-sm text-neutral-400 hover:text-neutral-700">&larr; Clients</Link>
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-4">
+      <div className="max-w-2xl mx-auto px-4 py-6 flex flex-col gap-4 page-fade-in">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-h1 font-semibold">{profileRes.data.full_name || profileRes.data.email}</h1>
@@ -152,7 +149,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 <summary className="flex items-center justify-between text-sm gap-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                   <span className="text-neutral-500 flex-shrink-0">{date}</span>
                   <span className="text-neutral-700 flex-1 min-w-0 truncate text-right">{Math.round(t.cal)} kcal · {Math.round(t.prot)}p {Math.round(t.carb)}c {Math.round(t.fat)}f</span>
-                  <span className="text-[11px] text-neutral-400 flex-shrink-0">{count} {count === 1 ? 'entry' : 'entries'}</span>
+                  <span className="text-2xs text-neutral-400 flex-shrink-0">{count} {count === 1 ? 'entry' : 'entries'}</span>
                   <span className="flex-shrink-0" title={RANK_META[rank].label}>{RANK_META[rank].emoji}</span>
                 </summary>
                 <div className="mt-2 pl-1">
@@ -165,7 +162,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
         <RemoveClientButton userId={id} clientName={profileRes.data.full_name || profileRes.data.email} />
       </div>
-    </div>
+    </>
   );
 }
 
@@ -192,8 +189,8 @@ function FoodList({ meals }: { meals: { name: string; calories: number; protein_
       {meals.map((m, i) => (
         <div key={i} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2 text-sm">
           <span className="flex-1 min-w-0 truncate">{m.name}{m.estimated && <span className="text-neutral-400"> (est.)</span>}</span>
-          <span className="flex-shrink-0 text-[11px] text-neutral-400 whitespace-nowrap">{Math.round(m.calories)} kcal · {Math.round(m.protein_g)}p {Math.round(m.carbs_g)}c {Math.round(m.fat_g)}f</span>
-          <span className={`flex-shrink-0 text-[11px] font-medium w-8 text-right ${qualityColor(m.quality_score)}`} title="Food quality score">
+          <span className="flex-shrink-0 text-2xs text-neutral-400 whitespace-nowrap">{Math.round(m.calories)} kcal · {Math.round(m.protein_g)}p {Math.round(m.carbs_g)}c {Math.round(m.fat_g)}f</span>
+          <span className={`flex-shrink-0 text-2xs font-medium w-8 text-right ${qualityColor(m.quality_score)}`} title="Food quality score">
             {m.quality_score ?? '—'}
           </span>
         </div>

@@ -62,7 +62,7 @@ export default function ProgressClient() {
     .filter((p): p is { month: number; weight: number } => p.weight != null);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
+    <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4 page-fade-in">
       <div className="bg-surface border border-border rounded-2xl p-4">
         <p className="text-sm font-medium mb-3">Weight progress</p>
         <div className="grid grid-cols-3 gap-2 text-center mb-4">

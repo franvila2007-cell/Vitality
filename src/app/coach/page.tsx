@@ -1,6 +1,4 @@
-import Image from 'next/image';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { addDays } from '@/lib/date';
 import { getProjections, computeMonthColors, STATUS_META, type GoalType } from '@/lib/progress';
@@ -9,12 +7,9 @@ import RestoreClientButton from '@/components/coach/RestoreClientButton';
 import DeleteForeverButton from '@/components/coach/DeleteForeverButton';
 import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
 
+// Auth/role guard and the top header bar now live in coach/layout.tsx.
 export default async function CoachPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  if (me?.role !== 'coach') redirect('/');
 
   const { data: clients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').is('archived_at', null).order('full_name');
   const { data: archivedClients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').not('archived_at', 'is', null).order('full_name');
@@ -117,18 +112,8 @@ export default async function CoachPage() {
   );
 
   return (
-    <div className="min-h-screen">
-      <div className="sticky top-0 z-10 bg-surface border-b border-border">
-        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/coach" className="flex items-center gap-2 transition-opacity hover:opacity-70">
-            <Image src="/vitality-logo.png" alt="Vitality" width={32} height={25} priority />
-            <span className="text-xs font-medium text-neutral-400 border border-border rounded-full px-2 py-0.5">Coach</span>
-          </Link>
-          <SignOutButton />
-        </div>
-      </div>
-
-      <div className="max-w-4xl mx-auto px-4 py-6">
+    <>
+      <div className="max-w-4xl mx-auto px-4 py-6 page-fade-in">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-h1 font-semibold">Clients ({rows.length})</h1>
           <Link href="/coach/clients/new" className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90">+ Add client</Link>
@@ -162,7 +147,7 @@ export default async function CoachPage() {
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-sm font-medium whitespace-nowrap">{Math.round(totals.cal)} / {targets?.calories ?? '—'} kcal</p>
-                  <p className="text-[11px] text-neutral-400 whitespace-nowrap">{latestDate ? (latestDate === serverToday ? 'today' : latestDate) : 'no entries yet'}</p>
+                  <p className="text-2xs text-neutral-400 whitespace-nowrap">{latestDate ? (latestDate === serverToday ? 'today' : latestDate) : 'no entries yet'}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap pl-[22px]">
@@ -197,14 +182,6 @@ export default async function CoachPage() {
           </details>
         )}
       </div>
-    </div>
-  );
-}
-
-function SignOutButton() {
-  return (
-    <form action="/api/auth/signout" method="post">
-      <button className="text-xs text-neutral-400 hover:text-neutral-600">Sign out</button>
-    </form>
+    </>
   );
 }

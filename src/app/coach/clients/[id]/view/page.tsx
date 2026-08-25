@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { redirect, notFound } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { addDays } from '@/lib/date';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
@@ -14,14 +14,11 @@ const DEFAULT_TARGETS = { calories: 2000, protein_g: 150, carbs_g: 200, fat_g: 6
 // server-side fetch scoped to their user_id instead of the session's own,
 // so the coach can see exactly what a client sees without signing in as
 // them (which would both risk mutating their data and blow away the
-// coach's own session in the same browser).
+// coach's own session in the same browser). Auth/role guard and the top
+// header bar live in coach/layout.tsx.
 export default async function ClientAppPreviewPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  const { data: me } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-  if (me?.role !== 'coach') redirect('/');
 
   // UTC-based, matching coach/page.tsx's serverToday — localDateStr() is for
   // client components computing a client's own local day; using it here
@@ -98,15 +95,15 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
   }).rank;
 
   return (
-    <div className="min-h-screen">
-      <div className="sticky top-0 z-10 bg-surface border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 h-16 flex items-center justify-between">
+    <>
+      <div className="border-b border-border">
+        <div className="max-w-2xl mx-auto px-4 h-12 flex items-center justify-between">
           <Link href={`/coach/clients/${id}`} className="text-sm text-neutral-400 hover:text-neutral-700">&larr; {fullName}</Link>
           <span className="text-xs font-medium text-neutral-400 border border-border rounded-full px-2.5 py-1">👁 Read-only preview</span>
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
+      <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4 page-fade-in">
         <div className="relative overflow-hidden rounded-2xl p-5 text-white bg-hero-gradient">
           <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl pointer-events-none" />
           <div className="absolute -bottom-12 -left-8 w-32 h-32 rounded-full bg-black/10 blur-2xl pointer-events-none" />
@@ -229,7 +226,7 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
 

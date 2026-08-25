@@ -111,6 +111,14 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Stand-in for View Transitions (unavailable in this project's installed
+   React — see AGENTS.md-adjacent notes). Applied to each route's outermost
+   content element so a fresh page mount replays a quick settle-in instead
+   of popping in instantly, without needing the native API. */
+.page-fade-in {
+  animation: fade-in 0.2s ease;
+}
+
 /* Vitto's idle "breathing" — a small constant sign of life on his avatar
    wherever he's just sitting there, not just when a message is in flight. */
 @keyframes vitto-bob {

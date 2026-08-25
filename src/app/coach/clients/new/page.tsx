@@ -46,13 +46,13 @@ export default function NewClientPage() {
   }
 
   return (
-    <div className="min-h-screen">
-      <div className="sticky top-0 z-10 bg-surface border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 h-16 flex items-center">
+    <>
+      <div className="border-b border-border">
+        <div className="max-w-2xl mx-auto px-4 h-12 flex items-center">
           <Link href="/coach" className="text-sm text-neutral-400 hover:text-neutral-700">&larr; Clients</Link>
         </div>
       </div>
-      <div className="max-w-lg mx-auto px-4 py-6">
+      <div className="max-w-lg mx-auto px-4 py-6 page-fade-in">
         <h1 className="text-h1 font-semibold mb-1">Add a client</h1>
         <p className="text-sm text-neutral-400 mb-6">They&rsquo;ll get an email with a link to set their password.</p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
@@ -88,7 +88,7 @@ export default function NewClientPage() {
           </button>
         </form>
       </div>
-    </div>
+    </>
   );
 }
 
