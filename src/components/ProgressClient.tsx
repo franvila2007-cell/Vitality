@@ -2,19 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { getProjections, computeMonthColors, type GoalType } from '@/lib/progress';
+import { getProjections, computeMonthColors, STATUS_META, type GoalType } from '@/lib/progress';
 import LoadingScreen from '@/components/LoadingScreen';
 import WeightTrendGraph from '@/components/WeightTrendGraph';
 import type { Database } from '@/lib/supabase/database.types';
 
 type ClientProfile = Database['public']['Tables']['client_profiles']['Row'];
 type Checkpoint = Database['public']['Tables']['weight_checkpoints']['Row'];
-
-const COLOR_CLASSES: Record<string, string> = {
-  green: 'border-l-emerald-500 bg-emerald-50 text-emerald-700',
-  orange: 'border-l-amber-500 bg-amber-50 text-amber-700',
-  red: 'border-l-red-500 bg-red-50 text-red-700',
-};
 
 export default function ProgressClient() {
   // Memoized once — see TodayClient.tsx for why an unstable client instance
@@ -78,8 +72,8 @@ export default function ProgressClient() {
         </div>
         <div className="grid grid-cols-3 gap-2">
           {months.map((m, i) => (
-            <div key={m} className={`rounded-lg border-l-4 px-2 py-2 text-center ${colors[i] ? COLOR_CLASSES[colors[i]!] : 'border-l-neutral-200 bg-neutral-50 text-neutral-400'}`}>
-              <div className="text-[9px] uppercase tracking-wide opacity-70">Month {m}</div>
+            <div key={m} className={`rounded-lg border-l-4 px-2 py-2 text-center ${colors[i] ? STATUS_META[colors[i]!].cardClassName : 'border-l-neutral-200 bg-neutral-50 text-neutral-400'}`}>
+              <div className="text-3xs uppercase tracking-wide opacity-70">Month {m}</div>
               <div className="text-sm font-semibold">{actuals[i] != null ? `${actuals[i]}kg` : `→${projections[i - 1] ?? profile.start_weight}kg`}</div>
             </div>
           ))}

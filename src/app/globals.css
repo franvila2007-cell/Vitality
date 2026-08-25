@@ -8,6 +8,42 @@
   --brand-light: #e1f8f6;
   --surface: #ffffff;
   --border: #e7e6e2;
+
+  /* Traffic-light status (on-track / needs-attention / off-track) — was
+     duplicated with different hardcoded shades in ProgressClient.tsx,
+     coach/page.tsx, and coach/clients/[id]/page.tsx's qualityColor(). */
+  --status-good: #10b981;
+  --status-good-bg: #ecfdf5;
+  --status-good-text: #047857;
+  --status-warn: #f59e0b;
+  --status-warn-bg: #fffbeb;
+  --status-warn-text: #b45309;
+  --status-bad: #ef4444;
+  --status-bad-bg: #fef2f2;
+  --status-bad-text: #b91c1c;
+
+  /* Rank tiers — was three different, non-matching gold/silver/bronze
+     palettes across ranking.ts and the two week-pip render sites. Bronze
+     value below matches the two pip call sites (amber-800-ish); ranking.ts's
+     old orange-based bronze is the one that changes to match here. */
+  --rank-gold: #fbbf24;
+  --rank-gold-bg: #fef3c7;
+  --rank-gold-text: #b45309;
+  --rank-silver: #d4d4d8;
+  --rank-silver-bg: #e5e5e5;
+  --rank-silver-text: #525252;
+  --rank-bronze: #92400e;
+  --rank-bronze-bg: #ffedd5;
+  --rank-bronze-text: #c2410c;
+
+  /* Macro bar / calorie-ring colors — consumed via inline style (they scale
+     a conic-gradient / are passed as a `color` prop), not Tailwind classes,
+     so these stay plain vars rather than @theme entries. Protein was a raw
+     #0FA8A6 hex that happened to equal --brand; now it just references it. */
+  --color-macro-protein: var(--brand);
+  --color-macro-carbs: #2d7dd2;
+  --color-macro-fat: #d4692a;
+  --color-ring-track: var(--border);
 }
 
 @theme inline {
@@ -20,12 +56,54 @@
   --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-status-good: var(--status-good);
+  --color-status-good-bg: var(--status-good-bg);
+  --color-status-good-text: var(--status-good-text);
+  --color-status-warn: var(--status-warn);
+  --color-status-warn-bg: var(--status-warn-bg);
+  --color-status-warn-text: var(--status-warn-text);
+  --color-status-bad: var(--status-bad);
+  --color-status-bad-bg: var(--status-bad-bg);
+  --color-status-bad-text: var(--status-bad-text);
+
+  --color-rank-gold: var(--rank-gold);
+  --color-rank-gold-bg: var(--rank-gold-bg);
+  --color-rank-gold-text: var(--rank-gold-text);
+  --color-rank-silver: var(--rank-silver);
+  --color-rank-silver-bg: var(--rank-silver-bg);
+  --color-rank-silver-text: var(--rank-silver-text);
+  --color-rank-bronze: var(--rank-bronze);
+  --color-rank-bronze-bg: var(--rank-bronze-bg);
+  --color-rank-bronze-text: var(--rank-bronze-text);
+
+  /* Sub-text-xs caption sizes — collapses four arbitrary bracket values
+     (text-[9px]/[10px]/[11px]/[13px]) scattered across the app into two
+     named, reusable sizes. */
+  --text-2xs: 0.6875rem; /* 11px — the dominant "tiny caption" size */
+  --text-2xs--line-height: 1rem;
+  --text-3xs: 0.625rem; /* 10px — uppercase micro-labels (STREAK, stat tags) */
+  --text-3xs--line-height: 0.875rem;
+
+  /* Page-title size — distinct from the text-sm/font-medium every card
+     title already uses, so a real page <h1> reads as a different tier. */
+  --text-h1: 1.25rem; /* 20px */
+  --text-h1--line-height: 1.75rem;
+
+  /* Two deliberate radius tiers, replacing three (rounded-2xl/xl/lg all
+     doing similar jobs with no clear rule for which). */
+  --radius-card: 1rem; /* 16px, = the already-dominant rounded-2xl */
+  --radius-control: 0.5rem; /* 8px, = rounded-lg — buttons/inputs/chips */
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.bg-hero-gradient {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
 }
 
 @keyframes fade-in {

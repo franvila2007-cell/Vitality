@@ -422,10 +422,7 @@ export default function TodayClient() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4">
       {/* Welcome card */}
-      <div
-        className="relative overflow-hidden rounded-2xl p-5 text-white"
-        style={{ background: 'linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%)' }}
-      >
+      <div className="relative overflow-hidden rounded-2xl p-5 text-white bg-hero-gradient">
         <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl pointer-events-none" />
         <div className="absolute -bottom-12 -left-8 w-32 h-32 rounded-full bg-black/10 blur-2xl pointer-events-none" />
 
@@ -440,21 +437,21 @@ export default function TodayClient() {
         <div className="relative flex gap-6 mb-4">
           <div>
             <div className="text-xl font-medium flex items-center gap-1"><span className="text-base">🔥</span>{streak}</div>
-            <div className="text-[10px] uppercase text-white/50 mt-0.5">Streak</div>
+            <div className="text-3xs uppercase text-white/50 mt-0.5">Streak</div>
           </div>
           <div>
             <div className="text-xl font-medium flex items-center gap-1"><span className="text-base">✅</span>{doneHabitIds.size}/{habits.length}</div>
-            <div className="text-[10px] uppercase text-white/50 mt-0.5">Habits today</div>
+            <div className="text-3xs uppercase text-white/50 mt-0.5">Habits today</div>
           </div>
           <div>
             <div className="text-xl font-medium flex items-center gap-1"><span className="text-base">🍽️</span>{Math.round(totals.cal)}</div>
-            <div className="text-[10px] uppercase text-white/50 mt-0.5">Kcal logged</div>
+            <div className="text-3xs uppercase text-white/50 mt-0.5">Kcal logged</div>
           </div>
         </div>
 
         {/* This week */}
         <div className="relative border-t border-white/15 pt-3">
-          <p className="text-[10px] uppercase text-white/50 mb-1.5">This week</p>
+          <p className="text-3xs uppercase text-white/50 mb-1.5">This week</p>
           <div className="flex gap-1.5">
             {weekHistory.map(({ date, rank }) => {
               const [y, m, d] = date.split('-').map(Number);
@@ -465,7 +462,7 @@ export default function TodayClient() {
               // bronze use distinct saturated fills that read against the
               // teal card; a day with no data yet stays translucent (or
               // outlined, if it's today and just hasn't happened yet).
-              const rankBg = rank === 'gold' ? 'bg-amber-400' : rank === 'silver' ? 'bg-zinc-300' : rank === 'bronze' ? 'bg-amber-800' : null;
+              const rankBg = rank ? RANK_META[rank].pipClassName : null;
               return (
                 <div key={date} className="flex-1 flex flex-col items-center gap-1">
                   <div
@@ -474,7 +471,7 @@ export default function TodayClient() {
                     }`}
                     title={rank ? RANK_META[rank].label : isToday ? "Today — not ranked yet" : 'No data'}
                   />
-                  <span className={`text-[9px] ${isToday ? 'text-white' : 'text-white/40'}`}>{label}</span>
+                  <span className={`text-3xs ${isToday ? 'text-white' : 'text-white/40'}`}>{label}</span>
                 </div>
               );
             })}
@@ -496,7 +493,7 @@ export default function TodayClient() {
           />
           <div>
             <p className="text-sm font-medium">Vitto</p>
-            <p className="text-[11px] text-neutral-400">Your Vitality AI food logger</p>
+            <p className="text-2xs text-neutral-400">Your Vitality AI food logger</p>
           </div>
         </div>
         <div className="flex flex-col gap-2 mb-3 max-h-72 overflow-y-auto">
@@ -602,16 +599,16 @@ export default function TodayClient() {
       <div className="bg-surface border border-border rounded-2xl p-4">
         <p className="text-xs text-neutral-400 mb-3">Daily targets: {targets.calories} kcal · {targets.protein_g}p / {targets.carbs_g}c / {targets.fat_g}f</p>
         <div className="flex items-center gap-5 mb-4">
-          <div className="relative w-24 h-24 rounded-full flex items-center justify-center" style={{ background: `conic-gradient(var(--brand) ${calPct * 3.6}deg, #eee 0deg)` }}>
+          <div className="relative w-24 h-24 rounded-full flex items-center justify-center" style={{ background: `conic-gradient(var(--brand) ${calPct * 3.6}deg, var(--color-ring-track) 0deg)` }}>
             <div className="absolute inset-2 bg-surface rounded-full flex flex-col items-center justify-center">
               <span className="text-lg font-medium">{Math.round(totals.cal)}</span>
-              <span className="text-[10px] text-neutral-400">/ {targets.calories} kcal</span>
+              <span className="text-3xs text-neutral-400">/ {targets.calories} kcal</span>
             </div>
           </div>
           <div className="flex-1 flex flex-col gap-2">
-            <MacroBar label="Protein" value={totals.prot} target={targets.protein_g} color="#0FA8A6" />
-            <MacroBar label="Carbs" value={totals.carb} target={targets.carbs_g} color="#2D7DD2" />
-            <MacroBar label="Fats" value={totals.fat} target={targets.fat_g} color="#D4692A" />
+            <MacroBar label="Protein" value={totals.prot} target={targets.protein_g} color="var(--color-macro-protein)" />
+            <MacroBar label="Carbs" value={totals.carb} target={targets.carbs_g} color="var(--color-macro-carbs)" />
+            <MacroBar label="Fats" value={totals.fat} target={targets.fat_g} color="var(--color-macro-fat)" />
           </div>
         </div>
 
@@ -630,7 +627,7 @@ export default function TodayClient() {
             {meals.map((m) => (
               <div key={m.id} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2">
                 <span className="flex-1 min-w-0 text-sm truncate">{m.name}</span>
-                <span className="flex-shrink-0 text-[11px] text-neutral-400 whitespace-nowrap">{Math.round(m.calories)} kcal · {Math.round(m.protein_g)}p {Math.round(m.carbs_g)}c {Math.round(m.fat_g)}f</span>
+                <span className="flex-shrink-0 text-2xs text-neutral-400 whitespace-nowrap">{Math.round(m.calories)} kcal · {Math.round(m.protein_g)}p {Math.round(m.carbs_g)}c {Math.round(m.fat_g)}f</span>
                 <button onClick={() => deleteMeal(m.id)} className="flex-shrink-0 text-neutral-300 hover:text-red-500 text-sm transition-colors">✕</button>
               </div>
             ))}
@@ -673,7 +670,7 @@ export default function TodayClient() {
       {/* Note from your coach */}
       {coachNote && (
         <div className="bg-brand-light border border-brand/20 rounded-2xl p-4">
-          <p className="text-[10px] uppercase tracking-wide text-brand-dark/60 mb-1.5">A note from Francesco</p>
+          <p className="text-3xs uppercase tracking-wide text-brand-dark/60 mb-1.5">A note from Francesco</p>
           <p className="text-sm text-brand-dark leading-relaxed">{coachNote}</p>
         </div>
       )}
@@ -725,7 +722,7 @@ export default function TodayClient() {
               {photoItems.map((item, i) => (
                 <div key={i} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2">
                   <span className="flex-1 min-w-0 text-sm truncate">{item.label}</span>
-                  <span className="flex-shrink-0 text-[11px] text-neutral-400 whitespace-nowrap">{Math.round(item.cal)} kcal · {Math.round(item.protein_g)}p {Math.round(item.carbs_g)}c {Math.round(item.fat_g)}f</span>
+                  <span className="flex-shrink-0 text-2xs text-neutral-400 whitespace-nowrap">{Math.round(item.cal)} kcal · {Math.round(item.protein_g)}p {Math.round(item.carbs_g)}c {Math.round(item.fat_g)}f</span>
                   <button onClick={() => removePhotoItem(i)} className="flex-shrink-0 text-neutral-300 hover:text-red-500 text-sm transition-colors">✕</button>
                 </div>
               ))}
@@ -778,7 +775,7 @@ export default function TodayClient() {
 function ManualField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-[10px] uppercase text-neutral-400">{label}</span>
+      <span className="text-3xs uppercase text-neutral-400">{label}</span>
       <input
         type="number"
         inputMode="decimal"
@@ -799,7 +796,7 @@ function MacroBar({ label, value, target, color }: { label: string; value: numbe
       <div className="flex-1 h-1.5 bg-neutral-100 rounded-full overflow-hidden">
         <div className="h-full rounded-full transition-[width] duration-300 ease-out" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <span className="text-[11px] text-neutral-600 w-16 text-right flex-shrink-0">{Math.round(value)}/{target}g</span>
+      <span className="text-2xs text-neutral-600 w-16 text-right flex-shrink-0">{Math.round(value)}/{target}g</span>
     </div>
   );
 }

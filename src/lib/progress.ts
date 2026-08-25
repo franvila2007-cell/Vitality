@@ -5,6 +5,17 @@
 export type GoalType = 'lose' | 'gain';
 export type MonthColor = 'green' | 'orange' | 'red' | null;
 
+// Shared "on track / watch / off track" styling — was duplicated as its own
+// hardcoded COLOR_CLASSES object in ProgressClient.tsx and again inline in
+// coach/page.tsx, each with slightly different shade choices. cardClassName
+// is for the bordered checkpoint tiles (ProgressClient); dotClassName is for
+// the small status indicator on the coach client list.
+export const STATUS_META: Record<'green' | 'orange' | 'red', { cardClassName: string; dotClassName: string }> = {
+  green: { cardClassName: 'border-l-status-good bg-status-good-bg text-status-good-text', dotClassName: 'bg-status-good' },
+  orange: { cardClassName: 'border-l-status-warn bg-status-warn-bg text-status-warn-text', dotClassName: 'bg-status-warn' },
+  red: { cardClassName: 'border-l-status-bad bg-status-bad-bg text-status-bad-text', dotClassName: 'bg-status-bad' },
+};
+
 const TOL = 0.4; // kg tolerance band used by the original
 
 // pace_config stores a per-month rate (kg to lose/gain that month), e.g.

@@ -11,10 +11,14 @@
 // a coach's manual override (rank_overrides table) is persisted.
 export type Rank = 'gold' | 'silver' | 'bronze';
 
-export const RANK_META: Record<Rank, { label: string; emoji: string; className: string }> = {
-  gold: { label: 'Gold', emoji: '🥇', className: 'bg-amber-100 text-amber-700 border-amber-300' },
-  silver: { label: 'Silver', emoji: '🥈', className: 'bg-neutral-200 text-neutral-600 border-neutral-300' },
-  bronze: { label: 'Bronze', emoji: '🥉', className: 'bg-orange-100 text-orange-700 border-orange-300' },
+// `className` is the light badge-pill treatment (bg/text/border); `pipClassName`
+// is a solid fill for the compact week-history squares — both now come from
+// the same --rank-gold/silver/bronze tokens (globals.css) instead of three
+// independent, mismatched palettes across ranking.ts and two week-pip sites.
+export const RANK_META: Record<Rank, { label: string; emoji: string; className: string; pipClassName: string }> = {
+  gold: { label: 'Gold', emoji: '🥇', className: 'bg-rank-gold-bg text-rank-gold-text border-rank-gold', pipClassName: 'bg-rank-gold' },
+  silver: { label: 'Silver', emoji: '🥈', className: 'bg-rank-silver-bg text-rank-silver-text border-rank-silver', pipClassName: 'bg-rank-silver' },
+  bronze: { label: 'Bronze', emoji: '🥉', className: 'bg-rank-bronze-bg text-rank-bronze-text border-rank-bronze', pipClassName: 'bg-rank-bronze' },
 };
 
 export type RankMealInput = { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null };

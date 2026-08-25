@@ -53,33 +53,33 @@ export default function NewClientPage() {
         </div>
       </div>
       <div className="max-w-lg mx-auto px-4 py-6">
-        <h1 className="text-lg font-medium mb-1">Add a client</h1>
+        <h1 className="text-h1 font-semibold mb-1">Add a client</h1>
         <p className="text-sm text-neutral-400 mb-6">They&rsquo;ll get an email with a link to set their password.</p>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <Field label="Full name"><input required value={form.fullName} onChange={(e) => set('fullName', e.target.value)} className="input" /></Field>
-          <Field label="Email"><input required type="email" value={form.email} onChange={(e) => set('email', e.target.value)} className="input" /></Field>
+          <Field label="Full name"><input required value={form.fullName} onChange={(e) => set('fullName', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full" /></Field>
+          <Field label="Email"><input required type="email" value={form.email} onChange={(e) => set('email', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full" /></Field>
 
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Start weight (kg)"><input required type="number" step="0.1" value={form.startWeight} onChange={(e) => set('startWeight', e.target.value)} className="input" /></Field>
-            <Field label="Goal weight (kg)"><input required type="number" step="0.1" value={form.goalWeight} onChange={(e) => set('goalWeight', e.target.value)} className="input" /></Field>
+            <Field label="Start weight (kg)"><input required type="number" step="0.1" value={form.startWeight} onChange={(e) => set('startWeight', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full" /></Field>
+            <Field label="Goal weight (kg)"><input required type="number" step="0.1" value={form.goalWeight} onChange={(e) => set('goalWeight', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full" /></Field>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <Field label="Goal type">
-              <select value={form.goalType} onChange={(e) => set('goalType', e.target.value)} className="input">
+              <select value={form.goalType} onChange={(e) => set('goalType', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full">
                 <option value="lose">Lose weight</option>
                 <option value="gain">Gain weight</option>
               </select>
             </Field>
-            <Field label="Goal date (optional)"><input type="date" value={form.goalDate} onChange={(e) => set('goalDate', e.target.value)} className="input" /></Field>
+            <Field label="Goal date (optional)"><input type="date" value={form.goalDate} onChange={(e) => set('goalDate', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full" /></Field>
           </div>
 
           <p className="text-xs font-medium text-neutral-500 mt-2">Daily macro targets</p>
           <div className="grid grid-cols-4 gap-2">
-            <Field label="Calories"><input type="number" value={form.calories} onChange={(e) => set('calories', e.target.value)} className="input" /></Field>
-            <Field label="Protein (g)"><input type="number" value={form.proteinG} onChange={(e) => set('proteinG', e.target.value)} className="input" /></Field>
-            <Field label="Carbs (g)"><input type="number" value={form.carbsG} onChange={(e) => set('carbsG', e.target.value)} className="input" /></Field>
-            <Field label="Fat (g)"><input type="number" value={form.fatG} onChange={(e) => set('fatG', e.target.value)} className="input" /></Field>
+            <Field label="Calories"><input type="number" value={form.calories} onChange={(e) => set('calories', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full" /></Field>
+            <Field label="Protein (g)"><input type="number" value={form.proteinG} onChange={(e) => set('proteinG', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full" /></Field>
+            <Field label="Carbs (g)"><input type="number" value={form.carbsG} onChange={(e) => set('carbsG', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full" /></Field>
+            <Field label="Fat (g)"><input type="number" value={form.fatG} onChange={(e) => set('fatG', e.target.value)} className="rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand transition-colors w-full" /></Field>
           </div>
 
           {error && <p className="text-sm text-red-600">{error}</p>}
@@ -88,7 +88,6 @@ export default function NewClientPage() {
           </button>
         </form>
       </div>
-      <style>{`.input { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; padding: 8px 10px; font-size: 14px; width: 100%; outline: none; } .input:focus { border-color: var(--brand); }`}</style>
     </div>
   );
 }

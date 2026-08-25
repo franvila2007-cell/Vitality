@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { addDays } from '@/lib/date';
-import { getProjections, computeMonthColors, type GoalType } from '@/lib/progress';
+import { getProjections, computeMonthColors, STATUS_META, type GoalType } from '@/lib/progress';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import RestoreClientButton from '@/components/coach/RestoreClientButton';
 import DeleteForeverButton from '@/components/coach/DeleteForeverButton';
@@ -130,7 +130,7 @@ export default async function CoachPage() {
 
       <div className="max-w-4xl mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-lg font-medium">Clients ({rows.length})</h1>
+          <h1 className="text-h1 font-semibold">Clients ({rows.length})</h1>
           <Link href="/coach/clients/new" className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90">+ Add client</Link>
         </div>
 
@@ -151,9 +151,7 @@ export default async function CoachPage() {
             >
               <div className="flex items-center gap-3 min-w-0">
                 <span
-                  className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
-                    status === 'green' ? 'bg-emerald-500' : status === 'orange' ? 'bg-amber-500' : status === 'red' ? 'bg-red-500' : 'bg-neutral-300'
-                  }`}
+                  className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${status ? STATUS_META[status].dotClassName : 'bg-neutral-300'}`}
                   title={status || 'no data yet'}
                 />
                 <div className="flex-1 min-w-0">
@@ -168,7 +166,7 @@ export default async function CoachPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap pl-[22px]">
-                <span className="flex-shrink-0 text-xs font-medium border border-amber-200 bg-amber-50 text-amber-700 rounded-full px-2 py-1" title={`${weeklyGolds} gold ${weeklyGolds === 1 ? 'day' : 'days'} in the last 7 days`}>
+                <span className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${RANK_META.gold.className}`} title={`${weeklyGolds} gold ${weeklyGolds === 1 ? 'day' : 'days'} in the last 7 days`}>
                   🥇 {weeklyGolds}/7 this week
                 </span>
                 {rank && (
