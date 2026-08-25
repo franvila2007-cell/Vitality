@@ -141,6 +141,16 @@ body {
   50% { box-shadow: 0 0 0 6px rgba(15, 168, 166, 0); }
 }
 
+/* Small flicker on the gold-streak flame emoji — a real flame never sits
+   perfectly still, so a subtle scale/rotate wobble reads as "live" rather
+   than a static icon next to an animated bar. */
+@keyframes flame-flicker {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.08) rotate(-3deg); }
+  50% { transform: scale(0.96) rotate(2deg); }
+  75% { transform: scale(1.05) rotate(-1deg); }
+}
+
 a, button, input {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
 }

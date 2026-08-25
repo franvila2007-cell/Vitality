@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import FoodGuide from '@/components/FoodGuide';
 import type { Database } from '@/lib/supabase/database.types';
 
 type Recipe = Database['public']['Tables']['custom_foods']['Row'];
@@ -131,6 +132,8 @@ export default function RecipesManager() {
           </button>
         </form>
       </div>
+
+      <FoodGuide />
 
       <div className="bg-surface border border-border rounded-2xl p-4">
         <p className="text-sm font-medium mb-3">Your recipes · {recipes.length}</p>
