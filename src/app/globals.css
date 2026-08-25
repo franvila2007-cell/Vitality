@@ -151,6 +151,40 @@ body {
   75% { transform: scale(1.05) rotate(-1deg); }
 }
 
+/* Vitto's excited reaction the moment something he logged actually lands —
+   a bigger, snappier bounce+wiggle than his idle bob, so logging a food
+   reads as him reacting to it rather than a static picture next to text. */
+@keyframes vitto-happy-pop {
+  0% { transform: scale(1) rotate(0deg); }
+  30% { transform: scale(1.25) rotate(-8deg); }
+  55% { transform: scale(0.94) rotate(6deg); }
+  75% { transform: scale(1.1) rotate(-3deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Pairs with vitto-happy-pop — a small sparkle that rises and fades above
+   his head on the same successful-log reaction. */
+@keyframes sparkle-rise {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  30% { opacity: 1; transform: translateY(-4px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-16px) scale(0.9); }
+}
+
+/* Slow left-right shimmer across the gold-streak fire bar's gradient (paired
+   with a 200%-wide background so there's room to travel) — makes the fill
+   itself look alive rather than a static gradient block. */
+@keyframes flame-shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Small embers rising off the hottest streak tiers. */
+@keyframes ember-rise {
+  0% { opacity: 0; transform: translateY(0) scale(0.7); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-14px) scale(0.4); }
+}
+
 a, button, input {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
 }

@@ -26,6 +26,15 @@ function tierFor(streak: number) {
   return t;
 }
 
+// A couple of small embers drifting up off the bar once a streak earns its
+// hottest tiers — purely decorative, capped low so it reads as "alive," not
+// distracting from the number.
+const EMBERS = [
+  { left: '22%', delay: '0s', duration: '1.6s' },
+  { left: '58%', delay: '0.5s', duration: '1.9s' },
+  { left: '80%', delay: '1s', duration: '1.5s' },
+];
+
 export default function GoldStreakMeter() {
   const [supabase] = useState(() => createClient());
   const [streak, setStreak] = useState<number | null>(null);
@@ -82,21 +91,33 @@ export default function GoldStreakMeter() {
 
   const tier = tierFor(streak);
   const pct = streak === 0 ? 0 : Math.max(8, Math.min(100, Math.round((streak / FULL_STREAK_DAYS) * 100)));
+  const isHot = streak >= 3;
 
   return (
     <div className="bg-surface border border-border rounded-2xl p-4">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium">Gold streak</p>
+        <p className="text-sm font-medium">
+          Gold streak{streak > 0 && <span className="text-neutral-400 font-normal"> ({streak} day{streak === 1 ? '' : 's'})</span>}
+        </p>
         <span className="text-sm font-semibold flex items-center gap-1">
           <span className={streak > 0 ? 'animate-[flame-flicker_1.4s_ease-in-out_infinite]' : 'opacity-30'}>🔥</span>
           {streak}
         </span>
       </div>
-      <div className="h-3 rounded-full bg-neutral-100 overflow-hidden">
+      <div className="relative h-3 rounded-full bg-neutral-100 overflow-hidden">
         <div
-          className={`h-full rounded-full transition-[width] duration-500 ease-out ${tier.barClass} ${tier.glowClass}`}
+          className={`h-full rounded-full transition-[width] duration-500 ease-out bg-[length:200%_100%] ${tier.barClass} ${tier.glowClass} ${streak > 0 ? 'animate-[flame-shimmer_2.5s_ease-in-out_infinite]' : ''}`}
           style={{ width: `${pct}%` }}
         />
+        {isHot && EMBERS.map((e, i) => (
+          <span
+            key={i}
+            className="absolute bottom-0.5 text-[8px] pointer-events-none animate-[ember-rise_1.8s_ease-in-out_infinite]"
+            style={{ left: e.left, animationDelay: e.delay, animationDuration: e.duration }}
+          >
+            🔥
+          </span>
+        ))}
       </div>
       <p className="text-2xs text-neutral-400 mt-1.5">
         {streak === 0

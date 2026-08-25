@@ -4,10 +4,13 @@ type FoodItem = { name: string; tone: 'green' | 'orange' };
 // into the same status color tokens used for progress-quality elsewhere in
 // the app rather than inventing a second green/orange palette.
 const PROTEIN: FoodItem[] = [
-  { name: 'Chicken (breast, thigh)', tone: 'green' },
-  { name: 'Fish (salmon, tuna, cod, tilapia)', tone: 'green' },
-  { name: 'Beef (lean cuts — sirloin, tenderloin, 90/10 ground)', tone: 'green' },
-  { name: 'Greek yogurt', tone: 'green' },
+  { name: 'Chicken (breast, thigh, drumstick)', tone: 'green' },
+  { name: 'Turkey (breast, ground)', tone: 'green' },
+  { name: 'Fish (salmon, tuna, cod, tilapia, shrimp)', tone: 'green' },
+  { name: 'Beef (lean cuts — sirloin, tenderloin, flank, 93/7 or 90/10 ground)', tone: 'green' },
+  { name: 'Beef (fattier cuts & 80/20 ground)', tone: 'orange' },
+  { name: 'Greek yogurt (0%, 2% or 5% fat)', tone: 'green' },
+  { name: 'Cottage cheese', tone: 'green' },
   { name: 'Milk', tone: 'green' },
   { name: 'Pork (chops, tenderloin, bacon)', tone: 'orange' },
   { name: 'Plant-based (tofu, lentils, chickpeas, tempeh, edamame)', tone: 'orange' },
@@ -18,35 +21,49 @@ const CARBS: FoodItem[] = [
   { name: 'Sweet potatoes', tone: 'green' },
   { name: 'White rice', tone: 'green' },
   { name: 'Dairy (milk, yogurt)', tone: 'green' },
-  { name: 'Fruit (berries, frozen berries, bananas, apples)', tone: 'green' },
-  { name: 'Honey', tone: 'orange' },
+  { name: 'Fruit (berries, frozen berries, bananas, apples, oranges)', tone: 'green' },
+  { name: 'Honey', tone: 'green' },
+  { name: 'Oats', tone: 'orange' },
+  { name: 'Legumes (chickpeas, black beans, kidney beans)', tone: 'orange' },
+  { name: 'Lentils', tone: 'orange' },
+  { name: 'Quinoa & couscous', tone: 'orange' },
   { name: 'Bread', tone: 'orange' },
   { name: 'Pasta', tone: 'orange' },
+  { name: 'Tortillas & wraps', tone: 'orange' },
 ];
 
 const FATS: FoodItem[] = [
   { name: 'Salmon', tone: 'green' },
+  { name: 'Avocado', tone: 'green' },
   { name: 'Olive oil', tone: 'green' },
-  { name: 'Nuts (almonds, walnuts, cashews)', tone: 'green' },
+  { name: 'Nuts (almonds, walnuts, cashews, pistachios)', tone: 'green' },
+  { name: 'Nut butters (peanut, almond)', tone: 'green' },
   { name: 'Butter', tone: 'green' },
   { name: 'Beef', tone: 'green' },
   { name: 'Dairy (cheese, whole milk)', tone: 'green' },
 ];
 
 const VEGETABLES: FoodItem[] = [
-  { name: 'Seasonal veg (peppers, zucchini, carrots, tomatoes)', tone: 'green' },
+  { name: 'Seasonal veg (peppers, zucchini, carrots, tomatoes, onions, mushrooms)', tone: 'green' },
   { name: 'Tubers (beets, turnips, parsnips)', tone: 'green' },
+  { name: 'Green beans & asparagus', tone: 'green' },
+  { name: 'Cucumber & lettuce', tone: 'green' },
   { name: 'Broccoli & cauliflower', tone: 'orange' },
   { name: 'Spinach & arugula', tone: 'orange' },
   { name: 'Kale & other dark leafy greens', tone: 'orange' },
+  { name: 'Brussels sprouts & cabbage', tone: 'orange' },
 ];
 
 const CONDIMENTS: FoodItem[] = [
   { name: 'Mustard', tone: 'orange' },
   { name: 'Hot sauce', tone: 'orange' },
-  { name: 'Vinegar', tone: 'orange' },
+  { name: 'Vinegar (balsamic, apple cider)', tone: 'orange' },
   { name: 'Soy sauce', tone: 'orange' },
   { name: 'Ketchup', tone: 'orange' },
+  { name: 'Salsa', tone: 'orange' },
+  { name: 'Mayo', tone: 'orange' },
+  { name: 'BBQ sauce', tone: 'orange' },
+  { name: 'Salad dressing', tone: 'orange' },
 ];
 
 function Chip({ item }: { item: FoodItem }) {

@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { localDateStr, addDays } from '@/lib/date';
 import TodaySkeleton from '@/components/skeletons/TodaySkeleton';
+import GoldStreakMeter from '@/components/GoldStreakMeter';
 import { computeDayRank, RANK_META, type Rank } from '@/lib/ranking';
 import { computeMicroTotals, MICRONUTRIENT_KEYS, type MicronutrientKey } from '@/lib/micronutrients';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
@@ -51,6 +52,7 @@ export default function TodayClient() {
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [vittoReacting, setVittoReacting] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [scanning, setScanning] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
@@ -174,7 +176,7 @@ export default function TodayClient() {
 
   useEffect(() => {
     if (chat.length === 0) {
-      setChat([{ id: 'greet', role: 'bot', text: "Hi, I'm Vitto! 👋 Tell me what you ate and I'll estimate the macros and log it — you can also ask things like \"how many calories do I have left?\" or say \"undo\"." }]);
+      setChat([{ id: 'greet', role: 'bot', text: "Hi, I'm Vitto! 👋 Vitality's chatbot, here to track everything you ate today. Tell me what you had and I'll log it — you can also ask things like \"how many calories do I have left?\" or say \"undo\"." }]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -200,6 +202,12 @@ export default function TodayClient() {
       const data = await res.json();
       setChat((c) => [...c, { id: 'b' + Date.now(), role: 'bot', text: data.reply || "Sorry, something went wrong." }]);
       if (data.meals) {
+        // A logged meal actually landed — give Vitto a visible reaction
+        // instead of him just sitting there once the reply text lands.
+        if (data.meals.length > meals.length) {
+          setVittoReacting(true);
+          setTimeout(() => setVittoReacting(false), 900);
+        }
         setMeals(data.meals);
         // Today's streak/week-pip depend on having a meal logged, and this
         // chat path is how most food actually gets logged — without this,
@@ -479,6 +487,8 @@ export default function TodayClient() {
         </div>
       </div>
 
+      <GoldStreakMeter />
+
       {/* Vitto chat */}
       {/* min-w-0: without it, a flex-column child sizes to its widest
           descendant's natural width — the quick-add chip row below is wide
@@ -487,10 +497,15 @@ export default function TodayClient() {
           scrolling internally as intended. */}
       <div className="bg-surface border border-border rounded-2xl p-4 min-w-0">
         <div className="flex items-center gap-3 mb-3">
-          <Image
-            src="/vitto-avatar.png" alt="" width={64} height={64}
-            className={`flex-shrink-0 ${sending ? 'animate-[vitto-thinking-ring_1.2s_ease-in-out_infinite]' : 'animate-[vitto-bob_3s_ease-in-out_infinite]'}`}
-          />
+          <div className="relative flex-shrink-0">
+            <Image
+              src="/vitto-avatar.png" alt="" width={64} height={64}
+              className={vittoReacting ? 'animate-[vitto-happy-pop_0.7s_ease]' : sending ? 'animate-[vitto-thinking-ring_1.2s_ease-in-out_infinite]' : 'animate-[vitto-bob_3s_ease-in-out_infinite]'}
+            />
+            {vittoReacting && (
+              <span className="absolute -top-1 -right-1 text-base pointer-events-none animate-[sparkle-rise_0.9s_ease-out_forwards]">✨</span>
+            )}
+          </div>
           <div>
             <p className="text-sm font-medium">Vitto</p>
             <p className="text-2xs text-neutral-400">Your Vitality AI food logger</p>
@@ -648,7 +663,8 @@ export default function TodayClient() {
 
       {/* Habits */}
       <div className="bg-surface border border-border rounded-2xl p-4">
-        <p className="text-sm font-medium mb-3">Today&rsquo;s habits</p>
+        <p className="text-sm font-medium mb-1">Today&rsquo;s habits</p>
+        <p className="text-xs text-neutral-400 mb-3">Get a gold. Get one day closer to reaching your goals.</p>
         {habits.length === 0 && <p className="text-sm text-neutral-400">No habits set up yet — your coach can add these.</p>}
         <div className="flex flex-col gap-2">
           {habits.map((h) => {

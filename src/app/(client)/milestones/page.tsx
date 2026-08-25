@@ -64,6 +64,7 @@ export default async function MilestonesPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-5 page-fade-in">
       <div className="bg-surface border border-border rounded-2xl p-4">
+        <p className="text-3xs uppercase tracking-wide text-neutral-400 mb-1">Vitality Protocol</p>
         <p className="text-sm font-medium mb-1">Day {dayNum} of {programDays}</p>
         <p className="text-xs text-neutral-400 mb-4">{verb} toward {cp.goal_weight}kg ({totalChange}kg {goalType === 'lose' ? 'to lose' : 'to gain'} from {cp.start_weight}kg)</p>
         <div className="flex flex-col gap-2">

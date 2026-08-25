@@ -711,7 +711,7 @@ export function processVittoMessage(text: string, ctx: VittoContext): VittoResul
     const fdn = getDisplayName(ctx.clientFirstName); const fname = fdn ? ', ' + fdn : '';
     opener = pick(['Okay, great' + fname + '! That\'s a good start to the day 🌅', 'Nice one' + fname + ' — great way to kick off the day!', 'Love it' + fname + ', first log of the day — let\'s keep this going 💪', 'That\'s a solid start to the day' + fname + ', logged:']);
   } else {
-    opener = pick(['Got it!', 'Nice one, logged that:', 'Perfect, added:', 'On it!', 'All set —', 'Boom, logged:', 'Nice — added:', "Sweet, that's in:", 'Easy, done:', 'Solid choice —', 'Noted!', "Great, that's in the log:"]);
+    opener = pick(['Got it!', 'Nice one, logged that:', 'Perfect, added:', 'On it!', 'All set —', 'Boom, logged:', 'Nice — added:', "Sweet, that's in:", 'Easy, done:', 'Solid choice —', 'Noted!', "Great, that's in the log:", 'Excellent choice! Logged:', 'Love that pick — logged:', 'Nutritious and delicious — logged:', "That'll do nicely — logged:", 'Nice pick! Locked in:']);
   }
   const foodList = matched.map((m) => m.label).join(' and ');
   let reply = opener + ' ' + foodList + '. Around ' + Math.round(totals.cal) + ' kcal, ' + roundedProt + 'g protein, ' + roundedCarb + 'g carbs and ' + roundedFat + 'g fat.';
