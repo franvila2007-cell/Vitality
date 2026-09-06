@@ -5,6 +5,7 @@ import TargetsEditor from '@/components/coach/TargetsEditor';
 import RankOverride from '@/components/coach/RankOverride';
 import CoachNoteEditor from '@/components/coach/CoachNoteEditor';
 import RemoveClientButton from '@/components/coach/RemoveClientButton';
+import ResendInviteButton from '@/components/coach/ResendInviteButton';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
@@ -159,6 +160,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             ))}
           </div>
         </div>
+
+        <ResendInviteButton userId={id} />
 
         <RemoveClientButton userId={id} clientName={profileRes.data.full_name || profileRes.data.email} />
       </div>
