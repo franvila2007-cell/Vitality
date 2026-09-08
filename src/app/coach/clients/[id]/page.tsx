@@ -7,8 +7,10 @@ import CoachNoteEditor from '@/components/coach/CoachNoteEditor';
 import RemoveClientButton from '@/components/coach/RemoveClientButton';
 import ResendInviteButton from '@/components/coach/ResendInviteButton';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
+import WeightTrendGraph from '@/components/WeightTrendGraph';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
+import { getProjections, computeMonthColors, STATUS_META, type GoalType } from '@/lib/progress';
 
 // Auth/role guard and the top header bar now live in coach/layout.tsx.
 export default async function ClientDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -71,6 +73,30 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     currentOverride = overrideRes.data?.rank ?? null;
   }
 
+  // Same projected-vs-actual math the client sees on their own Progress
+  // tab — was missing entirely from the coach's per-client view (just a
+  // flat list of checkpoint numbers, no graph, no on-track signal), so a
+  // coach checking in on a client's trajectory had to sign in as them to
+  // see it visually at all.
+  const checkpoints = checkpointsRes.data || [];
+  let weightProgress: {
+    months: number[]; actuals: (number | null)[]; colors: ReturnType<typeof computeMonthColors>;
+    projections: number[]; trendPoints: { month: number; weight: number }[];
+  } | null = null;
+  if (clientProfile) {
+    const goalType = clientProfile.goal_type as GoalType;
+    const pace = (clientProfile.pace_config as Record<string, number[]>)?.[goalType] || [1.5, 1.5, 1.5, 1.5, 1.5, 1.5];
+    const projections = getProjections(clientProfile.start_weight, goalType, pace);
+    const months = [1, 2, 3, 4, 5, 6];
+    const actuals = months.map((m) => (m === 1 ? clientProfile.start_weight : checkpoints.find((c) => c.month_index === m)?.weight ?? null));
+    const colorActuals = months.map((m) => (m === 1 ? null : checkpoints.find((c) => c.month_index === m)?.weight ?? null));
+    const colors = computeMonthColors(projections, colorActuals);
+    const trendPoints = months
+      .map((m, i) => ({ month: m, weight: actuals[i] }))
+      .filter((p): p is { month: number; weight: number } => p.weight != null);
+    weightProgress = { months, actuals, colors, projections, trendPoints };
+  }
+
   return (
     <>
       <div className="border-b border-border">
@@ -100,14 +126,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <p className="text-sm text-neutral-400">No program set up for this client yet.</p>
         )}
 
-        {checkpointsRes.data && checkpointsRes.data.length > 0 && (
+        {weightProgress && (
           <div className="bg-surface border border-border rounded-2xl p-4">
-            <p className="text-sm font-medium mb-2">Weight checkpoints</p>
-            <div className="flex gap-3 flex-wrap">
-              {checkpointsRes.data.map((c) => (
-                <span key={c.id} className="text-xs bg-neutral-50 rounded-full px-3 py-1">Month {c.month_index}: {c.weight}kg</span>
+            <p className="text-sm font-medium mb-3">Weight progress</p>
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {weightProgress.months.map((m, i) => (
+                <div key={m} className={`rounded-lg border-l-4 px-2 py-2 text-center ${weightProgress!.colors[i] ? STATUS_META[weightProgress!.colors[i]!].cardClassName : 'border-l-neutral-200 bg-neutral-50 text-neutral-400'}`}>
+                  <div className="text-3xs uppercase tracking-wide opacity-70">Month {m}</div>
+                  <div className="text-sm font-semibold">{weightProgress!.actuals[i] != null ? `${weightProgress!.actuals[i]}kg` : `→${weightProgress!.projections[i - 1] ?? clientProfile!.start_weight}kg`}</div>
+                </div>
               ))}
             </div>
+            <p className="text-2xs uppercase tracking-wide text-neutral-400 mb-2">Weigh-in trend</p>
+            <WeightTrendGraph points={weightProgress.trendPoints} goalWeight={clientProfile!.goal_weight} goalType={clientProfile!.goal_type as GoalType} />
           </div>
         )}
 
