@@ -27,8 +27,13 @@ export async function proxy(request: NextRequest) {
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
+  // /assessment (+ its submit endpoint) is the onboarding form sent to brand
+  // new clients before they have an account — fully public, so skip the
+  // Supabase auth round-trip entirely.
+  if (path.startsWith('/assessment') || path.startsWith('/api/assessment')) return response;
+
+  const { data: { user } } = await supabase.auth.getUser();
   // /auth/* (invite/magic-link callback + set-password) must stay reachable
   // both signed-out (callback exchanges the link for a session) and
   // signed-in (set-password runs right after that exchange) — only /login

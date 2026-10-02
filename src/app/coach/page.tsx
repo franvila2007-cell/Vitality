@@ -116,7 +116,10 @@ export default async function CoachPage() {
       <div className="max-w-4xl mx-auto px-4 py-6 page-fade-in">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-h1 font-semibold">Clients ({rows.length})</h1>
-          <Link href="/coach/clients/new" className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90">+ Add client</Link>
+          <div className="flex items-center gap-3">
+            <Link href="/coach/assessments" className="text-sm text-neutral-500 hover:text-neutral-800">Assessments</Link>
+            <Link href="/coach/clients/new" className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90">+ Add client</Link>
+          </div>
         </div>
 
         {rows.length === 0 && <p className="text-sm text-neutral-400">No clients yet — add your first one.</p>}

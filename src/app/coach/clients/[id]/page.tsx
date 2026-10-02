@@ -8,6 +8,8 @@ import RemoveClientButton from '@/components/coach/RemoveClientButton';
 import ResendInviteButton from '@/components/coach/ResendInviteButton';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
 import WeightTrendGraph from '@/components/WeightTrendGraph';
+import AssessmentAnswers from '@/components/coach/AssessmentAnswers';
+import type { Answers } from '@/lib/assessment/questions';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
 import { getProjections, computeMonthColors, STATUS_META, type GoalType } from '@/lib/progress';
@@ -31,6 +33,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   ]);
 
   if (profileRes.error || !profileRes.data) notFound();
+  // Onboarding assessments are submitted from the public form before/without
+  // a login, so they're linked to the client by email rather than user id.
+  const { data: assessment } = await supabase
+    .from('assessments').select('answers, created_at')
+    .ilike('email', profileRes.data.email.replace(/[\\%_]/g, '\\$&'))
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
   const clientProfile = clientProfileRes.data;
   const targets = targetsRes.data;
   const habitsTotal = habitsRes.data?.length ?? 0;
@@ -139,6 +147,22 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             </div>
             <p className="text-2xs uppercase tracking-wide text-neutral-400 mb-2">Weigh-in trend</p>
             <WeightTrendGraph points={weightProgress.trendPoints} goalWeight={clientProfile!.goal_weight} goalType={clientProfile!.goal_type as GoalType} />
+          </div>
+        )}
+
+        {assessment ? (
+          <details className="bg-surface border border-border rounded-2xl p-4 group">
+            <summary className="text-sm font-medium cursor-pointer list-none flex items-center justify-between [&::-webkit-details-marker]:hidden">
+              <span>Onboarding assessment <span className="text-2xs font-normal text-neutral-400">· {new Date(assessment.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span></span>
+              <span className="text-neutral-400 text-xs group-open:rotate-180 transition-transform">▾</span>
+            </summary>
+            <div className="mt-4">
+              <AssessmentAnswers answers={assessment.answers as Answers} />
+            </div>
+          </details>
+        ) : (
+          <div className="bg-surface border border-border rounded-2xl p-4 text-sm text-neutral-400">
+            Onboarding assessment not submitted yet. Send them the <span className="font-mono text-neutral-600">/assessment</span> link (they should use this same email).
           </div>
         )}
 

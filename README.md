@@ -39,3 +39,7 @@ Every other account is created from the coach dashboard (`/coach/clients/new`), 
 - `src/lib/supabase/` — browser/server/admin Supabase clients
 - `src/proxy.ts` — session refresh + role-based route guarding (Next.js 16's renamed `middleware`)
 - `supabase/migrations/` — schema + RLS policies
+
+## Onboarding assessment
+
+Public, no-login intake form for new 1-1 clients at `/assessment`. Questions live in `src/lib/assessment/questions.ts` (shared by the form, the `/api/assessment` validator, and the coach view). Submissions are stored in the `assessments` table (`supabase/migrations/0007_assessments.sql`) and readable by the coach at `/coach/assessments` or in Supabase's Table Editor.

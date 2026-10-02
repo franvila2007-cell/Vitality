@@ -142,6 +142,11 @@ export type Database = {
         { user_id: string; date: string; rank: 'gold' | 'silver' | 'bronze'; set_by: string; set_at?: string },
         { user_id?: string; date?: string; rank?: 'gold' | 'silver' | 'bronze'; set_by?: string; set_at?: string }
       >;
+      assessments: Table<
+        { id: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; created_at: string },
+        { id?: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; created_at?: string },
+        { id?: string; submission_id?: string; full_name?: string; email?: string; phone?: string; answers?: Json; created_at?: string }
+      >;
     };
   };
 };

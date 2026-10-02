@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 
 const DISMISSED_KEY = 'vitality-a2hs-dismissed';
 
 export default function AddToHomeScreenHint() {
   const [visible, setVisible] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !('MSStream' in window);
@@ -16,7 +18,8 @@ export default function AddToHomeScreenHint() {
     setVisible(isIOS && !isStandalone && !dismissed);
   }, []);
 
-  if (!visible) return null;
+  // The public onboarding form isn't the installable app.
+  if (!visible || pathname.startsWith('/assessment')) return null;
 
   function dismiss() {
     localStorage.setItem(DISMISSED_KEY, '1');
