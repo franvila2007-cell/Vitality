@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { parseFoodText, type VittoFoods } from '@/lib/vitto/parser';
-import type { FoodEntry } from '@/lib/vitto/foodDb';
+import { parseFoodText } from '@/lib/vitto/parser';
+import { buildVittoFoods } from '@/lib/vitto/buildFoods';
 import { llmAssistParse, llmEstimateFoods } from '@/lib/vitto/llmFallback';
 
 export const runtime = 'nodejs';
@@ -25,13 +25,7 @@ export async function POST(req: Request) {
     supabase.from('custom_foods').select('*').eq('user_id', user.id),
   ]);
 
-  const db: Record<string, FoodEntry> = {};
-  for (const row of globalFoodsRes.data || []) db[row.name] = { type: row.type, ...(row.data as object) } as FoodEntry;
-  // perUnit, not per100g — see the matching comment in /api/vitto/message/route.ts.
-  for (const cf of customFoodsRes.data || []) db[cf.name] = { type: 'perUnit', cal: cf.calories, prot: cf.protein_g, carb: cf.carbs_g, fat: cf.fat_g, label: cf.name, avgGrams: cf.default_grams };
-  const synonyms: Record<string, string> = {};
-  for (const s of synonymsRes.data || []) synonyms[s.phrase] = s.canonical;
-  const foods: VittoFoods = { db, synonyms };
+  const foods = buildVittoFoods(globalFoodsRes.data || [], synonymsRes.data || [], customFoodsRes.data || []);
 
   type CalcItem = { label: string; cal: number; prot: number; carb: number; fat: number; estimated: boolean };
 

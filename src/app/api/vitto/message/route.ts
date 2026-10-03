@@ -1,9 +1,9 @@
 import { NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { processVittoMessage, parseFoodText, type VittoContext, type VittoAction, type MealEntry, type PendingState } from '@/lib/vitto/parser';
-import type { FoodEntry } from '@/lib/vitto/foodDb';
-import { llmAssistParse, llmEstimateFoods, llmEstimateFoodInsights, llmAnswerQuestion } from '@/lib/vitto/llmFallback';
+import { processVittoMessage, finishWithLLM, type VittoContext, type VittoAction, type MealEntry, type PendingState } from '@/lib/vitto/parser';
+import { buildVittoFoods } from '@/lib/vitto/buildFoods';
+import { llmParseFoodMessage, llmEstimateFoodInsights, llmAnswerQuestion } from '@/lib/vitto/llmFallback';
 
 export const runtime = 'nodejs';
 
@@ -33,23 +33,7 @@ export async function POST(req: Request) {
     supabase.from('food_log_entries').select('*').eq('user_id', user.id).eq('date', date).order('logged_at', { ascending: true }),
   ]);
 
-  const db: Record<string, FoodEntry> = {};
-  for (const row of globalFoodsRes.data || []) {
-    db[row.name] = { type: row.type, ...(row.data as object) } as FoodEntry;
-  }
-  for (const cf of customFoodsRes.data || []) {
-    // perUnit, not per100g: a client-saved recipe/food's stored macros are
-    // for ONE serving/piece as they described it ("Almond" = one almond,
-    // "Yuho burger" = one burger) — treating that as "per 100g" silently
-    // divides real portions down to near-zero (a saved 7 kcal almond became
-    // "100g Almond = 7 kcal" instead of just 1 almond) and let quantity
-    // words embedded in the food's own name (e.g. "1 Walnut Half") get
-    // misread as a fraction modifier. Confirmed against a real client's
-    // logged entries before fixing.
-    db[cf.name] = { type: 'perUnit', cal: cf.calories, prot: cf.protein_g, carb: cf.carbs_g, fat: cf.fat_g, label: cf.name, avgGrams: cf.default_grams };
-  }
-  const synonyms: Record<string, string> = {};
-  for (const s of synonymsRes.data || []) synonyms[s.phrase] = s.canonical;
+  const foods = buildVittoFoods(globalFoodsRes.data || [], synonymsRes.data || [], customFoodsRes.data || []);
 
   const todayMeals: MealEntry[] = (todayMealsRes.data || []).map((m) => ({
     id: m.id, name: m.name, cal: m.calories, prot: m.protein_g, carb: m.carbs_g, fat: m.fat_g,
@@ -74,52 +58,21 @@ export async function POST(req: Request) {
 
   const firstName = profileRes.data?.full_name?.trim().split(/\s+/)[0] || null;
 
-  const ctx: VittoContext = { foods: { db, synonyms }, todayMeals, targets, mealTemplates, streakDays, pending, clientFirstName: firstName };
+  const ctx: VittoContext = { foods, todayMeals, targets, mealTemplates, streakDays, pending, clientFirstName: firstName };
 
   let result = processVittoMessage(text, ctx);
 
-  // Hybrid fallback, two tiers — only reached when the local parser fully
-  // failed on some/all of the message (it queued a "roughly how many
-  // calories was that?" follow-up):
-  //   1. Ask the LLM to normalize typos/slang, then re-run the SAME local,
-  //      DB-grounded matcher on the cleaned text — cheap, and numbers stay
-  //      exactly as curated in the coach's database.
-  //   2. If the food still isn't in the database at all (a restaurant item,
-  //      a home-cooked dish, a branded product), ask the LLM to estimate
-  //      macros directly from its own nutrition knowledge — a genuine
-  //      "knows about food" fallback rather than refusing. Always marked
-  //      `estimated: true` with a capped confidence so it's visibly distinct
-  //      from verified database numbers, never silently presented as exact.
-  const pendingUnknownAction = result.actions.find((a): a is Extract<VittoAction, { kind: 'set_pending' }> => a.kind === 'set_pending' && a.pending.type === 'unknown_food');
-  if (pendingUnknownAction && process.env.ANTHROPIC_API_KEY) {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    const originalPendingText = pendingUnknownAction.pending.type === 'unknown_food' ? pendingUnknownAction.pending.text : '';
-    const nonPendingActions = result.actions.filter((a) => a !== pendingUnknownAction);
-
-    const cleaned = await llmAssistParse(originalPendingText, apiKey);
-    const llmMatched = cleaned ? parseFoodText(cleaned, ctx.foods).matched : [];
-
-    if (llmMatched.length > 0) {
-      const addActions: VittoAction[] = llmMatched.map((m) => ({ kind: 'add_meal', entry: { name: m.label, cal: m.cal, prot: m.prot, carb: m.carb, fat: m.fat, originalText: originalPendingText, matchedFood: m.matchedFood, amount: m.amount, unit: m.unit, estimated: true, confidence: Math.min(m.confidence, 0.85) } }));
-      const totals = llmMatched.reduce((a, m) => ({ cal: a.cal + m.cal, prot: a.prot + m.prot, carb: a.carb + m.carb, fat: a.fat + m.fat }), { cal: 0, prot: 0, carb: 0, fat: 0 });
-      const foodList = llmMatched.map((m) => m.label).join(' and ');
-      result = {
-        reply: result.reply.split(' I didn\'t recognise')[0] + ` (took a closer look) — ${foodList}, around ${Math.round(totals.cal)} kcal, ${Math.round(totals.prot)}g protein, ${Math.round(totals.carb)}g carbs, ${Math.round(totals.fat)}g fat. Added to today's log ✅`,
-        actions: [...nonPendingActions, { kind: 'clear_pending' }, ...addActions],
-      };
-    } else {
-      // Not a typo of anything in the database — genuinely unknown food.
-      // Let the model estimate it directly rather than asking the client.
-      const estimated = await llmEstimateFoods(originalPendingText, apiKey);
-      if (estimated) {
-        const addActions: VittoAction[] = estimated.map((it) => ({ kind: 'add_meal', entry: { name: it.label, cal: it.cal, prot: it.protein_g, carb: it.carbs_g, fat: it.fat_g, originalText: originalPendingText, matchedFood: null, amount: null, unit: null, estimated: true, confidence: 0.55 } }));
-        const totals = estimated.reduce((a, it) => ({ cal: a.cal + it.cal, prot: a.prot + it.protein_g, carb: a.carb + it.carbs_g, fat: a.fat + it.fat_g }), { cal: 0, prot: 0, carb: 0, fat: 0 });
-        const foodList = estimated.map((it) => it.label).join(' and ');
-        result = {
-          reply: result.reply.split(' I didn\'t recognise')[0] + ` — I don't have "${foodList}" in the database, but here's my best AI estimate: around ${Math.round(totals.cal)} kcal, ${Math.round(totals.prot)}g protein, ${Math.round(totals.carb)}g carbs, ${Math.round(totals.fat)}g fat. Added to today's log ✅ (flagged as an estimate, not a verified figure — let me know the real numbers if you have them).`,
-          actions: [...nonPendingActions, { kind: 'clear_pending' }, ...addActions],
-        };
-      }
+  // Understanding fallback — reached only when the local engine wasn't fully
+  // confident about part of a food message (compound dishes, cafe orders,
+  // brands, unfamiliar words, unknown foods). One LLM call reads those parts
+  // like a person would; anything it maps onto a known food is re-computed
+  // from the database numbers, the rest is flagged as an estimate. The local
+  // best-effort result stands if the call fails or no key is configured.
+  if (result.needsLLM && result.llmTexts && result.llmTexts.length > 0 && process.env.ANTHROPIC_API_KEY) {
+    const items = await llmParseFoodMessage(result.llmTexts.join(', '), Object.keys(foods.db), process.env.ANTHROPIC_API_KEY);
+    if (items && items.length > 0) {
+      const merged = finishWithLLM(result, items, ctx, text);
+      if (merged) result = merged;
     }
   }
 

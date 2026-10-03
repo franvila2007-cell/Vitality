@@ -14,17 +14,12 @@
 // keeps the parsing/matching logic — the part worth testing in isolation —
 // free of I/O.
 
-import type { FoodEntry } from './foodDb';
+import { parseFoodText, parseFoodPart, tryParseCustomPer100g, parseModifiers, normalizeText, llmItemToPart, type VittoFoods, type ParsedFoodPart, type LLMFoodItem, type ParseResult } from './foodParser';
+
+export { parseFoodText, parseFoodPart, tryParseCustomPer100g };
+export type { VittoFoods, ParsedFoodPart, LLMFoodItem, ParseResult };
 
 // ── Types ───────────────────────────────────────────────────────────────
-
-export type FlatFood = {
-  type: 'per100g' | 'perUnit' | 'dish';
-  cal: number; prot: number; carb: number; fat: number;
-  defaultGrams?: number; cupGrams?: number; sliceGrams?: number; tbspGrams?: number; tspGrams?: number;
-  label?: string; avgGrams?: number;
-  cookState?: 'raw' | 'cooked';
-};
 
 export type MealEntry = {
   id: string;
@@ -58,13 +53,6 @@ export type VittoAction =
   | { kind: 'set_pending'; pending: PendingState }
   | { kind: 'clear_pending' };
 
-export type VittoFoods = {
-  /** foods_global rows merged with this client's custom_foods, custom taking priority on name collisions */
-  db: Record<string, FoodEntry>;
-  /** food_synonyms, phrase -> canonical db key */
-  synonyms: Record<string, string>;
-};
-
 export type VittoContext = {
   foods: VittoFoods;
   todayMeals: MealEntry[];
@@ -79,314 +67,20 @@ export type VittoContext = {
 // pattern for (not food, not small talk, not an app command) — the route
 // handler uses this to decide whether to hand the message to the LLM for a
 // real nutrition-knowledge answer instead of leaving the client stuck.
-export type VittoResult = { reply: string; actions: VittoAction[]; unhandled?: boolean };
-
-// ── Quantity words ──────────────────────────────────────────────────────
-
-// WORD_NUMBERS covers exact counts (a/two/few) AND rough portion words
-// ("most", "a little") mapped to a fraction of a standard serving — these
-// are intentionally approximate, matching how a person actually talks.
-const WORD_NUMBERS: Record<string, number> = {
-  a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
-  couple: 2, few: 3, half: 0.5,
-  most: 0.75, 'a little': 0.25, 'a bit': 0.25, 'a splash': 0.15, 'a small amount': 0.2,
-  'most of': 0.75, 'a little of': 0.25, 'a bit of': 0.25,
-};
-// Longer/more specific phrases must be checked before short ones, or "a" would
-// win over "a little of" every time since both appear in the same text.
-const WORD_NUMBER_ORDER = Object.keys(WORD_NUMBERS).sort((a, b) => b.length - a.length);
-
-function wordToQty(lower: string): number | null {
-  for (const w of WORD_NUMBER_ORDER) {
-    if (new RegExp('\\b' + w.replace(/ /g, '\\s+') + '\\b').test(lower)) return WORD_NUMBERS[w];
-  }
-  return null;
-}
-
-// Approximate portion words ("most", "a splash") only — used specifically to
-// scale a food's default serving when no explicit unit/weight is given.
-// Kept separate from wordToQty because plain counting words ("a", "one")
-// must NOT be read as a fraction of a serving — "a chicken" means a normal
-// serving, not 100% of one multiplied by 1; this only fires for words that
-// are inherently approximate.
-const FRACTION_WORDS = ['most of', 'a little of', 'a bit of', 'most', 'a little', 'a bit', 'a splash', 'a small amount', 'half'];
-function wordToFraction(lower: string): number | null {
-  for (const w of FRACTION_WORDS) {
-    if (new RegExp('\\b' + w.replace(/ /g, '\\s+') + '\\b').test(lower)) return WORD_NUMBERS[w.replace(' of', '')];
-  }
-  return null;
-}
-
-// ── Food lookup / fuzzy matching ────────────────────────────────────────
-
-// Sorted longest-first so multi-word dishes ("chicken caesar salad") win
-// over single words ("chicken") when both are present in what someone typed.
-function getFoodLookupPhrases(foods: VittoFoods): string[] {
-  return Object.keys(foods.db).concat(Object.keys(foods.synonyms)).sort((a, b) => b.length - a.length);
-}
-
-// Standard edit-distance algorithm — used only as a fallback when nothing
-// matched exactly, so a typo like "chikn" or "banan" still resolves.
-function levenshtein(a: string, b: string): number {
-  const m = a.length, n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const d: number[][] = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
-  for (let j = 0; j <= n; j++) d[0][j] = j;
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      d[i][j] = a[i - 1] === b[j - 1] ? d[i - 1][j - 1] : 1 + Math.min(d[i - 1][j], d[i][j - 1], d[i - 1][j - 1]);
-    }
-  }
-  return d[m][n];
-}
-
-// Tries every word/word-pair in the message against every known food name.
-// Only accepts a match within a tight, length-scaled edit-distance budget —
-// tight enough that "chikn"→"chicken" matches but unrelated short words
-// don't accidentally match something. Returns {phrase, distance, confidence}
-// or null.
 //
-// IMPORTANT: short words (3-4 letters) are excluded from fuzzy matching
-// entirely, and common English words are hard-blocked via FUZZY_STOPWORDS.
-// A real bug proved why: "had" is 1 edit from "ham", "raw" is 2 edits from
-// "prawn" — ordinary sentence words are frequently within edit-distance 1-2
-// of some short food name purely by coincidence. Fuzzy matching is only
-// safe on longer words, where a couple of edits is a real spelling mistake,
-// not a coincidence.
-const FUZZY_STOPWORDS = new Set([
-  'the', 'and', 'had', 'has', 'have', 'was', 'were', 'ate', 'eat', 'eating', 'add', 'added',
-  'raw', 'not', 'for', 'some', 'with', 'this', 'that', 'then', 'than', 'just', 'also',
-  'about', 'around', 'only', 'left', 'more', 'less', 'most', 'half', 'none', 'much',
-  'many', 'very', 'still', 'yes', 'no', 'did', 'does', 'you', 'your', 'again',
-  'today', 'now', 'later', 'before', 'after', 'same', 'last', 'next', 'new', 'old',
-  'day', 'one', 'two', 'all', 'any', 'out', 'into', 'from', 'over', 'under', 'cooked',
-  'grilled', 'roasted', 'baked', 'fried', 'boiled', 'steamed', 'uncooked', 'minced',
-]);
-
-function fuzzyMatchFood(lower: string, foods: VittoFoods): { phrase: string; distance: number; confidence: number } | null {
-  const tokens = lower.replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 5 && !FUZZY_STOPWORDS.has(w));
-  const candidates: string[] = [];
-  for (let i = 0; i < tokens.length; i++) {
-    candidates.push(tokens[i]);
-    if (i < tokens.length - 1 && !FUZZY_STOPWORDS.has(tokens[i + 1])) candidates.push(tokens[i] + ' ' + tokens[i + 1]);
-  }
-  const phrases = getFoodLookupPhrases(foods).filter((p) => p.length >= 5);
-  let best: { phrase: string; distance: number; confidence: number } | null = null;
-  for (const cand of candidates) {
-    for (const phrase of phrases) {
-      // skip trivial/huge length mismatches — not worth computing distance
-      if (Math.abs(cand.length - phrase.length) > 3) continue;
-      const dist = levenshtein(cand, phrase.toLowerCase());
-      const budget = phrase.length <= 6 ? 1 : phrase.length <= 9 ? 2 : 3;
-      if (dist <= budget && (!best || dist < best.distance)) {
-        best = { phrase, distance: dist, confidence: Math.max(0.5, 1 - dist / phrase.length) };
-      }
-    }
-  }
-  return best;
-}
-
-function getFoodEntry(key: string, foods: VittoFoods): FoodEntry | undefined {
-  return foods.db[key];
-}
-
-function resolveFoodKey(phrase: string, foods: VittoFoods): string | undefined {
-  return foods.db[phrase] ? phrase : foods.synonyms[phrase];
-}
-
-// Meat/fish that has a raw vs cooked profile stores {raw:{...},cooked:{...}}
-// instead of flat cal/prot/carb/fat. This picks the right one from words in
-// the message, defaulting to cooked — "I had chicken" almost always means
-// cooked, ready-to-eat chicken, not the raw weight before it went in the pan.
-function detectCookState(lower: string): 'raw' | 'cooked' | null {
-  if (/\b(raw|uncooked)\b/.test(lower)) return 'raw';
-  if (/\b(cooked|grilled|roasted|baked|fried|pan[- ]?fried|boiled|steamed|bbq|barbecu?ed?|seared|poached)\b/.test(lower)) return 'cooked';
-  return null;
-}
-
-// Resolves a food entry to a flat {cal,prot,carb,fat,...} shape regardless of
-// whether it's a simple entry or a raw/cooked pair — everything downstream
-// (grams scaling, defaultGrams, etc.) can then treat every food the same way.
-function resolveStatefulFood(food: FoodEntry, lower: string): FlatFood {
-  if ('raw' in food && 'cooked' in food) {
-    const state = detectCookState(lower) || 'cooked';
-    const stateVals = state === 'raw' ? food.raw : food.cooked;
-    return { type: food.type, cal: stateVals.cal, prot: stateVals.prot, carb: stateVals.carb, fat: stateVals.fat, defaultGrams: food.defaultGrams, cupGrams: food.cupGrams, sliceGrams: food.sliceGrams, tbspGrams: food.tbspGrams, tspGrams: food.tspGrams, cookState: state };
-  }
-  return food as FlatFood;
-}
-
-// Normalises any food entry (whatever its default type) to a per-100g basis,
-// so an explicit gram amount can scale ANY food correctly — e.g. "150g banana"
-// or "300g chicken caesar salad" — not just the foods stored per-100g already.
-function getPer100gMacros(food: FlatFood) {
-  if (food.type === 'per100g') return { cal: food.cal, prot: food.prot, carb: food.carb, fat: food.fat };
-  const g = food.avgGrams || 100;
-  return { cal: (food.cal / g) * 100, prot: (food.prot / g) * 100, carb: (food.carb / g) * 100, fat: (food.fat / g) * 100 };
-}
-
-export type ParsedFoodPart = {
-  label: string;
-  matchedFood: string;
-  amount: number;
-  unit: string;
-  estimated: boolean;
-  confidence: number;
-  cal: number; prot: number; carb: number; fat: number;
+// `needsLLM` marks a food log the local engine is only partly sure about
+// (compound dishes, unexplained words, unknown foods). The route re-reads
+// `llmTexts` with the LLM and calls finishWithLLM() to merge the result with
+// the `confident` local items; if the LLM is unavailable the local best-effort
+// `reply`/`actions` stand as they are.
+export type VittoResult = {
+  reply: string;
+  actions: VittoAction[];
+  unhandled?: boolean;
+  needsLLM?: boolean;
+  llmTexts?: string[];
+  confident?: ParsedFoodPart[];
 };
-
-export function parseFoodPart(part: string, foods: VittoFoods): ParsedFoodPart | null {
-  const lower = part.toLowerCase();
-  let matchedPhrase: string | null = null;
-  let confidence = 1.0;
-  // Compared lowercased (the coach-taught foods DB is lowercase, but a
-  // client-saved recipe name can be typed in any case) — matchedPhrase itself
-  // keeps its original casing so it still round-trips through foods.db[phrase].
-  for (const phrase of getFoodLookupPhrases(foods)) {
-    if (lower.includes(phrase.toLowerCase())) { matchedPhrase = phrase; break; }
-  }
-  if (!matchedPhrase) {
-    // exact match failed — try fuzzy, so typos like "chikn" or "banan" still resolve
-    const fuzzy = fuzzyMatchFood(lower, foods);
-    if (fuzzy) { matchedPhrase = fuzzy.phrase; confidence = fuzzy.confidence; }
-  }
-  if (!matchedPhrase) return null;
-  const matchedKey = resolveFoodKey(matchedPhrase, foods);
-  if (!matchedKey) return null;
-  const rawEntry = getFoodEntry(matchedKey, foods);
-  if (!rawEntry) return null;
-  const food = resolveStatefulFood(rawEntry, lower);
-  const stateTag = food.cookState ? ' (' + food.cookState + ')' : '';
-  const fuzzyTag = confidence < 1 ? ' (assumed)' : '';
-
-  // Only look for a quantity NEAR the matched food, not anywhere in the whole
-  // segment. Without this, a segment containing two foods and two numbers
-  // (e.g. delimiter-splitting missed a connector word) can pair the wrong
-  // number with the wrong food — exactly what happened with "250g ribeye
-  // steak cooked in 5g butter" logging as 250g of butter.
-  const approxIdx = lower.indexOf(matchedPhrase.split(' ')[0]);
-  const winStart = approxIdx < 0 ? 0 : Math.max(0, approxIdx - 25);
-  const winEnd = approxIdx < 0 ? lower.length : Math.min(lower.length, approxIdx + matchedPhrase.length + 15);
-  const win = lower.slice(winStart, winEnd);
-
-  // An explicit weight or liquid volume always wins, regardless of the
-  // food's default type. mL is treated as equivalent to grams (accurate
-  // enough for milk, kefir, juice, shakes — anything close to water density).
-  const kgMatch = win.match(/(\d+(?:\.\d+)?)\s*kg\b/);
-  const litreMatch = win.match(/(\d+(?:\.\d+)?)\s*(?:l|litres?|liters?)\b/);
-  const mlMatch = win.match(/(\d+(?:\.\d+)?)\s*(?:ml|millilit(?:re|er)s?)\b/);
-  const gMatch = win.match(/(\d+(?:\.\d+)?)\s*(?:g|grams?)\b/);
-  if (kgMatch || litreMatch || mlMatch || gMatch) {
-    let amount: number, unit: string;
-    if (kgMatch) { amount = parseFloat(kgMatch[1]) * 1000; unit = 'g'; }
-    else if (litreMatch) { amount = parseFloat(litreMatch[1]) * 1000; unit = 'ml'; }
-    else if (mlMatch) { amount = parseFloat(mlMatch[1]); unit = 'ml'; }
-    else { amount = parseFloat(gMatch![1]); unit = 'g'; }
-    const per100 = getPer100gMacros(food);
-    const factor = amount / 100;
-    return { label: Math.round(amount) + unit + ' ' + matchedKey + stateTag + fuzzyTag, matchedFood: matchedKey, amount: Math.round(amount), unit, estimated: false, confidence, cal: Math.round(per100.cal * factor), prot: Math.round(per100.prot * factor * 10) / 10, carb: Math.round(per100.carb * factor * 10) / 10, fat: Math.round(per100.fat * factor * 10) / 10 };
-  }
-
-  const numMatch = win.match(/(\d+(?:\.\d+)?)/);
-  const numQty = numMatch ? parseFloat(numMatch[1]) : null; // digit-based only — safe to use as a weight
-  const qty = numQty !== null ? numQty : wordToQty(win); // digit OR word — safe to use as a count
-
-  if (food.type === 'dish') {
-    const count = qty || 1;
-    const wasSpecified = numQty !== null || wordToQty(win) !== null;
-    const label = (count !== 1 ? count + 'x ' : '') + matchedKey + fuzzyTag;
-    return { label, matchedFood: matchedKey, amount: count, unit: 'serving', estimated: !wasSpecified, confidence, cal: Math.round(food.cal * count), prot: Math.round(food.prot * count * 10) / 10, carb: Math.round(food.carb * count * 10) / 10, fat: Math.round(food.fat * count * 10) / 10 };
-  }
-  if (food.type === 'perUnit') {
-    const count = qty || 1;
-    const wasSpecified = numQty !== null || wordToQty(win) !== null;
-    const plural = count > 1 ? (/(?:[oxsz]|ch|sh)$/.test(food.label || '') ? 'es' : 's') : '';
-    return { label: count + ' ' + food.label + plural + fuzzyTag, matchedFood: matchedKey, amount: count, unit: food.label || matchedKey, estimated: !wasSpecified, confidence, cal: Math.round(food.cal * count), prot: Math.round(food.prot * count * 10) / 10, carb: Math.round(food.carb * count * 10) / 10, fat: Math.round(food.fat * count * 10) / 10 };
-  }
-  // per100g: "a"/"some"/"a few" describe a serving, NOT a gram count — only an
-  // actual digit (with no unit attached, e.g. "200 chicken") should be read as grams.
-  // Standard culinary conversions used whenever a food doesn't have its own
-  // precise override — this is what makes "a tablespoon of X" work for ANY
-  // food, including ones taught later, not just the handful with tbspGrams set.
-  let grams: number, wasEstimated = false;
-  const fraction = wordToFraction(win);
-  const defaultGrams = food.defaultGrams || 100;
-  if (/\bcups?\b/.test(win)) grams = (qty || 1) * (food.cupGrams || 240);
-  else if (/\bslices?\b/.test(win)) grams = (qty || 1) * (food.sliceGrams || 30);
-  else if (/\btbsp\b|\btablespoons?\b/.test(win)) grams = (qty || 1) * (food.tbspGrams || 15);
-  else if (/\btsp\b|\bteaspoons?\b/.test(win)) grams = (qty || 1) * (food.tspGrams || 5);
-  else if (/\bhandfuls?\b/.test(win)) grams = (qty || 1) * 30;
-  else if (/\bpieces?\b/.test(win)) grams = (qty || 1) * (defaultGrams / 2 || 60);
-  else if (/\bportions?\b|\bservings?\b/.test(win)) grams = (qty || 1) * defaultGrams;
-  else if (fraction !== null) { grams = defaultGrams * fraction; wasEstimated = true; }
-  else if (numQty) grams = numQty;
-  else { grams = defaultGrams; wasEstimated = true; }
-  const factor = grams / 100;
-  return { label: Math.round(grams) + 'g ' + matchedKey + stateTag + fuzzyTag, matchedFood: matchedKey, amount: Math.round(grams), unit: 'g', estimated: wasEstimated, confidence, cal: Math.round(food.cal * factor), prot: Math.round(food.prot * factor * 10) / 10, carb: Math.round(food.carb * factor * 10) / 10, fat: Math.round(food.fat * factor * 10) / 10 };
-}
-
-// Lets someone give their own real per-100g figure from a food label instead
-// of relying on the built-in database — e.g. "minced beef that was 147cal
-// per 100g and I ate about 400g". Checked on the whole message (not per
-// comma-segment) since the calorie clause and the weight clause are usually
-// joined by "and" rather than listing separate foods.
-export function tryParseCustomPer100g(text: string, foods: VittoFoods) {
-  const lower = text.toLowerCase();
-  const per100Match = lower.match(/(\d+(?:\.\d+)?)\s*(?:kcal|cal|calories)?\s*(?:per|\/)\s*100\s*(?:g|grams?|ml|millilit(?:re|er)s?)\b/);
-  if (!per100Match) return null;
-  const statedCal = parseFloat(per100Match[1]);
-  const per100Start = per100Match.index!, per100End = per100Start + per100Match[0].length;
-  const isMl = /ml|millilit/.test(per100Match[0]);
-
-  // find the actual amount consumed — the first g/ml mention that ISN'T
-  // the "100g"/"100ml" inside the per-100 phrase itself
-  const amountMatches = [...lower.matchAll(/(\d+(?:\.\d+)?)\s*(?:g|grams?|ml|millilit(?:re|er)s?)\b/g)];
-  let weightGrams: number | null = null;
-  for (const gm of amountMatches) {
-    const gmStart = gm.index!, gmEnd = gmStart + gm[0].length;
-    if (gmStart >= per100Start && gmEnd <= per100End) continue;
-    weightGrams = parseFloat(gm[1]);
-    break;
-  }
-  if (weightGrams === null) return null;
-
-  let matchedKey: string | null = null;
-  for (const phrase of getFoodLookupPhrases(foods)) {
-    if (lower.includes(phrase.toLowerCase())) { matchedKey = resolveFoodKey(phrase, foods) || null; break; }
-  }
-
-  const factor = weightGrams / 100;
-  const totalCal = Math.round(statedCal * factor);
-  let prot: number, carb: number, fat: number;
-  if (matchedKey) {
-    const entry = getFoodEntry(matchedKey, foods)!;
-    const per100 = getPer100gMacros(resolveStatefulFood(entry, lower));
-    const scale = per100.cal ? statedCal / per100.cal : 1;
-    prot = Math.round(per100.prot * scale * factor * 10) / 10;
-    carb = Math.round(per100.carb * scale * factor * 10) / 10;
-    fat = Math.round(per100.fat * scale * factor * 10) / 10;
-  } else {
-    prot = Math.round(((totalCal * 0.15) / 4) * 10) / 10;
-    carb = Math.round(((totalCal * 0.5) / 4) * 10) / 10;
-    fat = Math.round(((totalCal * 0.35) / 9) * 10) / 10;
-  }
-  const unit = isMl ? 'ml' : 'g';
-  return { label: Math.round(weightGrams) + unit + ' ' + (matchedKey || 'food') + ' (at ' + statedCal + ' kcal/100' + unit + ')', cal: totalCal, prot, carb, fat, estimatedMacros: !matchedKey };
-}
-
-export function parseFoodText(text: string, foods: VittoFoods) {
-  // "chicken n potatoes" -> "chicken and potatoes" — \bn\b only matches a
-  // standalone "n", so this never touches words that merely contain an n.
-  const normalized = text.replace(/\bn\b/gi, 'and');
-  const parts = normalized.split(/,|\band\b|&|\+|\bwith\b|\bon\b|\bin\b/i).map((s) => s.trim()).filter(Boolean);
-  const matched: ParsedFoodPart[] = [], unmatched: string[] = [];
-  parts.forEach((p) => {
-    const r = parseFoodPart(p, foods);
-    if (r) matched.push(r); else if (p) unmatched.push(p);
-  });
-  return { matched, unmatched };
-}
 
 // ── Small talk / commands ───────────────────────────────────────────────
 
@@ -507,7 +201,7 @@ function logMealtimeSlot(slot: string, mealTemplates: MealTemplate[]): VittoResu
 function tryAnswerQuestion(lower: string, ctx: VittoContext): VittoResult | null {
   const t = getMacroTotals(ctx.todayMeals);
   const tg = ctx.targets;
-  if (/undo|remove last|delete last|oops|scratch that/.test(lower)) return undoLastMeal(ctx.todayMeals);
+  if (/\b(undo|oops|scratch that|(remove|delete) (the )?last( one| entry| meal)?)\b/.test(lower)) return undoLastMeal(ctx.todayMeals);
   if (/^new day\b|start (a )?new day|^reset (today|day)\b/.test(lower)) return clearTodayLog(ctx.todayMeals);
   if (/clear (everything|all|my log|today('s)? log)|remove all|delete everything/.test(lower)) return clearTodayLog(ctx.todayMeals);
   const removeMatch = lower.match(/^(?:remove|delete)\s+(?:the\s+|my\s+)?(.+)/);
@@ -562,7 +256,7 @@ function tryCorrectCookState(text: string, ctx: VittoContext): VittoResult | nul
   if (arr.length === 0) return null;
   const last = arr[arr.length - 1];
   if (!last.matchedFood) return null;
-  const food = getFoodEntry(last.matchedFood, ctx.foods);
+  const food = ctx.foods.db[last.matchedFood];
   if (!food || !('raw' in food && 'cooked' in food)) return null; // this food has no raw/cooked distinction to correct
   const grams = last.amount || 100;
   const per100 = newState === 'raw' ? food.raw : food.cooked;
@@ -582,7 +276,11 @@ function tryCorrectCookState(text: string, ctx: VittoContext): VittoResult | nul
 
 function tryEditLastEntry(text: string, ctx: VittoContext): VittoResult | null {
   const lower = text.toLowerCase().trim();
-  const triggerMatch = lower.match(/^(actually,?\s*(it was|i meant|i had)?|wait,?\s*(it was|i meant)?|correction,?|sorry,?\s*i meant|i meant to say)\s*/);
+  // "actually 2 apples" / "no, it was 2 bananas" / "I meant a latte" — replace the last entry with a different food/amount.
+  // Verbs that only make sense as a correction work alone; "i had/i ate" needs a leading "no/actually/oops".
+  const triggerMatch = lower.match(/^(?:(?:no|nope|actually|wait|oops|sorry|oh)[,.]?\s+)*(?:it was|that was|it'?s|its|i meant(?: to say)?|i mean|make (?:that|it)|change (?:that|it) to|it should be|should be|correction[:,]?)\s+/)
+    || lower.match(/^(?:actually|wait|correction|sorry)[,:]?\s+(?:i (?:had|ate)\s+)?/)
+    || lower.match(/^(?:no|nope|oops|sorry)[,.]?\s+(?:i (?:had|ate)\s+)/);
   if (!triggerMatch) return null;
   const stripped = text.slice(triggerMatch[0].length).trim();
   if (!stripped) return null;
@@ -597,6 +295,47 @@ function tryEditLastEntry(text: string, ctx: VittoContext): VittoResult | null {
   });
   const newTotal = matched.reduce((a, m) => a + m.cal, 0);
   return { reply: 'Got it — corrected "' + old.name + '" to ' + matched.map((m) => m.label).join(' and ') + ' (' + Math.round(newTotal) + ' kcal). Updated in today\'s log ✅', actions };
+}
+
+// "make that large", "actually 3", "it was 200g", "double that", "half of that" —
+// changes ONLY the amount/size of the last entry, keeping the same food. Runs
+// after tryEditLastEntry, which handles corrections that name a new food.
+function tryAdjustLast(text: string, ctx: VittoContext): VittoResult | null {
+  const arr = ctx.todayMeals;
+  if (arr.length === 0) return null;
+  const last = arr[arr.length - 1];
+  const lower = normalizeText(text).replace(/[.!?]+$/, '');
+
+  // pure multipliers work on any entry, including LLM-estimated ones
+  const mult = lower.match(/^(?:(?:no|actually|wait|oops|sorry)[, ]+)*(?:make (?:that|it|this) |it was |that was )?(double|twice|triple|half)(?: of)?(?: that| it| this)?$/);
+  if (mult) {
+    const f = mult[1] === 'half' ? 0.5 : mult[1] === 'triple' ? 3 : 2;
+    const updated: NewMealEntry = {
+      name: last.name + (f === 0.5 ? ' (half)' : ' (×' + f + ')'), cal: Math.round(last.cal * f), prot: Math.round(last.prot * f * 10) / 10,
+      carb: Math.round(last.carb * f * 10) / 10, fat: Math.round(last.fat * f * 10) / 10, originalText: text,
+      matchedFood: last.matchedFood ?? null, amount: last.amount != null ? Math.round(last.amount * f) : null, unit: last.unit ?? null, estimated: last.estimated,
+    };
+    return { reply: 'Done — ' + (f === 0.5 ? 'halved' : 'doubled'.replace('doubled', f === 2 ? 'doubled' : 'tripled')) + ': ' + updated.name + ' (' + updated.cal + ' kcal).', actions: [{ kind: 'remove_meal', id: last.id }, { kind: 'add_meal', entry: updated }] };
+  }
+
+  const m = lower.match(/^(?:(?:no|nope|actually|wait|oops|sorry|oh)[, ]+)*(?:make (?:that|it|this)|change (?:that|it|this)(?: to)?|it was|that was|that should be|it should be|should be|i meant|i mean|more like|it'?s|its)?\s*(?:a |an |the )?(.+)$/);
+  if (!m || !m[1]) return null;
+  const rest = m[1].trim();
+  const mods = parseModifiers(rest);
+  const hasAmount = mods.grams !== undefined || mods.count !== undefined || mods.fraction !== undefined || mods.size !== undefined || mods.cafe !== undefined || mods.unit !== undefined;
+  // must be ONLY an amount/size — any leftover word means it's something else
+  if (!hasAmount || mods.leftover.length > 0) return null;
+  // and the message must really be a correction, not a fresh log of a bare amount
+  const isCorrection = /^(?:no|nope|actually|wait|oops|sorry|oh|make|change|it was|that was|that should|it should|should be|i meant|i mean|more like|it'?s|its)\b/.test(lower) || mods.size !== undefined && lower.split(' ').length <= 2;
+  if (!isCorrection) return null;
+  if (!last.matchedFood || !ctx.foods.db[last.matchedFood]) return null;
+
+  const cook = /\((raw|cooked)\)/.exec(last.name)?.[1] || '';
+  const { matched } = parseFoodText(rest + ' ' + last.matchedFood + (cook ? ' ' + cook : ''), ctx.foods);
+  if (matched.length !== 1) return null;
+  const n = matched[0];
+  const entry: NewMealEntry = { name: n.label, cal: n.cal, prot: n.prot, carb: n.carb, fat: n.fat, originalText: text, matchedFood: n.matchedFood, amount: n.amount, unit: n.unit, estimated: n.estimated, confidence: n.confidence };
+  return { reply: 'Got it — changed "' + last.name + '" to ' + n.label + ' (' + n.cal + ' kcal, ' + n.prot + 'g P, ' + n.carb + 'g C, ' + n.fat + 'g F). Updated ✅', actions: [{ kind: 'remove_meal', id: last.id }, { kind: 'add_meal', entry }] };
 }
 
 function tryParseCalorieReply(text: string): number | null {
@@ -653,6 +392,9 @@ export function processVittoMessage(text: string, ctx: VittoContext): VittoResul
   const editReply = tryEditLastEntry(trimmed, ctx);
   if (editReply) return { reply: editReply.reply, actions: [...clearStalePending, ...editReply.actions] };
 
+  const adjustReply = tryAdjustLast(trimmed, ctx);
+  if (adjustReply) return { reply: adjustReply.reply, actions: [...clearStalePending, ...adjustReply.actions] };
+
   // Commands (undo/remove/clear/totals/etc.) always take priority — but
   // greetings/thanks/chat must NOT: a message can be both a greeting and a
   // food log ("hey I had 3 eggs"), and the food must still get logged.
@@ -679,7 +421,19 @@ export function processVittoMessage(text: string, ctx: VittoContext): VittoResul
     return { reply: "Good question — I don't have a solid answer for that right now. Try asking again in a moment, or bring it to your coach.", actions: clearStalePending, unhandled: true };
   }
 
-  const { matched, unmatched } = parseFoodText(trimmed, ctx.foods);
+  // Statements about food that ISN'T being logged: future plans, hypotheticals
+  // and "I didn't eat" — logging a food from those would be plain wrong.
+  const futureOrHypothetical = /\b(going to|gonna|want to|wanna|planning (to|on)|about to|thinking (of|about)|craving|should i|can i|could i|may i|what if|shall i|would it be (ok|okay|fine)|is it (ok|okay|fine) (to|if)|tomorrow|next (week|time)|later (today|tonight)|for tomorrow|i('| wi)ll (eat|have|get|make|cook)|i might|maybe i)\b/i.test(trimmed) && !/\b(i )?(just|already) (ate|had)\b/i.test(trimmed);
+  const negativeIntake = /\b(didn'?t|did not|haven'?t|have not|hasn'?t|skipped|skipping|missed|forgot to (eat|have|log)|not (eaten|had) (anything|much))\b.*\b(eat|ate|eaten|have|had|lunch|dinner|breakfast|meal|food|anything)\b/i.test(trimmed) || /^(nothing|no food|haven'?t eaten)\b/i.test(trimmed);
+  if (negativeIntake) {
+    return { reply: pick(["No worries — nothing logged for that. Just tell me what you do end up having 👍", "Got it, I won't log anything for that. Let me know when you eat and I'll track it!", "All good — nothing added. Try to fit a proper meal in when you can 💪"]), actions: clearStalePending };
+  }
+  if (futureOrHypothetical) {
+    return { reply: "That sounds like a plan rather than something you've eaten yet, so I haven't logged it. Tell me once you've had it and I'll add it — or ask me anything about it!", actions: clearStalePending, unhandled: true };
+  }
+
+  const parsed = parseFoodText(trimmed, ctx.foods);
+  const { matched, unmatched } = parsed;
   if (matched.length === 0) {
     // No food found — NOW it's safe to treat this as pure conversation.
     const smallTalkReply = trySmallTalk(trimmed.toLowerCase(), ctx.clientFirstName);
@@ -688,22 +442,39 @@ export function processVittoMessage(text: string, ctx: VittoContext): VittoResul
     // estimate if this actually looks like a food/drink mention.
     const looksFoodLike = /\d/.test(trimmed) || /\b(ate|eat|eating|had|have|drank|drink|breakfast|lunch|dinner|snack|meal|food|calorie|protein|carbs?|fat|grams?|ml|kcal)\b/i.test(trimmed);
     if (looksFoodLike) {
-      return { reply: 'I don\'t recognise "' + trimmed + '" yet — no worries though, roughly how many calories was that? Just give me a number (like "450" or "about 500 cal") and I\'ll log it for you.', actions: [{ kind: 'set_pending', pending: { type: 'unknown_food', text: trimmed } }] };
+      return {
+        reply: 'I don\'t recognise "' + trimmed + '" yet — no worries though, roughly how many calories was that? Just give me a number (like "450" or "about 500 cal") and I\'ll log it for you.',
+        actions: [{ kind: 'set_pending', pending: { type: 'unknown_food', text: trimmed } }],
+        needsLLM: true, llmTexts: [trimmed], confident: [],
+      };
     }
     return { reply: "I'm not quite sure what you mean by that 🤔 You can tell me what you ate or drank, ask how many calories/protein/carbs/fat you have left, say \"undo\" to remove your last entry, or just say hi anytime!", actions: clearStalePending, unhandled: true };
   }
 
+  const composed = composeLogReply(ctx, trimmed, matched, unmatched);
+  return {
+    reply: composed.reply,
+    actions: [...clearStalePending, ...composed.actions],
+    needsLLM: parsed.needsLLM,
+    llmTexts: parsed.llmTexts,
+    confident: parsed.confident,
+  };
+}
+
+// Turns a list of resolved foods into the log actions + the friendly reply.
+// Shared by the local path and by finishWithLLM so both sound identical.
+export function composeLogReply(ctx: VittoContext, text: string, items: ParsedFoodPart[], unmatched: string[] = []): { reply: string; actions: VittoAction[] } {
   const isFirstLogToday = ctx.todayMeals.length === 0;
-  const totals = matched.reduce((a, m) => ({ cal: a.cal + m.cal, prot: a.prot + m.prot, carb: a.carb + m.carb, fat: a.fat + m.fat }), { cal: 0, prot: 0, carb: 0, fat: 0 });
+  const totals = items.reduce((a, m) => ({ cal: a.cal + m.cal, prot: a.prot + m.prot, carb: a.carb + m.carb, fat: a.fat + m.fat }), { cal: 0, prot: 0, carb: 0, fat: 0 });
   const roundedProt = Math.round(totals.prot), roundedCarb = Math.round(totals.carb), roundedFat = Math.round(totals.fat);
 
   // Each food gets its OWN log entry (not merged into one row) — this is
   // what makes "remove the banana" remove only the banana even when it was
   // logged in the same message as eggs, rather than deleting both.
-  const addActions: VittoAction[] = matched.map((m) => ({ kind: 'add_meal', entry: { name: m.label, cal: m.cal, prot: m.prot, carb: m.carb, fat: m.fat, originalText: trimmed, matchedFood: m.matchedFood, amount: m.amount, unit: m.unit, estimated: m.estimated, confidence: m.confidence } }));
+  const addActions: VittoAction[] = items.map((m) => ({ kind: 'add_meal', entry: { name: m.label, cal: m.cal, prot: m.prot, carb: m.carb, fat: m.fat, originalText: text, matchedFood: m.matchedFood || null, amount: m.amount, unit: m.unit, estimated: m.estimated, confidence: m.confidence } }));
 
   let opener: string;
-  const openedWithGreeting = /^(hi|hello|hey|hiya|yo|sup|howdy)\b/i.test(trimmed) || /^(good morning|good afternoon|good evening|morning|evening|afternoon)\b/i.test(trimmed);
+  const openedWithGreeting = /^(hi|hello|hey|hiya|yo|sup|howdy)\b/i.test(text) || /^(good morning|good afternoon|good evening|morning|evening|afternoon)\b/i.test(text);
   if (openedWithGreeting) {
     const fdn = getDisplayName(ctx.clientFirstName); const fname = fdn ? ' ' + fdn : '';
     opener = pick(['Hey' + fname + '! Got it —', 'Hi' + fname + '! Logged that —', 'Hey there! Noted —']);
@@ -713,13 +484,15 @@ export function processVittoMessage(text: string, ctx: VittoContext): VittoResul
   } else {
     opener = pick(['Got it!', 'Nice one, logged that:', 'Perfect, added:', 'On it!', 'All set —', 'Boom, logged:', 'Nice — added:', "Sweet, that's in:", 'Easy, done:', 'Solid choice —', 'Noted!', "Great, that's in the log:", 'Excellent choice! Logged:', 'Love that pick — logged:', 'Nutritious and delicious — logged:', "That'll do nicely — logged:", 'Nice pick! Locked in:']);
   }
-  const foodList = matched.map((m) => m.label).join(' and ');
+  const foodList = items.map((m) => m.label).join(' and ');
   let reply = opener + ' ' + foodList + '. Around ' + Math.round(totals.cal) + ' kcal, ' + roundedProt + 'g protein, ' + roundedCarb + 'g carbs and ' + roundedFat + 'g fat.';
-  const estimatedOnes = matched.filter((m) => m.estimated && m.amount && m.unit === 'g');
-  if (estimatedOnes.length === 1) {
-    reply += ' (I logged "' + estimatedOnes[0].matchedFood + '" as ' + estimatedOnes[0].amount + 'g since no amount was given — let me know the real amount if you have it.)';
-  } else if (estimatedOnes.length > 1) {
-    reply += ' (No exact amounts given for ' + estimatedOnes.map((m) => m.matchedFood).join(', ') + ', so I used typical serving sizes — correct me if you know the real amounts.)';
+
+  // Be upfront about every assumption, and make correcting it one short message.
+  const notes = [...new Set(items.map((m) => m.note).filter((n): n is string => !!n))];
+  if (notes.length > 0) {
+    reply += ' (' + notes.join('; ') + ' — if that\'s off, just tell me the real amount (like "actually 2" or "it was large") and I\'ll fix it.)';
+  } else if (items.some((m) => m.estimated && m.matchedFood === '')) {
+    reply += ' (That one is my best estimate, so treat it as approximate.)';
   }
 
   let pendingAction: VittoAction[] = [];
@@ -728,6 +501,16 @@ export function processVittoMessage(text: string, ctx: VittoContext): VittoResul
     reply += ' I didn\'t recognise "' + pendingText + '" though — roughly how many calories was that part? Tell me a number and I\'ll add it too.';
     pendingAction = [{ kind: 'set_pending', pending: { type: 'unknown_food', text: pendingText } }];
   }
+  return { reply, actions: [...addActions, ...pendingAction] };
+}
 
-  return { reply, actions: [...clearStalePending, ...addActions, ...pendingAction] };
+// Merges the local parser's confident items with what the LLM worked out for
+// the parts it was unsure about, and rebuilds the reply/actions.
+export function finishWithLLM(base: VittoResult, llmItems: LLMFoodItem[], ctx: VittoContext, text: string): VittoResult | null {
+  const llmParts = llmItems.map((it) => llmItemToPart(it, ctx.foods)).filter((p): p is ParsedFoodPart => p !== null);
+  if (llmParts.length === 0) return null;
+  const items = [...(base.confident ?? []), ...llmParts];
+  const clearStale: VittoAction[] = ctx.pending ? [{ kind: 'clear_pending' }] : [];
+  const composed = composeLogReply(ctx, text, items);
+  return { reply: composed.reply, actions: [...clearStale, ...composed.actions] };
 }

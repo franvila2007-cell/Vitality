@@ -261,3 +261,68 @@ export async function llmAnswerQuestion(
     return null;
   }
 }
+
+// ── Structured food-message understanding (the "advanced foods" path) ────
+//
+// Reached when the local engine (foodParser.ts) isn't fully confident about
+// part of a message: compound dishes, cafe/restaurant orders, brands,
+// unfamiliar words. The model reads the message like a person would — sizes,
+// counts, fractions, units, slang, Maltese food names — and returns one
+// structured item per food. Items it maps onto a KNOWN FOODS entry are
+// re-computed from the database numbers (grams -> macros) by llmItemToPart(),
+// so trusted data stays trusted; only genuinely unknown foods use the
+// model's own estimate (and are flagged as estimates).
+import type { LLMFoodItem } from './foodParser';
+
+const PARSE_SYSTEM_PROMPT = `You are the food-understanding engine inside a fitness coaching app used mainly in Malta/UK/US. Convert the client's message into the foods and drinks they say they ALREADY consumed.
+
+Rules:
+- One item per distinct food or drink. Understand sizes (mini/small/medium/large/xl), counts, fractions ("half a", "a couple of", "a dozen"), units (slice, bowl, cup, can, pint, tbsp, handful...), typos, slang, brands, cafe/restaurant orders and Maltese foods (pastizzi, ftira, hobz biz-zejt, kinnie, cisk...).
+- "grams" = TOTAL grams (or ml for drinks) consumed for that item. If no amount was given, assume ONE typical serving and say so in "note". Use realistic portions (a slice of pizza ~107g, a medium banana ~118g, a tall latte ~350ml).
+- "db": an EXACT name from the KNOWN FOODS list, but ONLY if the item genuinely IS that food (same food, not merely an ingredient of it). Otherwise null. Never invent names.
+- Always give cal, protein_g, carbs_g, fat_g for the WHOLE portion in "grams" — honest best estimates, used when db is null.
+- Compound dishes (e.g. "chicken shawarma wrap", "iced vanilla oat latte") are ONE item: db null unless a known dish is truly the same thing.
+- "note": a short plain-English assumption ONLY when it matters ("assumed a 350ml cup"); otherwise null.
+- "confidence": 0-1.
+- Ignore words that aren't food. If nothing edible was consumed, return {"items": []}.
+
+Respond with ONLY this JSON, no other text:
+{"items":[{"label":"human readable name incl. size/amount","db":string|null,"grams":number,"cal":number,"protein_g":number,"carbs_g":number,"fat_g":number,"confidence":number,"note":string|null}]}`;
+
+export async function llmParseFoodMessage(text: string, foodNames: string[], apiKey: string): Promise<LLMFoodItem[] | null> {
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const msg = await anthropic.messages.create(
+      {
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1200,
+        temperature: 0,
+        system: PARSE_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: `KNOWN FOODS: ${foodNames.join(', ')}\n\nClient message: "${text.replace(/"/g, "'")}"` }],
+      },
+      { timeout: 9000 }
+    );
+    const block = msg.content[0];
+    if (!block || block.type !== 'text') return null;
+    const parsed = parseJsonLoose(block.text) as { items?: unknown };
+    if (!Array.isArray(parsed.items)) return null;
+    const items: LLMFoodItem[] = [];
+    for (const raw of parsed.items.slice(0, 12)) {
+      if (!raw || typeof raw !== 'object') continue;
+      const r = raw as Record<string, unknown>;
+      if (typeof r.label !== 'string' || !r.label.trim()) continue;
+      items.push({
+        label: r.label.trim().slice(0, 120),
+        db: typeof r.db === 'string' && r.db.trim() ? r.db.trim() : null,
+        grams: Number.isFinite(Number(r.grams)) ? Number(r.grams) : null,
+        cal: Number(r.cal), protein_g: Number(r.protein_g), carbs_g: Number(r.carbs_g), fat_g: Number(r.fat_g),
+        confidence: Number.isFinite(Number(r.confidence)) ? Number(r.confidence) : 0.8,
+        note: typeof r.note === 'string' && r.note.trim() ? r.note.trim().slice(0, 140) : null,
+      });
+    }
+    return items;
+  } catch (err) {
+    console.error('llmParseFoodMessage failed', err);
+    return null; // graceful degradation — the local best-effort result stands
+  }
+}

@@ -5,11 +5,20 @@
 
 export type StatefulMacros = { cal: number; prot: number; carb: number; fat: number };
 
+// Optional per-food measurement overrides (grams, or ml for liquids). Anything
+// not set falls back to sensible culinary defaults in foodParser.ts.
+export type UnitFields = {
+  liquid?: boolean;
+  pieceGrams?: number; sliceGrams?: number; cupGrams?: number; tbspGrams?: number; tspGrams?: number;
+  glassGrams?: number; canGrams?: number; bottleGrams?: number; scoopGrams?: number; handfulGrams?: number;
+  barGrams?: number; packGrams?: number; shotGrams?: number;
+};
+
 export type FoodEntry =
-  | { type: 'per100g'; raw: StatefulMacros; cooked: StatefulMacros; defaultGrams: number; cupGrams?: number; sliceGrams?: number; tbspGrams?: number; tspGrams?: number }
-  | ({ type: 'per100g' } & StatefulMacros & { defaultGrams: number; cupGrams?: number; sliceGrams?: number; tbspGrams?: number; tspGrams?: number })
-  | ({ type: 'perUnit' } & StatefulMacros & { label: string; avgGrams: number })
-  | ({ type: 'dish' } & StatefulMacros & { avgGrams: number });
+  | ({ type: 'per100g'; raw: StatefulMacros; cooked: StatefulMacros; defaultGrams: number } & UnitFields)
+  | ({ type: 'per100g' } & StatefulMacros & { defaultGrams: number } & UnitFields)
+  | ({ type: 'perUnit' } & StatefulMacros & { label: string; avgGrams: number } & UnitFields)
+  | ({ type: 'dish' } & StatefulMacros & { avgGrams: number } & UnitFields);
 
 export const FOOD_DB: Record<string, FoodEntry> = {
   // Meat & fish: cooking drives off ~25% water weight, which concentrates
