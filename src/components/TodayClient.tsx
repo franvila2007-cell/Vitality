@@ -9,6 +9,7 @@ import GoldStreakMeter from '@/components/GoldStreakMeter';
 import { computeDayRank, RANK_META, type Rank } from '@/lib/ranking';
 import { computeMicroTotals, MICRONUTRIENT_KEYS, type MicronutrientKey } from '@/lib/micronutrients';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
+import VittoRecommends from '@/components/VittoRecommends';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import type { Database } from '@/lib/supabase/database.types';
 
@@ -656,6 +657,13 @@ export default function TodayClient() {
           </div>
         </div>
       </div>
+
+      {/* Vitto's next-meal suggestion, from what's left of today's targets */}
+      <VittoRecommends
+        remaining={{ cal: targets.calories - totals.cal, prot: targets.protein_g - totals.prot, carb: targets.carbs_g - totals.carb, fat: targets.fat_g - totals.fat }}
+        hasLogged={meals.length > 0}
+        date={today}
+      />
 
       {/* Micronutrients */}
       <details className="bg-surface border border-border rounded-2xl p-4 group">

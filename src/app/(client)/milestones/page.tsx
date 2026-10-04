@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { getProjections, type GoalType } from '@/lib/progress';
+import WorkoutProgress from '@/components/WorkoutProgress';
 
 // Fractions of the program at which a milestone lands — same shape as the
 // original fixed 0/14/21/30/45/60-out-of-60 schedule, but expressed as
@@ -27,7 +28,12 @@ export default async function MilestonesPage() {
   const { data: cp } = await supabase.from('client_profiles').select('*').eq('user_id', user.id).maybeSingle();
 
   if (!cp) {
-    return <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-neutral-400 page-fade-in">Your coach hasn&rsquo;t set up your program yet.</div>;
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4 page-fade-in">
+        <div className="bg-surface border border-border rounded-2xl p-4 text-sm text-neutral-400">Your coach hasn&rsquo;t set up your program yet.</div>
+        <WorkoutProgress />
+      </div>
+    );
   }
 
   const programDays = cp.program_length_days || 60;
@@ -62,7 +68,7 @@ export default async function MilestonesPage() {
   });
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-5 page-fade-in">
+    <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4 page-fade-in">
       <div className="bg-surface border border-border rounded-2xl p-4">
         <p className="text-3xs uppercase tracking-wide text-neutral-400 mb-1">Vitality Protocol</p>
         <p className="text-sm font-medium mb-1">Day {dayNum} of {programDays}</p>
@@ -81,6 +87,8 @@ export default async function MilestonesPage() {
           })}
         </div>
       </div>
+
+      <WorkoutProgress />
     </div>
   );
 }

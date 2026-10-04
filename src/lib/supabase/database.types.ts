@@ -112,6 +112,21 @@ export type Database = {
         { id?: string; user_id: string; name: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; default_grams?: number; ingredients_text?: string | null },
         { id?: string; user_id?: string; name?: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; default_grams?: number; ingredients_text?: string | null }
       >;
+      workouts: Table<
+        { id: string; user_id: string; name: string; sort_order: number; created_at: string },
+        { id?: string; user_id: string; name: string; sort_order?: number; created_at?: string },
+        { id?: string; user_id?: string; name?: string; sort_order?: number; created_at?: string }
+      >;
+      workout_exercises: Table<
+        { id: string; user_id: string; workout_id: string; name: string; sort_order: number; created_at: string },
+        { id?: string; user_id: string; workout_id: string; name: string; sort_order?: number; created_at?: string },
+        { id?: string; user_id?: string; workout_id?: string; name?: string; sort_order?: number; created_at?: string }
+      >;
+      workout_sets: Table<
+        { id: string; user_id: string; exercise_id: string; date: string; set_number: number; weight_kg: number; reps: number; created_at: string },
+        { id?: string; user_id: string; exercise_id: string; date: string; set_number: number; weight_kg: number; reps: number; created_at?: string },
+        { id?: string; user_id?: string; exercise_id?: string; date?: string; set_number?: number; weight_kg?: number; reps?: number; created_at?: string }
+      >;
       foods_global: Table<
         { name: string; type: 'per100g' | 'perUnit' | 'dish'; data: Json },
         { name: string; type: 'per100g' | 'perUnit' | 'dish'; data: Json },
