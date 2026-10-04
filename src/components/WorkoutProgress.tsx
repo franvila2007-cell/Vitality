@@ -16,7 +16,10 @@ type Exercise = Database['public']['Tables']['workout_exercises']['Row'];
 const PAGE = 1000; // PostgREST returns at most 1000 rows per request
 let tempSetCounter = 0; // ids for optimistic sets, until the insert returns the real row
 
-export default function WorkoutProgress() {
+// `userId` + `readOnly` are for the coach's preview of a client's app: it reads
+// that client's rows (the coach has read access) and hides every control that
+// would change them.
+export default function WorkoutProgress({ userId: viewUserId, readOnly = false }: { userId?: string; readOnly?: boolean } = {}) {
   const [supabase] = useState(() => createClient());
   const [today] = useState(() => localDateStr());
   const [userId, setUserId] = useState<string | null>(null);
@@ -33,9 +36,10 @@ export default function WorkoutProgress() {
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    setUserId(user.id);
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (!authUser) return;
+    const user = { id: viewUserId ?? authUser.id };
+    setUserId(authUser.id);
     const [wRes, eRes] = await Promise.all([
       supabase.from('workouts').select('*').eq('user_id', user.id).order('sort_order').order('created_at'),
       supabase.from('workout_exercises').select('*').eq('user_id', user.id).order('sort_order').order('created_at'),
@@ -57,7 +61,7 @@ export default function WorkoutProgress() {
     setSets(all);
     setSelectedId((cur) => cur ?? wRes.data?.[0]?.id ?? null);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, viewUserId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -179,7 +183,7 @@ export default function WorkoutProgress() {
       <div className="bg-surface border border-border rounded-2xl p-4">
         <p className="text-3xs uppercase tracking-wide text-neutral-400 mb-1">Strength</p>
         <p className="text-sm font-medium mb-1">Workout Progress</p>
-        <p className="text-xs text-neutral-400 mb-4">Log your sets and see, at a glance, whether you&rsquo;re getting stronger.</p>
+        <p className="text-xs text-neutral-400 mb-4">{readOnly ? 'Their lifting progress — read-only.' : <>Log your sets and see, at a glance, whether you&rsquo;re getting stronger.</>}</p>
 
         <p className="text-3xs uppercase tracking-wide text-neutral-400 mb-2">This month</p>
         <div className="grid grid-cols-3 gap-2 mb-3">
@@ -190,7 +194,7 @@ export default function WorkoutProgress() {
         <div className="flex items-center justify-between rounded-xl bg-neutral-50 px-3.5 py-2.5">
           <span className="text-xs text-neutral-500">Strength trend</span>
           {summary.strengthTrendPct == null ? (
-            <span className="text-xs text-neutral-400">Log an exercise twice to see it</span>
+            <span className="text-xs text-neutral-400">{readOnly ? 'Not enough data yet' : 'Log an exercise twice to see it'}</span>
           ) : (
             <TrendValue pct={summary.strengthTrendPct} suffix=" this month" />
           )}
@@ -199,7 +203,9 @@ export default function WorkoutProgress() {
 
       {/* Choose workout */}
       <div className="bg-surface border border-border rounded-2xl p-4 min-w-0">
-        {workouts.length === 0 && !newWorkoutOpen ? (
+        {workouts.length === 0 && readOnly ? (
+          <p className="text-sm text-neutral-400 text-center py-3">No workouts set up yet.</p>
+        ) : workouts.length === 0 && !newWorkoutOpen ? (
           <div>
             <p className="text-sm font-medium mb-1">Start with a workout</p>
             <p className="text-xs text-neutral-400 mb-3">Pick one to begin, or name your own.</p>
@@ -219,17 +225,17 @@ export default function WorkoutProgress() {
                   {w.name}
                 </button>
               ))}
-              <button
+              {!readOnly && <button
                 onClick={() => setNewWorkoutOpen((o) => !o)}
                 className={`flex-shrink-0 rounded-full border border-dashed text-xs font-medium px-3.5 py-1.5 whitespace-nowrap transition-transform active:scale-95 ${
                   newWorkoutOpen ? 'border-brand text-brand-dark bg-brand-light' : 'border-neutral-300 text-neutral-500'
                 }`}
               >
                 + New workout
-              </button>
+              </button>}
             </div>
 
-            {newWorkoutOpen && (
+            {newWorkoutOpen && !readOnly && (
               <div className="mt-2 border-t border-border pt-3">
                 <NewWorkoutPicker presets={unusedPresets} custom={customWorkout} setCustom={setCustomWorkout} onCreate={createWorkout} busy={busy} />
               </div>
@@ -238,12 +244,13 @@ export default function WorkoutProgress() {
             {selected && !newWorkoutOpen && (
               <div className="mt-2 flex flex-col gap-3">
                 {selectedExercises.length === 0 && (
-                  <p className="text-sm text-neutral-400 text-center py-3">Add your first exercise to {selected.name}.</p>
+                  <p className="text-sm text-neutral-400 text-center py-3">{readOnly ? 'No exercises in this workout yet.' : <>Add your first exercise to {selected.name}.</>}</p>
                 )}
                 {selectedExercises.map((ex) => (
                   <ExerciseCard
                     key={ex.id}
                     exercise={ex}
+                    readOnly={readOnly}
                     sessions={sessionsByExercise.get(ex.id) || []}
                     today={today}
                     onAddSet={(date, w, r) => addSet(ex.id, date, w, r)}
@@ -252,7 +259,7 @@ export default function WorkoutProgress() {
                   />
                 ))}
 
-                {addExerciseOpen ? (
+                {readOnly ? null : addExerciseOpen ? (
                   <div className="rounded-xl border border-border p-3">
                     <p className="text-xs font-medium text-neutral-500 mb-2">Add an exercise</p>
                     {suggestions.length > 0 && (
@@ -297,9 +304,9 @@ export default function WorkoutProgress() {
                   </button>
                 )}
 
-                <button onClick={() => deleteWorkout(selected.id)} className="self-center text-2xs text-neutral-300 hover:text-red-500 transition-colors">
+                {!readOnly && <button onClick={() => deleteWorkout(selected.id)} className="self-center text-2xs text-neutral-300 hover:text-red-500 transition-colors">
                   Delete this workout
-                </button>
+                </button>}
               </div>
             )}
           </>
@@ -369,8 +376,9 @@ function TrendValue({ pct, suffix = '' }: { pct: number; suffix?: string }) {
   );
 }
 
-function ExerciseCard({ exercise, sessions, today, onAddSet, onDeleteSet, onRemove }: {
+function ExerciseCard({ exercise, readOnly, sessions, today, onAddSet, onDeleteSet, onRemove }: {
   exercise: Exercise;
+  readOnly: boolean;
   sessions: Session[];
   today: string;
   onAddSet: (date: string, weightKg: number, reps: number) => void;
@@ -407,19 +415,23 @@ function ExerciseCard({ exercise, sessions, today, onAddSet, onDeleteSet, onRemo
           </div>
         </div>
       ) : (
-        <p className="text-xs text-neutral-400 mb-3">No sets yet — tap &ldquo;Log sets&rdquo; to record your first.</p>
+        <p className="text-xs text-neutral-400 mb-3">{readOnly ? 'Nothing logged yet.' : <>No sets yet — tap &ldquo;Log sets&rdquo; to record your first.</>}</p>
       )}
 
       {latest && <MiniChart sessions={sessions} bodyweight={bodyweight} />}
 
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className={`mt-3 w-full rounded-lg py-2 text-sm font-medium transition-transform active:scale-[0.98] ${open ? 'border border-border text-neutral-500' : 'bg-brand text-white'}`}
-      >
-        {open ? 'Close' : 'Log sets'}
-      </button>
+      {(!readOnly || latest) && (
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className={`mt-3 w-full rounded-lg py-2 text-sm font-medium transition-transform active:scale-[0.98] ${open || readOnly ? 'border border-border text-neutral-500' : 'bg-brand text-white'}`}
+        >
+          {open ? 'Close' : readOnly ? 'View sessions' : 'Log sets'}
+        </button>
+      )}
 
-      {open && (
+      {open && readOnly && <SessionList sessions={sessions} />}
+
+      {open && !readOnly && (
         <SetLogger
           sessions={sessions}
           today={today}
@@ -428,6 +440,26 @@ function ExerciseCard({ exercise, sessions, today, onAddSet, onDeleteSet, onRemo
           onRemove={onRemove}
         />
       )}
+    </div>
+  );
+}
+
+// Coach preview: the most recent sessions with every set, newest first.
+function SessionList({ sessions }: { sessions: Session[] }) {
+  return (
+    <div className="mt-3 border-t border-border pt-3 flex flex-col gap-2.5">
+      {sessions.slice(-8).reverse().map((s) => (
+        <div key={s.date}>
+          <p className="text-3xs uppercase text-neutral-400 mb-1">
+            {shortDate(s.date)}{s.isPR && <span className="ml-1.5 rounded-full bg-rank-gold text-neutral-900 font-semibold px-1.5 py-0.5">PR</span>}
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {s.sets.map((set, i) => (
+              <span key={set.id} className="rounded-full bg-neutral-100 text-neutral-700 text-xs px-2.5 py-1"><span className="text-neutral-400">{i + 1}</span> {fmtSet(set)}</span>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

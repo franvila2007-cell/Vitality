@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
@@ -6,6 +5,7 @@ import { addDays } from '@/lib/date';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import { computeMicroTotals } from '@/lib/micronutrients';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
+import VittoRecommends from '@/components/VittoRecommends';
 
 const DEFAULT_TARGETS = { calories: 2000, protein_g: 150, carbs_g: 200, fat_g: 65 };
 
@@ -96,13 +96,6 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
 
   return (
     <>
-      <div className="border-b border-border">
-        <div className="max-w-2xl mx-auto px-4 h-12 flex items-center justify-between">
-          <Link href={`/coach/clients/${id}`} className="text-sm text-neutral-400 hover:text-neutral-700">&larr; {fullName}</Link>
-          <span className="text-xs font-medium text-neutral-400 border border-border rounded-full px-2.5 py-1">👁 Read-only preview</span>
-        </div>
-      </div>
-
       <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4 page-fade-in">
         <div className="relative overflow-hidden rounded-2xl p-5 text-white bg-hero-gradient">
           <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl pointer-events-none" />
@@ -192,6 +185,12 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
             </div>
           </div>
         </div>
+
+        <VittoRecommends
+          remaining={{ cal: targets.calories - totals.cal, prot: targets.protein_g - totals.prot, carb: targets.carbs_g - totals.carb, fat: targets.fat_g - totals.fat }}
+          hasLogged={meals.length > 0}
+          date={today}
+        />
 
         <details className="bg-surface border border-border rounded-2xl p-4 group">
           <summary className="text-sm font-medium cursor-pointer list-none flex items-center justify-between [&::-webkit-details-marker]:hidden">
