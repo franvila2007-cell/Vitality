@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import VittoPlate from '@/components/VittoPlate';
+import Image from 'next/image';
 import type { Macros, MealOption, Recommendation } from '@/lib/vitto/mealRecommender';
 
 // Next-meal suggestion built from what's left of today's targets. The server
@@ -54,7 +54,8 @@ export default function VittoRecommends({ remaining, hasLogged, date }: { remain
       <div className="absolute -top-12 -right-10 w-36 h-36 rounded-full bg-brand/10 blur-2xl pointer-events-none" />
 
       <div className="relative flex items-center gap-2 mb-3">
-        <VittoPlate size={92} className="flex-shrink-0 -ml-1" />
+        {/* Detective Vitto, magnifying glass out: he's "inspecting" what's left of the day's targets. */}
+        <Image src="/vitto-detective.png" alt="Detective Vitto inspecting a piece of broccoli with a magnifying glass" width={398} height={420} className="flex-shrink-0 -ml-1 w-[100px] h-auto" />
         <div className="min-w-0">
           <p className="text-3xs uppercase tracking-wide text-brand-dark/60 mb-0.5">Next meal</p>
           <p className="text-base font-medium text-brand-dark leading-tight">Vitto Recommends</p>

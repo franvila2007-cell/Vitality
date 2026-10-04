@@ -488,7 +488,13 @@ export default function TodayClient() {
         </div>
       </div>
 
-      <GoldStreakMeter />
+      <GoldStreakMeter
+        meals={meals}
+        habitsTotal={habits.length}
+        habitsDone={doneHabitIds.size}
+        targets={targets}
+        rankOverride={rankOverride}
+      />
 
       {/* Vitto chat */}
       {/* min-w-0: without it, a flex-column child sizes to its widest

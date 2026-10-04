@@ -219,6 +219,32 @@ body {
   100% { opacity: 0; transform: translateY(-14px) scale(0.4); }
 }
 
+/* Gold-progress bar reacting to a logged meal / ticked habit: a quick bump
+   of the fill and a "+N%" chip that floats up off the end of the bar. */
+@keyframes meter-bump {
+  0% { transform: scaleY(1); filter: brightness(1); }
+  40% { transform: scaleY(1.5); filter: brightness(1.25); }
+  100% { transform: scaleY(1); filter: brightness(1); }
+}
+
+@keyframes chip-rise {
+  0% { opacity: 0; transform: translateY(4px) scale(0.8); }
+  25% { opacity: 1; transform: translateY(-2px) scale(1.05); }
+  100% { opacity: 0; transform: translateY(-14px) scale(1); }
+}
+
+/* The moment a day tips into gold: the card pops and a light sweep crosses the bar. */
+@keyframes gold-pop {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+
+@keyframes gold-sweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
 a, button, input {
   transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, opacity 0.15s ease, transform 0.1s ease;
 }
