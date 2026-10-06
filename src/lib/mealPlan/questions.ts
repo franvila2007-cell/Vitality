@@ -20,7 +20,6 @@ export const MEAL_PLAN_SECTIONS: Section[] = [
         id: 'goal', type: 'choice', label: 'What is your main goal?', required: true,
         options: ['Lose fat', 'Build muscle', 'Lose fat & build muscle', 'Better health & energy'],
       },
-      { id: 'ems_sessions', type: 'choice', label: 'How many EMS sessions do you do per week?', required: true, options: ['Just starting', '1', '2', '3+'] },
     ],
   },
   {
