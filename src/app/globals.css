@@ -6,6 +6,10 @@
   --brand: #0fa8a6;
   --brand-dark: #0b5f5e;
   --brand-light: #e1f8f6;
+  /* IronBodyFit red (sampled from their shield) — only used as an accent on
+     the co-branded /ironbodyfit-meal-plans form, never as a primary action color. */
+  --ibf-red: #e3173e;
+  --ibf-red-light: #fdeef1;
   --surface: #ffffff;
   --border: #e7e6e2;
 
@@ -52,6 +56,8 @@
   --color-brand: var(--brand);
   --color-brand-dark: var(--brand-dark);
   --color-brand-light: var(--brand-light);
+  --color-ibf-red: var(--ibf-red);
+  --color-ibf-red-light: var(--ibf-red-light);
   --color-surface: var(--surface);
   --color-border: var(--border);
   --font-sans: var(--font-geist-sans);
@@ -262,6 +268,12 @@ a, button, input {
 
 .assess-gradient {
   background-image: linear-gradient(120deg, #4cb8e6 0%, var(--brand) 100%);
+}
+
+/* Vitality × IronBodyFit: teal into IronBodyFit red, matching the "×" in
+   the collaboration artwork. Used for thin accents only. */
+.collab-gradient {
+  background-image: linear-gradient(90deg, var(--brand) 0%, #4cb8e6 45%, var(--ibf-red) 100%);
 }
 
 @media (prefers-reduced-motion: reduce) {

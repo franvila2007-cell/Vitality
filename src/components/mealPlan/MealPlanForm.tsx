@@ -1,30 +1,34 @@
 'use client';
 
 import Image from 'next/image';
-import { SECTIONS } from '@/lib/assessment/questions';
-import { useSectionedForm } from './useSectionedForm';
-import { QuestionList } from './fields';
+import { MEAL_PLAN_SECTIONS } from '@/lib/mealPlan/questions';
+import { useSectionedForm } from '@/components/assessment/useSectionedForm';
+import { QuestionList } from '@/components/assessment/fields';
 
-const TOTAL = SECTIONS.length;
+const TOTAL = MEAL_PLAN_SECTIONS.length;
 
-// Rendered client-only (see AssessmentFormLoader) so saved progress can be
+// IronBodyFit meal-plan request form, co-branded Vitality × IronBodyFit.
+// Vitality teal leads (buttons, selections, focus); IronBodyFit red is kept
+// to accents — the "×", the top stripe, section numbers — so the two brands
+// sit together without the page turning into a red/teal clash.
+// Rendered client-only (see MealPlanFormLoader) so saved progress can be
 // read straight from localStorage on first render.
-export default function AssessmentForm() {
+export default function MealPlanForm() {
   const {
     step, section, progress, answers, errors, confirmed, submitting, submitError, done, resumed, honeypot,
     setAnswer, setConfirmed, next, back, submit,
-  } = useSectionedForm({ sections: SECTIONS, storageKey: 'vitality-assessment-v1', endpoint: '/api/assessment' });
+  } = useSectionedForm({ sections: MEAL_PLAN_SECTIONS, storageKey: 'ibf-meal-plan-v1', endpoint: '/api/meal-plan' });
 
   return (
     <div className="relative min-h-screen w-full bg-[#fbfdfd] text-neutral-900">
-      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[420px] bg-[radial-gradient(ellipse_at_top,rgba(76,184,230,0.14),transparent_60%),radial-gradient(ellipse_at_top_right,rgba(15,168,166,0.12),transparent_55%)]" />
+      <div aria-hidden className="collab-gradient absolute inset-x-0 top-0 h-1" />
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[460px] bg-[radial-gradient(ellipse_at_top_left,rgba(15,168,166,0.15),transparent_60%),radial-gradient(ellipse_at_top_right,rgba(227,23,62,0.07),transparent_55%)]" />
 
-      <header className="relative mx-auto flex max-w-2xl items-center gap-3 px-5 pt-6 sm:pt-10">
-        <Image src="/vitality-logo.png" alt="" width={30} height={24} priority />
-        <div className="leading-none">
-          <div className="text-[15px] font-semibold tracking-[0.28em] text-neutral-900">VITALITY</div>
-          <div className="mt-1 text-[10px] font-medium tracking-[0.3em] text-brand">1-1 COACHING</div>
-        </div>
+      <header className="relative mx-auto flex max-w-2xl items-center justify-between px-5 pt-6 sm:pt-10">
+        <CollabMark />
+        <span className="rounded-full border border-neutral-200 bg-white/70 px-3 py-1 text-[11px] font-medium tracking-wide text-neutral-500">
+          Meal Plans
+        </span>
       </header>
 
       {step > 0 && !done && (
@@ -32,7 +36,7 @@ export default function AssessmentForm() {
           <div className="mx-auto max-w-2xl px-5 py-3">
             <div className="mb-2 flex items-baseline justify-between text-xs">
               <span className="font-medium text-neutral-700">
-                <span className="text-neutral-400">Section {step} of {TOTAL} · </span>{section?.title}
+                <span className="text-neutral-400">Step {step} of {TOTAL} · </span>{section?.title}
               </span>
               <span className="tabular-nums text-neutral-400">{progress}%</span>
             </div>
@@ -50,10 +54,13 @@ export default function AssessmentForm() {
           <Welcome onStart={next} resumed={resumed} />
         ) : section ? (
           <div key={section.id} className="assess-rise pt-8 sm:pt-10">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">Section {step}</p>
+            <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-ibf-red">
+              <span className="h-1.5 w-1.5 rounded-full bg-ibf-red" />
+              Step {step}
+            </p>
             <h2 className="mt-2 text-[28px] font-semibold tracking-tight sm:text-3xl">{section.title}</h2>
             {resumed && (
-              <p className="mt-3 text-sm text-neutral-500">Welcome back — we saved your progress.</p>
+              <p className="mt-3 text-sm text-neutral-500">Welcome back, we saved your progress.</p>
             )}
             {section.intro && (
               <p className="mt-5 rounded-2xl border border-brand/15 bg-brand-light/60 px-4 py-3.5 text-sm leading-relaxed text-brand-dark">
@@ -103,10 +110,10 @@ export default function AssessmentForm() {
                   {submitting ? (
                     <span className="flex items-center justify-center gap-2">
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-                      Submitting…
+                      Sending…
                     </span>
                   ) : (
-                    'Complete My Assessment'
+                    'Send my answers'
                   )}
                 </PrimaryButton>
               )}
@@ -114,6 +121,29 @@ export default function AssessmentForm() {
           </div>
         ) : null}
       </main>
+
+      <footer className="relative pb-8 text-center text-[11px] tracking-wide text-neutral-400">
+        IronBodyFit Meal Plans · Powered by <span className="font-semibold text-brand-dark">Vitality Malta</span>
+      </footer>
+    </div>
+  );
+}
+
+// Vitality logo × IronBodyFit shield, echoing the collaboration artwork.
+function CollabMark() {
+  return (
+    <div className="flex items-center gap-3" aria-label="Vitality × IronBodyFit">
+      <Image src="/vitality-logo.png" alt="Vitality" width={34} height={27} priority />
+      <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+        <defs>
+          <linearGradient id="collab-x" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="var(--brand)" />
+            <stop offset="100%" stopColor="var(--ibf-red)" />
+          </linearGradient>
+        </defs>
+        <path d="M2 2l10 10M12 2L2 12" stroke="url(#collab-x)" strokeWidth="2.6" strokeLinecap="round" />
+      </svg>
+      <Image src="/ironbodyfit-logo.png" alt="IronBodyFit" width={31} height={28} priority />
     </div>
   );
 }
@@ -131,33 +161,58 @@ function PrimaryButton({ children, onClick, disabled }: { children: React.ReactN
   );
 }
 
+const PILLARS = [
+  {
+    title: 'Lose fat',
+    icon: <path d="M12 3c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2.2 1.2-3.6 2.2-4.6.3 1.6 1.1 2.6 2.3 3.1C11 9 11 6 12 3z" />,
+    tone: 'bg-ibf-red-light text-ibf-red',
+  },
+  {
+    title: 'Build muscle',
+    icon: <path d="M6.5 8v8M17.5 8v8M4 10v4M20 10v4M6.5 12h11" />,
+    tone: 'bg-brand-light text-brand-dark',
+  },
+  {
+    title: 'Optimise EMS',
+    icon: <path d="M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z" />,
+    tone: 'bg-[#e6f4fb] text-[#2a8fbf]',
+  },
+];
+
 function Welcome({ onStart, resumed }: { onStart: () => void; resumed: boolean }) {
   return (
-    <div className="assess-rise pt-14 sm:pt-20">
-      <h1 className="text-[40px] font-semibold leading-[1.05] tracking-tight sm:text-5xl">
-        Let&apos;s build your <span className="assess-gradient bg-clip-text text-transparent">roadmap.</span>
+    <div className="assess-rise pt-12 sm:pt-16">
+      <p className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/80 px-3 py-1 text-xs font-medium text-neutral-600">
+        <span className="h-1.5 w-1.5 rounded-full bg-ibf-red" />
+        For IronBodyFit Malta members
+      </p>
+      <h1 className="mt-5 text-[40px] font-semibold leading-[1.05] tracking-tight sm:text-5xl">
+        IronBodyFit <span className="assess-gradient bg-clip-text text-transparent">Meal Plans</span>
       </h1>
+      <p className="mt-2 text-sm font-medium tracking-wide text-neutral-500">
+        Powered by <span className="text-brand-dark">Vitality</span>
+      </p>
       <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-neutral-600">
-        Before we get started, we want to understand you properly. Your goals, lifestyle, nutrition, training and current starting point will help us build your personalised Vitality roadmap.
+        A form created by Vitality Malta for IronBodyFit members. Your answers help us build a meal plan that helps you lose fat, build muscle and look after your health, while getting the most out of your EMS training.
       </p>
 
-      <div className="mt-8 grid grid-cols-3 gap-3 text-center">
-        {[
-          ['10–15', 'minutes'],
-          [String(TOTAL), 'short sections'],
-          ['Auto', 'saves as you go'],
-        ].map(([big, small]) => (
-          <div key={small} className="rounded-2xl border border-neutral-100 bg-white px-2 py-4 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-            <div className="text-lg font-semibold text-neutral-900">{big}</div>
-            <div className="mt-0.5 text-xs text-neutral-500">{small}</div>
+      <div className="mt-8 grid grid-cols-3 gap-3">
+        {PILLARS.map((p) => (
+          <div key={p.title} className="flex flex-col items-center gap-2.5 rounded-2xl border border-neutral-100 bg-white px-2 py-4 text-center shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+            <span className={`flex h-10 w-10 items-center justify-center rounded-full ${p.tone}`}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{p.icon}</svg>
+            </span>
+            <span className="text-[13px] font-medium text-neutral-800">{p.title}</span>
           </div>
         ))}
       </div>
 
       <div className="mt-10 flex">
-        <PrimaryButton onClick={onStart}>{resumed ? 'Continue where I left off' : 'Start my assessment'}</PrimaryButton>
+        <PrimaryButton onClick={onStart}>{resumed ? 'Continue where I left off' : 'Start'}</PrimaryButton>
       </div>
-      <p className="mt-4 text-center text-xs text-neutral-400">Your answers are private and only shared with your Vitality coach.</p>
+      <p className="mt-4 text-center text-xs text-neutral-400">
+        About 5 minutes · {TOTAL} short steps · saves as you go
+      </p>
     </div>
   );
 }
@@ -168,18 +223,18 @@ function Success() {
       <div className="assess-gradient flex h-14 w-14 items-center justify-center rounded-full shadow-[0_10px_30px_-10px_rgba(15,168,166,0.7)]">
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
       </div>
-      <h1 className="mt-7 text-[40px] font-semibold leading-tight tracking-tight sm:text-5xl">You&apos;re all set.</h1>
+      <h1 className="mt-7 text-[40px] font-semibold leading-tight tracking-tight sm:text-5xl">Thank you!</h1>
       <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-neutral-600">
-        Your coach will review your assessment before your onboarding session and use it to begin building your personalised Vitality Roadmap.
+        Your answers are with the Vitality team. We&apos;ll use them to build your personalised IronBodyFit meal plan.
       </p>
 
       <div className="mt-10 rounded-3xl border border-neutral-100 bg-white p-6 shadow-[0_2px_12px_rgba(0,0,0,0.04)] sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand">What happens next</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-ibf-red">What happens next</p>
         <ol className="mt-5 flex flex-col gap-5">
           {[
-            'We review your assessment',
-            'We prepare your starting roadmap',
-            'We go through everything together during your onboarding session',
+            'We review your answers',
+            'We build your meal plan around your goals and EMS training',
+            'We send it to you by email',
           ].map((text, i) => (
             <li key={text} className="flex items-start gap-4">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-light text-sm font-semibold text-brand-dark">{i + 1}</span>

@@ -10,6 +10,8 @@ type Json = string | number | boolean | null | { [key: string]: Json | undefined
 // in this app selects a single table at a time.
 type Table<Row, Insert, Update> = { Row: Row; Insert: Insert; Update: Update; Relationships: [] };
 
+export type MealPlanStatus = 'new' | 'in_progress' | 'sent';
+
 // The 16 micronutrient columns on food_log_entries, all nullable numeric
 // (Nullable is the "unset" type — null for Row, and also allowed on
 // Insert/Update via Partial<> at each call site).
@@ -161,6 +163,11 @@ export type Database = {
         { id: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; created_at: string },
         { id?: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; created_at?: string },
         { id?: string; submission_id?: string; full_name?: string; email?: string; phone?: string; answers?: Json; created_at?: string }
+      >;
+      meal_plan_requests: Table<
+        { id: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; status: MealPlanStatus; created_at: string },
+        { id?: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; status?: MealPlanStatus; created_at?: string },
+        { id?: string; submission_id?: string; full_name?: string; email?: string; phone?: string; answers?: Json; status?: MealPlanStatus; created_at?: string }
       >;
     };
   };

@@ -28,10 +28,13 @@ export async function proxy(request: NextRequest) {
   );
 
   const path = request.nextUrl.pathname;
-  // /assessment (+ its submit endpoint) is the onboarding form sent to brand
-  // new clients before they have an account — fully public, so skip the
-  // Supabase auth round-trip entirely.
-  if (path.startsWith('/assessment') || path.startsWith('/api/assessment')) return response;
+  // /assessment and /ironbodyfit-meal-plans (+ their submit endpoints) are forms filled in
+  // by people who don't have an account — brand new clients and IronBodyFit
+  // members — fully public, so skip the Supabase auth round-trip entirely.
+  if (
+    path.startsWith('/assessment') || path.startsWith('/api/assessment') ||
+    path.startsWith('/ironbodyfit-meal-plans') || path.startsWith('/api/meal-plan')
+  ) return response;
 
   const { data: { user } } = await supabase.auth.getUser();
   // /auth/* (invite/magic-link callback + set-password) must stay reachable

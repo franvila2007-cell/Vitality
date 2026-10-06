@@ -296,3 +296,30 @@ export function validateSection(section: Section, answers: Answers): Record<stri
   }
   return errors;
 }
+
+// Server-side pass over a whole submission: validates every visible
+// question and keeps only known, visible, non-empty answers (so stale
+// answers to questions hidden by a later "No" aren't stored), trimmed.
+// Shared by every public form's submit route.
+export function cleanSubmission(sections: Section[], answers: Answers): {
+  clean: Answers; errors: Record<string, string>; firstErrorSection: number;
+} {
+  const errors: Record<string, string> = {};
+  let firstErrorSection = -1;
+  const clean: Answers = {};
+  sections.forEach((section, i) => {
+    for (const q of section.questions) {
+      if (q.type === 'note' || !isVisible(q, answers)) continue;
+      const err = validateQuestion(q, answers);
+      if (err) {
+        errors[q.id] = err;
+        if (firstErrorSection === -1) firstErrorSection = i;
+        continue;
+      }
+      const v = answers[q.id];
+      if (Array.isArray(v)) { if (v.length) clean[q.id] = v; }
+      else if (typeof v === 'string' && v.trim() !== '') clean[q.id] = v.trim();
+    }
+  });
+  return { clean, errors, firstErrorSection };
+}

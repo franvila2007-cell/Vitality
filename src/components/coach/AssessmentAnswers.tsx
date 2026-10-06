@@ -1,11 +1,12 @@
-import { SECTIONS, type Answers } from '@/lib/assessment/questions';
+import { SECTIONS, type Answers, type Section } from '@/lib/assessment/questions';
 
 // Prints a submitted onboarding assessment back in question order, grouped
-// by section. Shared by /coach/assessments and each client's detail page.
-export default function AssessmentAnswers({ answers }: { answers: Answers }) {
+// by section. Shared by /coach/assessments and each client's detail page;
+// /coach/meal-plans passes its own sections.
+export default function AssessmentAnswers({ answers, sections = SECTIONS }: { answers: Answers; sections?: Section[] }) {
   return (
     <div className="flex flex-col gap-6">
-      {SECTIONS.map((section) => {
+      {sections.map((section) => {
         const qs = section.questions.filter((q) => q.type !== 'note' && answers[q.id] !== undefined);
         if (!qs.length) return null;
         return (

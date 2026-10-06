@@ -13,6 +13,8 @@ export default async function CoachPage() {
 
   const { data: clients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').is('archived_at', null).order('full_name');
   const { data: archivedClients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').not('archived_at', 'is', null).order('full_name');
+  // Unhandled IronBodyFit meal-plan requests, badged on the Meal Plans link.
+  const { count: newMealPlans } = await supabase.from('meal_plan_requests').select('id', { count: 'exact', head: true }).eq('status', 'new');
 
   const serverToday = new Date().toISOString().slice(0, 10);
   const weekStart = addDays(serverToday, -6);
@@ -118,6 +120,12 @@ export default async function CoachPage() {
           <h1 className="text-h1 font-semibold">Clients ({rows.length})</h1>
           <div className="flex items-center gap-3">
             <Link href="/coach/assessments" className="text-sm text-neutral-500 hover:text-neutral-800">Assessments</Link>
+            <Link href="/coach/meal-plans" className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-800">
+              Meal Plans
+              {!!newMealPlans && (
+                <span className="min-w-5 rounded-full bg-ibf-red px-1.5 text-center text-3xs font-semibold leading-5 text-white">{newMealPlans}</span>
+              )}
+            </Link>
             <Link href="/coach/clients/new" className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90">+ Add client</Link>
           </div>
         </div>
