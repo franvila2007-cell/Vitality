@@ -4,14 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { MealPlanStatus } from '@/lib/supabase/database.types';
-
-export const MEAL_PLAN_STATUS_META: Record<MealPlanStatus, { label: string; className: string }> = {
-  new: { label: 'New', className: 'bg-ibf-red-light text-ibf-red border-ibf-red/20' },
-  in_progress: { label: 'In progress', className: 'bg-status-warn-bg text-status-warn-text border-status-warn/30' },
-  sent: { label: 'Plan sent', className: 'bg-status-good-bg text-status-good-text border-status-good/30' },
-};
-
-const STATUSES: MealPlanStatus[] = ['new', 'in_progress', 'sent'];
+import { MEAL_PLAN_STATUS_META, MEAL_PLAN_STATUSES } from '@/lib/mealPlan/status';
 
 // Moves a meal-plan request along as the plan gets written and delivered.
 // RLS (meal_plan_requests_update_coach) only lets the coach do this.
@@ -39,7 +32,7 @@ export default function MealPlanStatusPicker({ id, initial }: { id: string; init
   return (
     <div>
       <div className="flex gap-2">
-        {STATUSES.map((s) => (
+        {MEAL_PLAN_STATUSES.map((s) => (
           <button
             key={s}
             onClick={() => choose(s)}

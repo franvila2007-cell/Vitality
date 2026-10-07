@@ -3,7 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import type { Answers } from '@/lib/assessment/questions';
 import { MEAL_PLAN_SECTIONS } from '@/lib/mealPlan/questions';
 import AssessmentAnswers from '@/components/coach/AssessmentAnswers';
-import MealPlanStatusPicker, { MEAL_PLAN_STATUS_META } from '@/components/coach/MealPlanStatusPicker';
+import MealPlanStatusPicker from '@/components/coach/MealPlanStatusPicker';
+import { MEAL_PLAN_STATUS_META } from '@/lib/mealPlan/status';
 
 // IronBodyFit meal-plan requests submitted via the public /ironbodyfit-meal-plans form —
 // kept apart from onboarding assessments. Auth/role guard lives in
