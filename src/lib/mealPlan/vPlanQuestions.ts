@@ -1,7 +1,7 @@
 import type { Section } from '@/lib/assessment/questions';
 
 // Single source of truth for the V Plans form — meal-plan requests from
-// Vitality's own clients. The public form at /v-plan renders from this,
+// Vitality's own clients. The public form at /vitality-meal-plan renders from this,
 // /api/v-plan validates against it, and /coach/v-plans prints answers back
 // in question order. Same question shape and validators as the assessment.
 export const V_PLAN_SECTIONS: Section[] = [

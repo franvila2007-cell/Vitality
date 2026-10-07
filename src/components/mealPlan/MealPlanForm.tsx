@@ -21,8 +21,9 @@ const ICONS = {
 // The two meal-plan forms share one layout and differ only in branding and
 // copy. IronBodyFit is co-branded: Vitality teal leads (buttons, selections,
 // focus) and IronBodyFit red is kept to accents — the "×", the top stripe,
-// step numbers — so the two brands sit together without clashing. V Plans
-// is Vitality's own, all teal.
+// step numbers — so the two brands sit together without clashing. The
+// Vitality one is all teal; clients see it as "Vitality Meal Plan" (the
+// coach app files these requests under "V Plans").
 const VARIANTS: Record<MealPlanVariant, {
   sections: Section[];
   storageKey: string;
@@ -36,6 +37,7 @@ const VARIANTS: Record<MealPlanVariant, {
   chip: string;
   title: [string, string];
   poweredBy: boolean;
+  tagline?: string;
   intro: string;
   pillars: Pillar[];
   minutes: string;
@@ -72,24 +74,25 @@ const VARIANTS: Record<MealPlanVariant, {
     storageKey: 'vitality-v-plan-v1',
     endpoint: '/api/v-plan',
     mark: <VitalityMark />,
-    pill: 'V Plans',
+    pill: 'Meal Plans',
     stripe: 'assess-gradient',
     glow: 'bg-[radial-gradient(ellipse_at_top_left,rgba(15,168,166,0.15),transparent_60%),radial-gradient(ellipse_at_top_right,rgba(76,184,230,0.13),transparent_55%)]',
     accentText: 'text-brand',
     accentDot: 'bg-brand',
     chip: 'For Vitality clients',
-    title: ['Your', 'V Plan'],
+    title: ['Vitality', 'Meal Plan'],
     poweredBy: false,
-    intro: 'Your personal Vitality meal plan, built around your goals, your training, your routine and the meals you actually enjoy making. Tell us how you eat today and we’ll take it from there.',
+    tagline: 'Health made to work around your life, not made to be your life.',
+    intro: 'A form to build your meal plan, and a system that teaches you and guides you while optimising your health and results. Tell us about your goals, your training and the meals you enjoy, and we’ll build your plan around them.',
     pillars: [
       { title: 'Your goals', icon: ICONS.flame, tone: 'bg-brand-light text-brand-dark' },
       { title: 'Your training', icon: ICONS.dumbbell, tone: 'bg-[#e6f4fb] text-[#2a8fbf]' },
       { title: 'Your meals', icon: ICONS.plate, tone: 'bg-brand-light text-brand-dark' },
     ],
     minutes: 'About 7 minutes',
-    successText: "Your answers are with your Vitality coach. We'll use them to build your personalised V Plan.",
-    nextSteps: ['Your coach reviews your answers', 'We build your V Plan around your goals, training and favourite meals', 'We send it to you and set your targets in the Vitality app'],
-    footer: <>V Plans by <span className="font-semibold text-brand-dark">Vitality Malta</span></>,
+    successText: "Your answers are with your Vitality coach. We'll use them to build your personalised Vitality meal plan.",
+    nextSteps: ['Your coach reviews your answers', 'We build your meal plan around your goals, training and favourite meals', 'We send it to you and set your targets in the Vitality app'],
+    footer: <>Vitality Meal Plans · <span className="font-semibold text-brand-dark">Vitality Malta</span></>,
   },
 };
 
@@ -236,7 +239,7 @@ function VitalityMark() {
       <Image src="/vitality-logo.png" alt="" width={30} height={24} priority />
       <div className="leading-none">
         <div className="text-[15px] font-semibold tracking-[0.28em] text-neutral-900">VITALITY</div>
-        <div className="mt-1 text-[10px] font-medium tracking-[0.3em] text-brand">V PLANS</div>
+        <div className="mt-1 text-[10px] font-medium tracking-[0.3em] text-brand">MEAL PLANS</div>
       </div>
     </div>
   );
@@ -267,6 +270,9 @@ function Welcome({ v, total, onStart, resumed }: { v: V; total: number; onStart:
       <h1 className="mt-5 text-[40px] font-semibold leading-[1.05] tracking-tight sm:text-5xl">
         {v.title[0]} <span className="assess-gradient bg-clip-text text-transparent">{v.title[1]}</span>
       </h1>
+      {v.tagline && (
+        <p className="mt-3 text-[17px] font-medium leading-snug text-brand-dark">{v.tagline}</p>
+      )}
       {v.poweredBy && (
         <p className="mt-2 text-sm font-medium tracking-wide text-neutral-500">
           Powered by <span className="text-brand-dark">Vitality</span>

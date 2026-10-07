@@ -9,7 +9,7 @@ export type InboxKey = 'assessments' | 'ironbodyfit' | 'vitality';
 export const INBOXES: { key: InboxKey; href: string; title: string; subtitle: string; formPath: string }[] = [
   { key: 'assessments', href: '/coach/assessments', title: 'Assessments', subtitle: 'New client onboarding', formPath: '/assessment' },
   { key: 'ironbodyfit', href: '/coach/meal-plans', title: 'IronBodyFit', subtitle: 'IronBodyFit meal plans', formPath: '/ironbodyfit-meal-plans' },
-  { key: 'vitality', href: '/coach/v-plans', title: 'V Plans', subtitle: 'Vitality client meal plans', formPath: '/v-plan' },
+  { key: 'vitality', href: '/coach/v-plans', title: 'V Plans', subtitle: 'Vitality client meal plans', formPath: '/vitality-meal-plan' },
 ];
 
 export type InboxCounts = Record<InboxKey, { total: number; fresh: number }>;

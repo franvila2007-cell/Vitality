@@ -28,14 +28,14 @@ export async function proxy(request: NextRequest) {
   );
 
   const path = request.nextUrl.pathname;
-  // /assessment, /ironbodyfit-meal-plans and /v-plan (+ their submit
-  // endpoints) are forms sent as plain links — to brand new clients,
-  // IronBodyFit members and Vitality clients — fully public, so skip the
-  // Supabase auth round-trip entirely.
+  // /assessment, /ironbodyfit-meal-plans and /vitality-meal-plan (+ their
+  // submit endpoints, and /v-plan, the old link that redirects) are forms
+  // sent as plain links — to brand new clients, IronBodyFit members and
+  // Vitality clients — fully public, so skip the Supabase auth round-trip.
   if (
     path.startsWith('/assessment') || path.startsWith('/api/assessment') ||
     path.startsWith('/ironbodyfit-meal-plans') || path.startsWith('/api/meal-plan') ||
-    path.startsWith('/v-plan') || path.startsWith('/api/v-plan')
+    path.startsWith('/vitality-meal-plan') || path.startsWith('/v-plan') || path.startsWith('/api/v-plan')
   ) return response;
 
   const { data: { user } } = await supabase.auth.getUser();
