@@ -6,6 +6,8 @@ import { computeDayRank, RANK_META } from '@/lib/ranking';
 import RestoreClientButton from '@/components/coach/RestoreClientButton';
 import DeleteForeverButton from '@/components/coach/DeleteForeverButton';
 import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
+import { InboxCards } from '@/components/coach/FormInboxes';
+import { getInboxCounts } from '@/lib/coach/formInboxes';
 
 // Auth/role guard and the top header bar now live in coach/layout.tsx.
 export default async function CoachPage() {
@@ -13,8 +15,8 @@ export default async function CoachPage() {
 
   const { data: clients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').is('archived_at', null).order('full_name');
   const { data: archivedClients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').not('archived_at', 'is', null).order('full_name');
-  // Unhandled IronBodyFit meal-plan requests, badged on the Meal Plans link.
-  const { count: newMealPlans } = await supabase.from('meal_plan_requests').select('id', { count: 'exact', head: true }).eq('status', 'new');
+  // Totals + what needs attention for the three form inboxes boxed at the top.
+  const inboxCounts = await getInboxCounts(supabase);
 
   const serverToday = new Date().toISOString().slice(0, 10);
   const weekStart = addDays(serverToday, -6);
@@ -116,16 +118,12 @@ export default async function CoachPage() {
   return (
     <>
       <div className="max-w-4xl mx-auto px-4 py-6 page-fade-in">
+        <p className="text-3xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">Forms</p>
+        <InboxCards counts={inboxCounts} />
+
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-h1 font-semibold">Clients ({rows.length})</h1>
           <div className="flex items-center gap-3">
-            <Link href="/coach/assessments" className="text-sm text-neutral-500 hover:text-neutral-800">Assessments</Link>
-            <Link href="/coach/meal-plans" className="flex items-center gap-1.5 text-sm text-neutral-500 hover:text-neutral-800">
-              Meal Plans
-              {!!newMealPlans && (
-                <span className="min-w-5 rounded-full bg-ibf-red px-1.5 text-center text-3xs font-semibold leading-5 text-white">{newMealPlans}</span>
-              )}
-            </Link>
             <Link href="/coach/clients/new" className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium hover:opacity-90">+ Add client</Link>
           </div>
         </div>

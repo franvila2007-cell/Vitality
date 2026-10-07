@@ -4,6 +4,8 @@ import type { Answers } from '@/lib/assessment/questions';
 import AssessmentAnswers from '@/components/coach/AssessmentAnswers';
 import AddClientFromAssessment from '@/components/coach/AddClientFromAssessment';
 import { clientSetupFromAssessment } from '@/lib/assessment/clientSetup';
+import { getInboxCounts } from '@/lib/coach/formInboxes';
+import { InboxTabs } from '@/components/coach/FormInboxes';
 
 // Read-only list of onboarding assessments submitted via the public
 // /assessment form. Auth/role guard lives in coach/layout.tsx, and RLS
@@ -19,13 +21,12 @@ export default async function AssessmentsPage() {
   // same as the client detail page) — those get a link instead of "Add".
   const { data: clients } = await supabase.from('profiles').select('id, email').eq('role', 'client');
   const clientIdByEmail = new Map((clients || []).map((c) => [c.email.toLowerCase(), c.id]));
+  const counts = await getInboxCounts(supabase);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 page-fade-in">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-h1 font-semibold">Assessments ({rows?.length ?? 0})</h1>
-        <Link href="/coach" className="text-sm text-neutral-500 hover:text-neutral-800">← Clients</Link>
-      </div>
+      <InboxTabs active="assessments" counts={counts} />
+      <h1 className="text-h1 font-semibold mb-4">Assessments ({rows?.length ?? 0})</h1>
 
       {error && <p className="text-sm text-status-bad-text">Couldn&apos;t load assessments: {error.message}</p>}
       {!error && rows?.length === 0 && (

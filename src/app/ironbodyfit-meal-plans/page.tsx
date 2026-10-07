@@ -10,5 +10,5 @@ export const metadata: Metadata = {
 // Public meal-plan request form for IronBodyFit members — no account needed.
 // Answers are posted to /api/meal-plan and read back at /coach/meal-plans.
 export default function MealPlanPage() {
-  return <MealPlanForm />;
+  return <MealPlanForm variant="ironbodyfit" />;
 }

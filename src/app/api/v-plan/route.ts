@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { MEAL_PLAN_SECTIONS } from '@/lib/mealPlan/questions';
+import { V_PLAN_SECTIONS } from '@/lib/mealPlan/vPlanQuestions';
 import { parseFormSubmission } from '@/lib/assessment/submit';
 
-// Public (no login): an IronBodyFit member requests a meal plan. Lands in
-// meal_plan_requests (read at /coach/meal-plans), kept separate from the
-// onboarding assessments. Service-role insert for the same reason as
-// /api/assessment — see supabase/migrations/0009_meal_plan_requests.sql.
+// Public (no login): a Vitality client requests a V Plan (meal plan). Shares
+// meal_plan_requests with the IronBodyFit form, tagged source = 'vitality',
+// and is read at /coach/v-plans. Service-role insert for the same reason as
+// /api/assessment — see supabase/migrations/0009 and 0010.
 export async function POST(req: Request) {
-  const parsed = await parseFormSubmission(req, MEAL_PLAN_SECTIONS);
+  const parsed = await parseFormSubmission(req, V_PLAN_SECTIONS);
   if ('response' in parsed) return parsed.response;
   const { submissionId, clean } = parsed;
 
@@ -20,13 +20,13 @@ export async function POST(req: Request) {
       email: (clean.email as string).toLowerCase(),
       phone: clean.phone as string,
       answers: clean,
-      source: 'ironbodyfit',
+      source: 'vitality',
     },
     { onConflict: 'submission_id', ignoreDuplicates: true }
   );
 
   if (error) {
-    console.error('meal plan request insert failed', error);
+    console.error('v plan request insert failed', error);
     return NextResponse.json({ error: "We couldn't send your answers. Please try again in a moment." }, { status: 500 });
   }
   return NextResponse.json({ ok: true });
