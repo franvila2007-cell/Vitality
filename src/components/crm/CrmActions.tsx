@@ -90,25 +90,47 @@ export function CrmRowDelete({ id, name }: { id: string; name: string }) {
   );
 }
 
-// For meal-plan contacts tagged plan-pending / plan-sent (e.g. the
-// IronBodyFit client sheet): flip the tag in one tap.
-export function CrmPlanStatus({ id, tags }: { id: string; tags: string[] }) {
+// Meal-plan status for contacts tagged plan-pending / plan-sent (e.g. the
+// IronBodyFit client sheet): the same symbol everywhere — ✓ Sent (green) or
+// ⏳ To send (amber) — and tapping it flips the status.
+export function planStatus(tags: string[]): 'sent' | 'pending' | null {
+  return tags.includes('plan-pending') ? 'pending' : tags.includes('plan-sent') ? 'sent' : null;
+}
+
+export function CrmPlanStatus({ id, tags, size = 'md' }: { id: string; tags: string[]; size?: 'sm' | 'md' }) {
   const [supabase] = useState(() => createClient());
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const pending = tags.includes('plan-pending');
-  if (!pending && !tags.includes('plan-sent')) return null;
-  async function flip() {
+  const [override, setOverride] = useState<'sent' | 'pending' | null>(null);
+  const status = override ?? planStatus(tags);
+  if (!status) return null;
+  async function flip(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const next = status === 'pending' ? 'sent' : 'pending';
+    setOverride(next);
     setBusy(true);
-    const next = tags.filter((t) => t !== 'plan-pending' && t !== 'plan-sent').concat(pending ? 'plan-sent' : 'plan-pending');
-    const { error } = await supabase.from('crm_contacts').update({ tags: next }).eq('id', id);
-    if (!error) await supabase.from('crm_activities').insert({ contact_id: id, kind: 'system', body: pending ? 'Meal plan sent out' : 'Meal plan marked as pending again' });
+    const nextTags = tags.filter((t) => t !== 'plan-pending' && t !== 'plan-sent').concat(`plan-${next}`);
+    const { error } = await supabase.from('crm_contacts').update({ tags: nextTags }).eq('id', id);
+    if (!error) await supabase.from('crm_activities').insert({ contact_id: id, kind: 'system', body: next === 'sent' ? 'Meal plan sent out' : 'Meal plan marked as still to send' });
     setBusy(false);
-    if (!error) router.refresh();
+    if (error) setOverride(null);
+    else router.refresh();
   }
-  return pending ? (
-    <button onClick={flip} disabled={busy} className="rounded-full bg-ibf-red text-white px-3 py-1.5 text-xs font-medium disabled:opacity-50">✓ Mark meal plan as sent</button>
-  ) : (
-    <button onClick={flip} disabled={busy} className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-neutral-500 disabled:opacity-50">Meal plan sent ✓ · undo</button>
+  const sent = status === 'sent';
+  const tone = sent
+    ? 'bg-status-good-bg text-status-good-text border-status-good/30'
+    : 'bg-status-warn-bg text-status-warn-text border-status-warn/40';
+  const cls = size === 'sm' ? 'px-2 py-0.5 text-3xs' : 'px-3 py-1.5 text-xs';
+  return (
+    <button
+      onClick={flip}
+      disabled={busy}
+      title={sent ? 'Meal plan sent — tap to mark as still to send' : 'Meal plan still to send — tap when sent'}
+      aria-label={sent ? 'Meal plan sent. Tap to mark as still to send' : 'Meal plan still to send. Tap to mark as sent'}
+      className={`relative inline-flex flex-shrink-0 items-center gap-1 rounded-full border font-semibold whitespace-nowrap transition-transform active:scale-95 disabled:opacity-60 ${tone} ${cls}`}
+    >
+      <span aria-hidden>{sent ? '✓' : '⏳'}</span>{sent ? 'Sent' : 'To send'}
+    </button>
   );
 }

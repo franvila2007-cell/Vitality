@@ -8,7 +8,7 @@ import {
 } from '@/lib/crm/constants';
 import { weightProgress } from '@/lib/crm/progress';
 import { ago } from '@/lib/crm/format';
-import { CrmRowDelete } from '@/components/crm/CrmActions';
+import { CrmPlanStatus, CrmRowDelete } from '@/components/crm/CrmActions';
 
 const input = 'rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand';
 
@@ -86,7 +86,7 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
           >{t.label}</Link>
         ))}
         {/* IronBodyFit meal plans: has their plan gone out yet? */}
-        {[{ tag: 'plan-pending', label: 'Plan pending' }, { tag: 'plan-sent', label: 'Plan sent' }].map((t) => (
+        {[{ tag: 'plan-pending', label: '⏳ Plan to send' }, { tag: 'plan-sent', label: '✓ Plan sent' }].map((t) => (
           <Link
             key={t.tag}
             href={href({ tag: tag === t.tag ? '' : t.tag })}
@@ -154,9 +154,11 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
                             : <>{SOURCE_META[c.source]?.emoji} {sourceLabel(c.source)}{c.email || c.phone ? ` · ${c.email || c.phone}` : ''}</>}
                         </p>
                       </div>
-                      <span className={`text-3xs font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 flex-shrink-0 ${STAGE_META[c.stage].className}`}>{STAGE_META[c.stage].short}</span>
+                      {/* Meal-plan rows carry the Sent / To send badge instead on phones, so the name has room. */}
+                      <span className={`text-3xs font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 flex-shrink-0 ${STAGE_META[c.stage].className} ${c.tags.includes('plan-sent') || c.tags.includes('plan-pending') ? 'hidden sm:inline' : ''}`}>{STAGE_META[c.stage].short}</span>
                       <span className="hidden sm:block text-2xs text-neutral-400 w-16 text-right flex-shrink-0">{ago(c.last_activity_at, nowMs)}</span>
                     </Link>
+                    <CrmPlanStatus id={c.id} tags={c.tags} size="sm" />
                     <CrmRowDelete id={c.id} name={c.full_name} />
                   </div>
                 );

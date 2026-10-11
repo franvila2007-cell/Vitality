@@ -82,6 +82,7 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
                 <Image src={BRAND_META[c.brand].logo} alt="" width={12} height={11} />{BRAND_META[c.brand].label}
               </span>
               {type && <span className={`rounded-full px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide ${CLIENT_TYPE_META[type].chip}`}>{CLIENT_TYPE_META[type].label}</span>}
+              <CrmPlanStatus id={c.id} tags={c.tags} size="sm" />
             </div>
             <p className="text-2xs text-neutral-400 mt-0.5">
               {SOURCE_META[c.source]?.emoji} {sourceLabel(c.source)} · added {shortDate(c.created_at)} · {STAGE_META[c.stage].label} for {daysSince(c.stage_changed_at, nowMs)}d
@@ -100,7 +101,6 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
           {c.phone && <Action href={`tel:${c.phone.replace(/[^\d+]/g, '')}`}>📞 Call</Action>}
           {c.email && <Action href={`mailto:${c.email}`}>✉️ Email</Action>}
           {c.client_id && <Action href={`/coach/clients/${c.client_id}`}>⭐ Client page</Action>}
-          <CrmPlanStatus id={c.id} tags={c.tags} />
         </div>
         <p className="text-2xs text-neutral-400 mt-2">{[c.email, c.phone].filter(Boolean).join(' · ') || 'No email or phone yet — add them in Edit details.'}</p>
 

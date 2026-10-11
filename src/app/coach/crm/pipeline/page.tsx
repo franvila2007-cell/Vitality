@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { BRAND_META, PACKAGE_META, SOURCE_META, STAGE_META, brandOrder, sourceLabel } from '@/lib/crm/constants';
 import { daysSince, dueLabel } from '@/lib/crm/format';
 import CrmStagePicker from '@/components/crm/CrmStagePicker';
+import { CrmPlanStatus } from '@/components/crm/CrmActions';
 
 const DAY = 864e5;
 const COLUMNS: CrmStage[] = ['lead', 'contacted', 'consult', 'proposal', 'won', 'lost'];
@@ -71,7 +72,8 @@ export default async function CrmPipelinePage() {
                           {c.tags.slice(0, 2).map((t) => <Chip key={t}>#{t}</Chip>)}
                         </div>
                       )}
-                      <div className="relative mt-2 flex justify-end">
+                      <div className="relative mt-2 flex items-center justify-end gap-1.5">
+                        <CrmPlanStatus id={c.id} tags={c.tags} size="sm" />
                         <CrmStagePicker id={c.id} initial={c.stage} compact />
                       </div>
                     </div>
