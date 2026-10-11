@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     {
       submission_id: submissionId,
       full_name: clean.full_name as string,
-      // The IronBodyFit form no longer asks for email or phone.
+      // The IronBodyFit form asks for a phone number but no email.
       email: ((clean.email as string | undefined) ?? '').toLowerCase(),
       phone: (clean.phone as string | undefined) ?? '',
       answers: clean,

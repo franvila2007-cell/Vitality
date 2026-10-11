@@ -35,14 +35,32 @@ export async function recordFunnelEvent(admin: Admin, ev: {
     }
     const email = ev.email.trim().toLowerCase();
     const brand = ev.brand ?? brandForSource(ev.source);
+    const rawPhone = (ev.phone ?? '').trim();
+    const phone = /^[279]\d{7}$/.test(rawPhone.replace(/[\s-]/g, '')) ? `+356 ${rawPhone.replace(/[\s-]/g, '')}` : rawPhone || null;
     const typed = ev.fullName.trim().replace(/\s+/g, ' ');
     // "maria borg" → "Maria Borg"; names typed with capitals are left alone.
     const name = typed === typed.toLowerCase() ? typed.replace(/(^|[\s'-])(\p{L})/gu, (_, p, c) => p + c.toUpperCase()) : typed;
     const cols = 'id, phone, stage, package, tags';
-    const { data: existing } = email
-      ? await admin.from('crm_contacts').select(cols).eq('email', email).maybeSingle()
-      : await admin.from('crm_contacts').select(cols).eq('brand', brand).ilike('full_name', name.replace(/[\\%_]/g, '\\$&'))
-          .order('list_position').limit(1).maybeSingle();
+    type Match = { id: string; phone: string | null; stage: CrmStage; package: CrmContactRow['package']; tags: string[] };
+    let existing: Match | null = null;
+    if (email) {
+      existing = (await admin.from('crm_contacts').select(cols).eq('email', email).maybeSingle()).data;
+    } else {
+      // No email (IronBodyFit form): match by name within the brand, then
+      // by phone number (last 8 digits) for typos — but only when a first
+      // name or surname also matches, since some people share a number.
+      existing = (await admin.from('crm_contacts').select(cols).eq('brand', brand)
+        .ilike('full_name', name.replace(/[\\%_]/g, '\\$&')).order('list_position').limit(1).maybeSingle()).data;
+      const digits = (ev.phone ?? '').replace(/\D/g, '').slice(-8);
+      if (!existing && digits.length === 8) {
+        const words = new Set(name.toLowerCase().split(' ').filter((w) => w.length >= 3));
+        const { data: withPhone } = await admin.from('crm_contacts').select(`${cols}, full_name`).eq('brand', brand).not('phone', 'is', null).order('list_position');
+        existing = (withPhone || []).find((c) =>
+          (c.phone ?? '').replace(/\D/g, '').slice(-8) === digits &&
+          c.full_name.toLowerCase().split(/\s+/).some((w) => words.has(w))
+        ) ?? null;
+      }
+    }
 
     let contactId = existing?.id;
     if (!contactId) {
@@ -55,7 +73,7 @@ export async function recordFunnelEvent(admin: Admin, ev: {
       const { data: created, error } = await admin.from('crm_contacts').insert({
         full_name: name || email || 'Unknown',
         email: email || null,
-        phone: ev.phone || null,
+        phone,
         source: ev.source,
         brand,
         stage,
@@ -71,7 +89,7 @@ export async function recordFunnelEvent(admin: Admin, ev: {
       }
     } else {
       const update: Partial<CrmContactRow> = {};
-      if (!existing?.phone && ev.phone) update.phone = ev.phone;
+      if (!existing?.phone && phone) update.phone = phone;
       // An existing lead / past contact asking for a meal plan becomes a
       // meal-plan client with the plan to send; existing 1-1 clients keep
       // their package.

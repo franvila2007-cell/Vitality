@@ -10,6 +10,7 @@ export const MEAL_PLAN_SECTIONS: Section[] = [
     title: 'About you',
     questions: [
       { id: 'full_name', type: 'text', label: 'Name and surname', required: true, autoComplete: 'name' },
+      { id: 'phone', type: 'tel', label: 'Phone number', required: true, autoComplete: 'tel', placeholder: '+356' },
       { id: 'age', type: 'number', label: 'Age', required: true, unit: 'years', min: 14, max: 100, half: true },
       { id: 'sex', type: 'choice', label: 'Sex', required: true, options: ['Female', 'Male'], half: true },
       { id: 'height', type: 'number', label: 'Height', required: true, unit: 'cm', min: 100, max: 250, half: true },
