@@ -21,7 +21,10 @@ export type CrmContactRow = {
   id: string; full_name: string; email: string | null; phone: string | null; source: string; stage: CrmStage;
   lost_reason: string | null; tags: string[]; value_eur: number | null; next_follow_up: string | null; notes: string;
   client_id: string | null; stage_changed_at: string; last_activity_at: string; created_at: string;
+  brand: CrmBrand; package: CrmPackage | null; package_price: number | null; package_start: string | null;
 };
+export type CrmBrand = 'vitality' | 'ironbodyfit';
+export type CrmPackage = '6_months' | '12_months';
 
 export type MealPlanStatus = 'new' | 'in_progress' | 'sent';
 export type MealPlanSource = 'ironbodyfit' | 'vitality';

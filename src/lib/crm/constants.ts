@@ -1,4 +1,4 @@
-import type { CrmActivityKind, CrmStage } from '@/lib/supabase/database.types';
+import type { CrmActivityKind, CrmBrand, CrmPackage, CrmStage } from '@/lib/supabase/database.types';
 
 // Pipeline stages in order. The first four are the open funnel; won / lost /
 // past are where a contact ends up.
@@ -55,4 +55,29 @@ export const FORM_INBOX: Record<string, { label: string; href: string }> = {
 
 export function waLink(phone: string) {
   return `https://wa.me/${phone.replace(/[^\d]/g, '')}`;
+}
+
+// Which business a contact belongs to. Vitality is listed first everywhere;
+// IronBodyFit carries its red so the two are told apart at a glance.
+export const BRANDS: { key: CrmBrand; label: string; stripe: string; chip: string; logo: string }[] = [
+  { key: 'vitality', label: 'Vitality', stripe: 'border-l-brand', chip: 'bg-brand-light text-brand-dark', logo: '/vitality-logo.png' },
+  { key: 'ironbodyfit', label: 'IronBodyFit', stripe: 'border-l-ibf-red', chip: 'bg-ibf-red-light text-ibf-red', logo: '/ironbodyfit-logo.png' },
+];
+export const BRAND_META = Object.fromEntries(BRANDS.map((b) => [b.key, b])) as Record<CrmBrand, (typeof BRANDS)[number]>;
+export const brandOrder = (b: CrmBrand) => (b === 'vitality' ? 0 : 1);
+export const brandForSource = (source: string): CrmBrand => (source === 'ironbodyfit' ? 'ironbodyfit' : 'vitality');
+
+// The two packages a client can join.
+export const PACKAGES: { key: CrmPackage; label: string; short: string; months: number }[] = [
+  { key: '6_months', label: '6 months', short: '6 mo', months: 6 },
+  { key: '12_months', label: '1 year', short: '1 yr', months: 12 },
+];
+export const PACKAGE_META = Object.fromEntries(PACKAGES.map((p) => [p.key, p])) as Record<CrmPackage, (typeof PACKAGES)[number]>;
+
+// Last day the package covers (start + 6/12 months, minus a day).
+export function packageEnd(start: string, pkg: CrmPackage): string {
+  const [y, m, d] = start.split('-').map(Number);
+  const end = new Date(Date.UTC(y, m - 1 + PACKAGE_META[pkg].months, d));
+  end.setUTCDate(end.getUTCDate() - 1);
+  return end.toISOString().slice(0, 10);
 }

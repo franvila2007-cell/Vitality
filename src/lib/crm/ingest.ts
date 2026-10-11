@@ -1,5 +1,6 @@
 import type { createAdminClient } from '@/lib/supabase/admin';
 import type { CrmStage } from '@/lib/supabase/database.types';
+import { brandForSource } from '@/lib/crm/constants';
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -40,6 +41,7 @@ export async function recordFunnelEvent(admin: Admin, ev: {
         email,
         phone: ev.phone || null,
         source: ev.source,
+        brand: brandForSource(ev.source),
         stage,
         client_id: isClient ? profile.id : null,
       }).select('id').single();

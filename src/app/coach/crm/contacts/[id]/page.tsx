@@ -3,7 +3,10 @@ import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import type { Answers } from '@/lib/assessment/questions';
 import { clientSetupFromAssessment, type ClientSetup } from '@/lib/assessment/clientSetup';
-import { ACTIVITY_META, FORM_INBOX, SOURCE_META, STAGE_META, sourceLabel, waLink } from '@/lib/crm/constants';
+import { ACTIVITY_META, BRAND_META, FORM_INBOX, SOURCE_META, STAGE_META, sourceLabel, waLink } from '@/lib/crm/constants';
+import { packageContext } from '@/lib/crm/packages';
+import CrmPackageEditor from '@/components/crm/CrmPackageEditor';
+import Image from 'next/image';
 import { ago, daysSince, euro, shortDate } from '@/lib/crm/format';
 import CrmStagePicker from '@/components/crm/CrmStagePicker';
 import CrmTaskList from '@/components/crm/CrmTaskList';
@@ -46,6 +49,8 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
     }
   }
 
+  const pkgCtx = await packageContext(supabase, c.client_id);
+  const isClient = c.stage === 'won' || c.stage === 'past' || !!c.package;
   const tasks = tasksRes.data || [];
   const openTasks = tasks.filter((t) => !t.done_at);
   const doneTasks = tasks.filter((t) => t.done_at);
@@ -56,16 +61,21 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
     <div className="flex flex-col gap-4">
       <Link href="/coach/crm/contacts" className="text-sm text-neutral-500 hover:text-neutral-800 -mt-1">← Contacts</Link>
 
-      <div className="bg-surface border border-border rounded-xl p-4">
+      <div className={`bg-surface border border-border border-l-4 ${BRAND_META[c.brand].stripe} rounded-xl p-4`}>
         <div className="flex items-start gap-3">
           <span className="w-12 h-12 rounded-full bg-brand-light text-brand-dark flex items-center justify-center text-lg font-semibold flex-shrink-0">
             {c.full_name.trim().charAt(0).toUpperCase() || '?'}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-lg font-semibold leading-tight">{c.full_name}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-lg font-semibold leading-tight">{c.full_name}</p>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide ${BRAND_META[c.brand].chip}`}>
+                <Image src={BRAND_META[c.brand].logo} alt="" width={12} height={11} />{BRAND_META[c.brand].label}
+              </span>
+            </div>
             <p className="text-2xs text-neutral-400 mt-0.5">
               {SOURCE_META[c.source]?.emoji} {sourceLabel(c.source)} · added {shortDate(c.created_at)} · {STAGE_META[c.stage].label} for {daysSince(c.stage_changed_at, nowMs)}d
-              {c.value_eur ? <> · <b className="text-neutral-600">{euro(Number(c.value_eur))}/mo</b></> : null}
+              {c.package_price != null ? <> · <b className="text-neutral-600">{euro(Number(c.package_price))}</b></> : null}
             </p>
             {c.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
@@ -100,6 +110,17 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
           <CrmEditDetails contact={c} />
           <CrmDeleteContact id={c.id} name={c.full_name} />
         </div>
+      </div>
+
+      <div className={`bg-surface border rounded-xl p-4 ${isClient && !c.package ? 'border-brand/40 shadow-[0_4px_16px_-10px_rgba(15,168,166,0.5)]' : 'border-border'}`}>
+        <p className="text-sm font-medium mb-1">{c.package ? 'Package' : isClient ? 'Which package did they join?' : 'Joined? Record their package'}</p>
+        {!c.package && <p className="text-2xs text-neutral-400 mb-3">{isClient ? 'Every client is on 6 months or 1 year — add it so revenue and renewals are tracked.' : 'Saving a package marks them as a Client.'}</p>}
+        <CrmPackageEditor
+          contactId={c.id}
+          initial={{ package: c.package, price: c.package_price != null ? Number(c.package_price) : null, start: c.package_start }}
+          defaultStart={pkgCtx.defaultStart}
+          suggestedPrices={pkgCtx.suggestedPrices}
+        />
       </div>
 
       {!c.client_id && setup && c.stage !== 'past' && (

@@ -18,6 +18,10 @@ export default async function CoachPage() {
   const { data: archivedClients } = await supabase.from('profiles').select('id, full_name, email').eq('role', 'client').not('archived_at', 'is', null).order('full_name');
   // Totals + what needs attention for the three form inboxes boxed at the top.
   const inboxCounts = await getInboxCounts(supabase);
+  const [{ count: openLeads }, { count: noPackage }] = await Promise.all([
+    supabase.from('crm_contacts').select('id', { count: 'exact', head: true }).in('stage', ['lead', 'contacted', 'consult', 'proposal']),
+    supabase.from('crm_contacts').select('id', { count: 'exact', head: true }).eq('stage', 'won').is('package', null),
+  ]);
 
   const serverToday = new Date().toISOString().slice(0, 10);
   const weekStart = addDays(serverToday, -6);
@@ -117,6 +121,17 @@ export default async function CoachPage() {
   return (
     <>
       <div className="max-w-4xl mx-auto px-4 py-6 page-fade-in">
+        <Link href="/coach/crm" className="relative mb-5 flex items-center gap-3 overflow-hidden rounded-2xl p-4 text-white bg-hero-gradient hover:brightness-105">
+          <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-lg flex-shrink-0">📇</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">CRM</span>
+            <span className="block text-2xs text-white/75 truncate">
+              {openLeads ?? 0} open lead{openLeads === 1 ? '' : 's'}{noPackage ? ` · ${noPackage} client${noPackage === 1 ? '' : 's'} need a package` : ''} · contacts, pipeline &amp; revenue
+            </span>
+          </span>
+          <span className="text-sm font-medium flex-shrink-0">Open →</span>
+        </Link>
+
         <p className="text-3xs font-semibold uppercase tracking-wider text-neutral-400 mb-2">Forms</p>
         <InboxCards counts={inboxCounts} />
 

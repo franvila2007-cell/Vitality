@@ -12,6 +12,8 @@ import AssessmentAnswers from '@/components/coach/AssessmentAnswers';
 import type { Answers } from '@/lib/assessment/questions';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import { HABIT_SCHEDULE_COLUMNS, completionsByDate, habitDay } from '@/lib/habits';
+import { packageContext } from '@/lib/crm/packages';
+import CrmPackageEditor from '@/components/crm/CrmPackageEditor';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
 import { getProjections, computeMonthColors, STATUS_META, type GoalType } from '@/lib/progress';
 
@@ -40,6 +42,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     .from('assessments').select('answers, created_at')
     .ilike('email', profileRes.data.email.replace(/[\\%_]/g, '\\$&'))
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
+  // Their CRM contact (every client has one) — for the package card.
+  const [{ data: crmContact }, pkgCtx] = await Promise.all([
+    supabase.from('crm_contacts').select('id, package, package_price, package_start').eq('client_id', id).maybeSingle(),
+    packageContext(supabase, id),
+  ]);
   const clientProfile = clientProfileRes.data;
   const targets = targetsRes.data;
   const habits = habitsRes.data || [];
@@ -125,6 +132,21 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             👁 View their app
           </Link>
         </div>
+
+        {crmContact && (
+          <div className={`bg-surface border rounded-2xl p-4 ${crmContact.package ? 'border-border' : 'border-brand/40'}`}>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-medium">{crmContact.package ? 'Package' : 'Which package did they join?'}</p>
+              <Link href={`/coach/crm/contacts/${crmContact.id}`} className="text-xs font-medium text-brand-dark hover:opacity-70">CRM →</Link>
+            </div>
+            <CrmPackageEditor
+              contactId={crmContact.id}
+              initial={{ package: crmContact.package, price: crmContact.package_price != null ? Number(crmContact.package_price) : null, start: crmContact.package_start }}
+              defaultStart={pkgCtx.defaultStart}
+              suggestedPrices={pkgCtx.suggestedPrices}
+            />
+          </div>
+        )}
 
         {clientProfile ? (
           <div className="bg-surface border border-border rounded-2xl p-4 grid grid-cols-3 gap-2 text-center">

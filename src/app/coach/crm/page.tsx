@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { ACTIVITY_META, OPEN_STAGES, SOURCE_META, STAGE_META, sourceLabel } from '@/lib/crm/constants';
-import { ago, euro } from '@/lib/crm/format';
+import { ACTIVITY_META, BRAND_META, OPEN_STAGES, PACKAGE_META, SOURCE_META, STAGE_META, brandOrder, packageEnd, sourceLabel } from '@/lib/crm/constants';
+import { ago, euro, shortDate } from '@/lib/crm/format';
 import CrmTaskList from '@/components/crm/CrmTaskList';
 import { CopyLink } from '@/components/crm/CrmActions';
 
@@ -26,28 +26,41 @@ export default async function CrmOverviewPage() {
   const d30 = new Date(nowMs - 30 * DAY).toISOString();
   const d90 = new Date(nowMs - 90 * DAY).toISOString();
 
-  const [contactsRes, tasksRes, activityRes, wonRes] = await Promise.all([
-    supabase.from('crm_contacts').select('id, full_name, source, stage, value_eur, created_at').limit(10000),
+  const today = new Date(nowMs).toISOString().slice(0, 10);
+  const monthStart = today.slice(0, 8) + '01';
+  const monthName = new Date(nowMs).toLocaleDateString('en-GB', { month: 'long' });
+
+  const [contactsRes, tasksRes, activityRes, clientsRes] = await Promise.all([
+    supabase.from('crm_contacts').select('id, full_name, source, stage, brand, created_at, client_id, package, package_price, package_start').limit(10000),
     supabase.from('crm_tasks').select('id, title, due_on, done_at, contact_id').is('done_at', null).order('due_on').limit(50),
     supabase.from('crm_activities').select('id, contact_id, kind, body, meta, created_at').order('created_at', { ascending: false }).limit(12),
-    // Became a client in the last 30 days: a stage move to won, or an account created.
-    supabase.from('crm_activities').select('contact_id, kind, body, meta').gte('created_at', d30).in('kind', ['stage', 'system']),
+    supabase.from('profiles').select('id, created_at').eq('role', 'client'),
   ]);
-  const contacts = contactsRes.data || [];
+  const contacts = (contactsRes.data || []).sort((a, b) => brandOrder(a.brand) - brandOrder(b.brand));
+  const clientSince = new Map((clientsRes.data || []).map((p) => [p.id, p.created_at.slice(0, 10)]));
   const nameById = new Map(contacts.map((c) => [c.id, c.full_name]));
 
   const isLead = (c: { source: string }) => c.source !== 'existing_client';
   const open = contacts.filter((c) => OPEN_STAGES.includes(c.stage));
   const newLeads30 = contacts.filter((c) => isLead(c) && c.created_at >= d30).length;
-  const newClients30 = new Set(
-    (wonRes.data || [])
-      .filter((a) => (a.kind === 'stage' && (a.meta as { to?: string })?.to === 'won') || (a.kind === 'system' && a.body.startsWith('Client account created')))
-      .map((a) => a.contact_id)
-  ).size;
+  const openIbf = open.filter((c) => c.brand === 'ironbodyfit').length;
   const cohort = contacts.filter((c) => isLead(c) && c.created_at >= d90);
   const conversion = cohort.length ? Math.round((cohort.filter((c) => c.stage === 'won').length / cohort.length) * 100) : null;
-  const pipelineValue = open.reduce((a, c) => a + (Number(c.value_eur) || 0), 0);
-  const monthlyRevenue = contacts.filter((c) => c.stage === 'won').reduce((a, c) => a + (Number(c.value_eur) || 0), 0);
+
+  // Clients: the day they joined is their package start, else the day their
+  // app account was created.
+  const clients = contacts.filter((c) => c.stage === 'won');
+  const joinedOn = (c: (typeof contacts)[number]) => c.package_start ?? (c.client_id ? clientSince.get(c.client_id) : undefined) ?? null;
+  const newThisMonth = clients.filter((c) => (joinedOn(c) ?? '') >= monthStart);
+  const packages = contacts
+    .filter((c) => c.package && c.package_start)
+    .map((c) => ({ c, end: packageEnd(c.package_start!, c.package!), months: PACKAGE_META[c.package!].months, price: Number(c.package_price) || 0 }));
+  const revenueThisMonth = packages.filter((p) => p.c.package_start! >= monthStart && p.c.package_start! <= today).reduce((a, p) => a + p.price, 0);
+  const active = packages.filter((p) => p.c.package_start! <= today && p.end >= today);
+  const monthlyRecurring = active.reduce((a, p) => a + p.price / p.months, 0);
+  const in45 = new Date(nowMs + 45 * DAY).toISOString().slice(0, 10);
+  const renewals = packages.filter((p) => p.end >= today && p.end <= in45 && p.c.stage === 'won').sort((a, b) => a.end.localeCompare(b.end));
+  const noPackage = clients.filter((c) => !c.package);
 
   const funnel = [...OPEN_STAGES, 'won' as const].map((k) => ({ key: k, n: contacts.filter((c) => c.stage === k).length }));
   const funnelMax = Math.max(1, ...funnel.map((f) => f.n));
@@ -69,14 +82,46 @@ export default async function CrmOverviewPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-        <Kpi label="Open leads" value={String(open.length)} sub={`${newLeads30} new in 30 days`} />
-        <Kpi label="New clients" value={String(newClients30)} sub="last 30 days" />
-        <Kpi label="Conversion" value={conversion == null ? '–' : `${conversion}%`} sub="leads → clients, 90 days" />
-        <Kpi label="Pipeline" value={euro(pipelineValue)} sub={monthlyRevenue ? `${euro(monthlyRevenue)}/mo from clients` : 'open deal value / mo'} />
+        <Kpi label="Open leads" value={String(open.length)} sub={openIbf ? `${open.length - openIbf} Vitality · ${openIbf} IronBodyFit` : `${newLeads30} new in 30 days`} />
+        <Kpi label={`New clients · ${monthName}`} value={String(newThisMonth.length)} sub={newThisMonth.length ? newThisMonth.slice(0, 3).map((c) => c.full_name.split(' ')[0]).join(', ') + (newThisMonth.length > 3 ? '…' : '') : 'none yet this month'} />
+        <Kpi label={`Revenue · ${monthName}`} value={euro(revenueThisMonth)} sub="from packages started this month" />
+        <Kpi label="Active packages" value={String(active.length)} sub={active.length ? `≈ ${euro(monthlyRecurring)} a month` : `${clients.length} clients`} />
       </div>
 
+      {(noPackage.length > 0 || renewals.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {noPackage.length > 0 && (
+            <Card title="Clients without a package" sub={`${noPackage.length} — add 6 months or 1 year`}>
+              <div className="flex flex-col gap-1.5">
+                {noPackage.slice(0, 8).map((c) => (
+                  <Link key={c.id} href={`/coach/crm/contacts/${c.id}`} className={`flex items-center justify-between gap-2 rounded-lg border-l-4 ${BRAND_META[c.brand].stripe} bg-neutral-50 px-3 py-2 hover:bg-neutral-100`}>
+                    <span className="text-sm truncate">{c.full_name}</span>
+                    <span className="text-2xs font-medium text-brand-dark flex-shrink-0">Set package →</span>
+                  </Link>
+                ))}
+              </div>
+            </Card>
+          )}
+          {renewals.length > 0 && (
+            <Card title="Renewals coming up" sub="packages ending in the next 45 days">
+              <div className="flex flex-col gap-1.5">
+                {renewals.map((p) => (
+                  <Link key={p.c.id} href={`/coach/crm/contacts/${p.c.id}`} className={`flex items-center justify-between gap-2 rounded-lg border-l-4 ${BRAND_META[p.c.brand].stripe} bg-neutral-50 px-3 py-2 hover:bg-neutral-100`}>
+                    <span className="min-w-0">
+                      <span className="block text-sm truncate">{p.c.full_name}</span>
+                      <span className="block text-2xs text-neutral-400">{PACKAGE_META[p.c.package!].label} · {euro(p.price)}</span>
+                    </span>
+                    <span className="text-2xs font-medium text-status-warn-text flex-shrink-0">ends {shortDate(p.end)}</span>
+                  </Link>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Card title="Funnel" action={<Link href="/coach/crm/pipeline" className="text-xs font-medium text-brand-dark hover:opacity-70">Pipeline →</Link>}>
+        <Card title="Funnel" sub={conversion == null ? undefined : `${conversion}% of leads convert (90 days)`} action={<Link href="/coach/crm/pipeline" className="text-xs font-medium text-brand-dark hover:opacity-70">Pipeline →</Link>}>
           <div className="flex flex-col gap-2">
             {funnel.map((f) => (
               <Link key={f.key} href={`/coach/crm/contacts?stage=${f.key}`} className="group flex items-center gap-2">
