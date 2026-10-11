@@ -10,15 +10,13 @@ export const MEAL_PLAN_SECTIONS: Section[] = [
     title: 'About you',
     questions: [
       { id: 'full_name', type: 'text', label: 'Name and surname', required: true, autoComplete: 'name' },
-      { id: 'email', type: 'email', label: 'Email', required: true, autoComplete: 'email', hint: "We'll send your meal plan here.", half: true },
-      { id: 'phone', type: 'tel', label: 'Phone number', required: true, autoComplete: 'tel', placeholder: '+356', half: true },
       { id: 'age', type: 'number', label: 'Age', required: true, unit: 'years', min: 14, max: 100, half: true },
       { id: 'sex', type: 'choice', label: 'Sex', required: true, options: ['Female', 'Male'], half: true },
       { id: 'height', type: 'number', label: 'Height', required: true, unit: 'cm', min: 100, max: 250, half: true },
       { id: 'weight', type: 'number', label: 'Current weight', required: true, unit: 'kg', min: 30, max: 350, step: 0.1, half: true },
       {
         id: 'goal', type: 'choice', label: 'What is your main goal?', required: true,
-        options: ['Lose fat', 'Build muscle', 'Lose fat & build muscle', 'Better health & energy'],
+        options: ['Lose fat', 'Build muscle', 'Tone muscle', 'Lose fat & build muscle', 'Better health & energy'],
       },
     ],
   },
@@ -27,10 +25,9 @@ export const MEAL_PLAN_SECTIONS: Section[] = [
     title: 'Your food',
     questions: [
       {
-        id: 'diet', type: 'multi', label: 'Dietary preferences', hint: 'Select all that apply.', required: true,
-        options: ['No preference', 'High protein', 'Vegetarian', 'Vegan', 'Pescatarian', 'Halal', 'Gluten-free', 'Dairy-free', 'Low carb', 'Other'],
+        id: 'diet', type: 'multi', label: 'Dietary preferences', hint: 'Select any that apply — leave blank if none.',
+        options: ['Halal', 'Gluten intolerant', 'Lactose intolerant'],
       },
-      { id: 'diet_other', type: 'text', label: 'Other dietary preference', required: true, when: { id: 'diet', is: 'Other' } },
       { id: 'foods_enjoy', type: 'textarea', label: 'List foods you ENJOY eating', hint: 'Be specific, e.g. chicken thighs, basmati rice, Greek yoghurt, berries.' },
       { id: 'foods_dislike', type: 'textarea', label: 'List foods you DISLIKE or REFUSE to eat', required: true, placeholder: 'Write "None" if there aren\'t any' },
       { id: 'foods_frequent', type: 'textarea', label: 'Are there any foods you eat very frequently already?', required: true, placeholder: 'e.g. eggs every morning, pasta most evenings' },

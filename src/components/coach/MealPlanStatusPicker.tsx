@@ -10,7 +10,7 @@ import { MEAL_PLAN_STATUS_META, MEAL_PLAN_STATUSES } from '@/lib/mealPlan/status
 // RLS (meal_plan_requests_update_coach) only lets the coach do this.
 // For IronBodyFit requests (syncCrm) it also flips the CRM contact's
 // ✓ Sent / ⏳ To send badge, so the two never disagree.
-export default function MealPlanStatusPicker({ id, initial, email, syncCrm }: { id: string; initial: MealPlanStatus; email?: string; syncCrm?: boolean }) {
+export default function MealPlanStatusPicker({ id, initial, email, name, syncCrm }: { id: string; initial: MealPlanStatus; email?: string; name?: string; syncCrm?: boolean }) {
   const supabase = createClient();
   const router = useRouter();
   const [status, setStatus] = useState(initial);
@@ -24,8 +24,12 @@ export default function MealPlanStatusPicker({ id, initial, email, syncCrm }: { 
     const { error } = await supabase.from('meal_plan_requests').update({ status: next }).eq('id', id);
     if (error) setError("Couldn't update the status.");
     else {
-      if (syncCrm && email) {
-        const { data: contact } = await supabase.from('crm_contacts').select('id, tags').eq('email', email.toLowerCase()).maybeSingle();
+      if (syncCrm && (email || name)) {
+        // The IronBodyFit form has no email any more — match by name then.
+        const { data: contact } = email
+          ? await supabase.from('crm_contacts').select('id, tags').eq('email', email.toLowerCase()).maybeSingle()
+          : await supabase.from('crm_contacts').select('id, tags').eq('brand', 'ironbodyfit')
+              .ilike('full_name', name!.trim().replace(/\s+/g, ' ').replace(/[\\%_]/g, '\\$&')).order('list_position').limit(1).maybeSingle();
         if (contact) {
           const tag = next === 'sent' ? 'plan-sent' : 'plan-pending';
           if (!contact.tags.includes(tag)) {

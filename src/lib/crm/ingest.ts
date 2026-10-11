@@ -1,10 +1,12 @@
 import type { createAdminClient } from '@/lib/supabase/admin';
-import type { CrmContactRow, CrmStage } from '@/lib/supabase/database.types';
+import type { CrmBrand, CrmContactRow, CrmStage } from '@/lib/supabase/database.types';
 import { brandForSource } from '@/lib/crm/constants';
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-// Records a funnel event on the matching CRM contact (by email), creating
+// Records a funnel event on the matching CRM contact (by email — or, for
+// forms that don't ask for one like IronBodyFit's, by name within the
+// brand), creating
 // the contact if it's new. Called server-side from every public form route
 // with the service-role client, after the submission itself is saved.
 // Never throws: for forms that save their own submission the CRM is a side
@@ -13,8 +15,10 @@ type Admin = ReturnType<typeof createAdminClient>;
 // the only place a join lead is stored).
 export async function recordFunnelEvent(admin: Admin, ev: {
   fullName: string;
+  /** may be empty: then the contact is matched by name */
   email: string;
   phone?: string | null;
+  brand?: CrmBrand;
   source: string;
   form: string;
   summary: string;
@@ -30,27 +34,37 @@ export async function recordFunnelEvent(admin: Admin, ev: {
       if (seen?.length) return true;
     }
     const email = ev.email.trim().toLowerCase();
-    const { data: existing } = await admin.from('crm_contacts').select('id, phone, stage, package, tags').eq('email', email).maybeSingle();
+    const brand = ev.brand ?? brandForSource(ev.source);
+    const typed = ev.fullName.trim().replace(/\s+/g, ' ');
+    // "maria borg" → "Maria Borg"; names typed with capitals are left alone.
+    const name = typed === typed.toLowerCase() ? typed.replace(/(^|[\s'-])(\p{L})/gu, (_, p, c) => p + c.toUpperCase()) : typed;
+    const cols = 'id, phone, stage, package, tags';
+    const { data: existing } = email
+      ? await admin.from('crm_contacts').select(cols).eq('email', email).maybeSingle()
+      : await admin.from('crm_contacts').select(cols).eq('brand', brand).ilike('full_name', name.replace(/[\\%_]/g, '\\$&'))
+          .order('list_position').limit(1).maybeSingle();
 
     let contactId = existing?.id;
     if (!contactId) {
       // Someone who already has a client account is a client, not a lead.
-      const { data: profile } = await admin.from('profiles').select('id, role, archived_at').ilike('email', email).maybeSingle();
-      const isClient = profile?.role === 'client';
-      const stage: CrmStage = isClient ? (profile.archived_at ? 'past' : 'won') : ev.mealPlanClient ? 'won' : 'lead';
+      const { data: profile } = email
+        ? await admin.from('profiles').select('id, role, archived_at').ilike('email', email).maybeSingle()
+        : { data: null };
+      const isClient = !!profile && profile.role === 'client';
+      const stage: CrmStage = isClient ? (profile!.archived_at ? 'past' : 'won') : ev.mealPlanClient ? 'won' : 'lead';
       const { data: created, error } = await admin.from('crm_contacts').insert({
-        full_name: ev.fullName.trim() || email,
-        email,
+        full_name: name || email || 'Unknown',
+        email: email || null,
         phone: ev.phone || null,
         source: ev.source,
-        brand: brandForSource(ev.source),
+        brand,
         stage,
-        client_id: isClient ? profile.id : null,
+        client_id: isClient ? profile!.id : null,
         ...(ev.mealPlanClient && !isClient ? { package: 'meal_plan' as const, tags: ['plan-pending'] } : {}),
       }).select('id').single();
       if (error) {
         // Lost a race with a parallel submission for the same email — use theirs.
-        const { data: again } = await admin.from('crm_contacts').select('id').eq('email', email).maybeSingle();
+        const { data: again } = email ? await admin.from('crm_contacts').select('id').eq('email', email).maybeSingle() : { data: null };
         contactId = again?.id;
       } else {
         contactId = created.id;

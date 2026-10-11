@@ -47,7 +47,7 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
         {rows?.map((r) => {
           const a = r.answers as Answers;
           const meta = MEAL_PLAN_STATUS_META[r.status];
-          const clientId = clientIdByEmail.get(r.email.toLowerCase());
+          const clientId = r.email ? clientIdByEmail.get(r.email.toLowerCase()) : undefined;
           return (
             <details key={r.id} className="group bg-surface border border-border rounded-xl overflow-hidden">
               <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 hover:bg-neutral-50">
@@ -66,14 +66,14 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
               </summary>
               <div className="border-t border-border px-4 py-4 flex flex-col gap-5">
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                  <a href={`mailto:${r.email}`} className="text-brand-dark hover:underline">{r.email}</a>
-                  <a href={`tel:${r.phone.replace(/[^\d+]/g, '')}`} className="text-brand-dark hover:underline">{r.phone}</a>
+                  {r.email && <a href={`mailto:${r.email}`} className="text-brand-dark hover:underline">{r.email}</a>}
+                  {r.phone && <a href={`tel:${r.phone.replace(/[^\d+]/g, '')}`} className="text-brand-dark hover:underline">{r.phone}</a>}
                   {clientId && <Link href={`/coach/clients/${clientId}`} className="font-medium text-brand-dark hover:underline">Open their client page →</Link>}
                   <span className="text-neutral-400 sm:hidden">
                     {new Date(r.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </div>
-                <MealPlanStatusPicker id={r.id} initial={r.status} email={r.email} syncCrm={source === 'ironbodyfit'} />
+                <MealPlanStatusPicker id={r.id} initial={r.status} email={r.email} name={r.full_name} syncCrm={source === 'ironbodyfit'} />
                 <AssessmentAnswers answers={a} sections={sections} />
               </div>
             </details>

@@ -18,8 +18,9 @@ export async function POST(req: Request) {
     {
       submission_id: submissionId,
       full_name: clean.full_name as string,
-      email: (clean.email as string).toLowerCase(),
-      phone: clean.phone as string,
+      // The IronBodyFit form no longer asks for email or phone.
+      email: ((clean.email as string | undefined) ?? '').toLowerCase(),
+      phone: (clean.phone as string | undefined) ?? '',
       answers: clean,
       source: 'ironbodyfit',
     },
@@ -32,7 +33,8 @@ export async function POST(req: Request) {
   }
   // Log it on the CRM contact after the response — never slows or fails the form.
   after(() => recordFunnelEvent(admin, {
-    fullName: clean.full_name as string, email: clean.email as string, phone: clean.phone as string,
+    fullName: clean.full_name as string, email: (clean.email as string | undefined) ?? '', phone: (clean.phone as string | undefined) ?? null,
+    brand: 'ironbodyfit',
     source: 'ironbodyfit', form: 'ironbodyfit', mealPlanClient: true, summary: `Requested an IronBodyFit meal plan${clean.goal ? ` · goal: ${clean.goal}` : ''}`, submissionId,
   }));
   return NextResponse.json({ ok: true });

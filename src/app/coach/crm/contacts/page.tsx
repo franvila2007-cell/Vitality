@@ -163,7 +163,7 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
                       <span className={`text-3xs font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 flex-shrink-0 ${STAGE_META[c.stage].className} ${c.tags.includes('plan-sent') || c.tags.includes('plan-pending') ? 'hidden sm:inline' : ''}`}>{STAGE_META[c.stage].short}</span>
                       <span className="hidden sm:block text-2xs text-neutral-400 w-16 text-right flex-shrink-0">{ago(c.last_activity_at, nowMs)}</span>
                     </Link>
-                    <CrmPlanStatus id={c.id} tags={c.tags} email={c.email} size="sm" />
+                    <CrmPlanStatus id={c.id} tags={c.tags} email={c.email} name={c.full_name} size="sm" />
                     <CrmRowDelete id={c.id} name={c.full_name} />
                   </div>
                 );

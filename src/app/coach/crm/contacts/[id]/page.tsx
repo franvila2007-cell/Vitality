@@ -82,7 +82,7 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
                 <Image src={BRAND_META[c.brand].logo} alt="" width={12} height={11} />{BRAND_META[c.brand].label}
               </span>
               {type && <span className={`rounded-full px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide ${CLIENT_TYPE_META[type].chip}`}>{CLIENT_TYPE_META[type].label}</span>}
-              <CrmPlanStatus id={c.id} tags={c.tags} email={c.email} size="sm" />
+              <CrmPlanStatus id={c.id} tags={c.tags} email={c.email} name={c.full_name} size="sm" />
             </div>
             <p className="text-2xs text-neutral-400 mt-0.5">
               {SOURCE_META[c.source]?.emoji} {sourceLabel(c.source)} · added {shortDate(c.created_at)} · {STAGE_META[c.stage].label} for {daysSince(c.stage_changed_at, nowMs)}d

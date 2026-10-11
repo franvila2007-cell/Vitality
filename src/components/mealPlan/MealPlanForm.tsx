@@ -66,7 +66,7 @@ const VARIANTS: Record<MealPlanVariant, {
     ],
     minutes: 'About 5 minutes',
     successText: "Your answers are with the Vitality team. We'll use them to build your personalised IronBodyFit meal plan.",
-    nextSteps: ['We review your answers', 'We build your meal plan around your goals and EMS training', 'We send it to you by email'],
+    nextSteps: ['We review your answers', 'We build your meal plan around your goals and EMS training', 'We get your plan to you through IronBodyFit'],
     footer: <>IronBodyFit Meal Plans · Powered by <span className="font-semibold text-brand-dark">Vitality Malta</span></>,
   },
   vitality: {

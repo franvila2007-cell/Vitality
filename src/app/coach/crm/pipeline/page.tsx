@@ -75,7 +75,7 @@ export default async function CrmPipelinePage() {
                         </div>
                       )}
                       <div className="relative mt-2 flex items-center justify-end gap-1.5">
-                        <CrmPlanStatus id={c.id} tags={c.tags} email={c.email} size="sm" />
+                        <CrmPlanStatus id={c.id} tags={c.tags} email={c.email} name={c.full_name} size="sm" />
                         <CrmStagePicker id={c.id} initial={c.stage} compact />
                       </div>
                     </div>
