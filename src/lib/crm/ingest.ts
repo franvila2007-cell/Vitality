@@ -1,5 +1,5 @@
 import type { createAdminClient } from '@/lib/supabase/admin';
-import type { CrmStage } from '@/lib/supabase/database.types';
+import type { CrmContactRow, CrmStage } from '@/lib/supabase/database.types';
 import { brandForSource } from '@/lib/crm/constants';
 
 type Admin = ReturnType<typeof createAdminClient>;
@@ -20,6 +20,8 @@ export async function recordFunnelEvent(admin: Admin, ev: {
   summary: string;
   submissionId?: string;
   extra?: Record<string, unknown>;
+  /** IronBodyFit meal-plan form: they're a meal-plan client straight away, plan still to send */
+  mealPlanClient?: boolean;
 }): Promise<boolean> {
   try {
     // A retried / double-clicked submission is saved once; log it once too.
@@ -28,14 +30,14 @@ export async function recordFunnelEvent(admin: Admin, ev: {
       if (seen?.length) return true;
     }
     const email = ev.email.trim().toLowerCase();
-    const { data: existing } = await admin.from('crm_contacts').select('id, phone').eq('email', email).maybeSingle();
+    const { data: existing } = await admin.from('crm_contacts').select('id, phone, stage, package, tags').eq('email', email).maybeSingle();
 
     let contactId = existing?.id;
     if (!contactId) {
       // Someone who already has a client account is a client, not a lead.
       const { data: profile } = await admin.from('profiles').select('id, role, archived_at').ilike('email', email).maybeSingle();
       const isClient = profile?.role === 'client';
-      const stage: CrmStage = isClient ? (profile.archived_at ? 'past' : 'won') : 'lead';
+      const stage: CrmStage = isClient ? (profile.archived_at ? 'past' : 'won') : ev.mealPlanClient ? 'won' : 'lead';
       const { data: created, error } = await admin.from('crm_contacts').insert({
         full_name: ev.fullName.trim() || email,
         email,
@@ -44,6 +46,7 @@ export async function recordFunnelEvent(admin: Admin, ev: {
         brand: brandForSource(ev.source),
         stage,
         client_id: isClient ? profile.id : null,
+        ...(ev.mealPlanClient && !isClient ? { package: 'meal_plan' as const, tags: ['plan-pending'] } : {}),
       }).select('id').single();
       if (error) {
         // Lost a race with a parallel submission for the same email — use theirs.
@@ -52,8 +55,22 @@ export async function recordFunnelEvent(admin: Admin, ev: {
       } else {
         contactId = created.id;
       }
-    } else if (!existing?.phone && ev.phone) {
-      await admin.from('crm_contacts').update({ phone: ev.phone }).eq('id', contactId);
+    } else {
+      const update: Partial<CrmContactRow> = {};
+      if (!existing?.phone && ev.phone) update.phone = ev.phone;
+      // An existing lead / past contact asking for a meal plan becomes a
+      // meal-plan client with the plan to send; existing 1-1 clients keep
+      // their package.
+      if (ev.mealPlanClient && existing && !existing.package) {
+        update.package = 'meal_plan';
+        update.stage = 'won';
+        update.brand = 'ironbodyfit';
+        update.tags = Array.from(new Set([...(existing.tags ?? []).filter((t) => t !== 'plan-sent'), 'plan-pending']));
+      } else if (ev.mealPlanClient && existing?.package === 'meal_plan') {
+        // Asked again: there's a new plan to send.
+        update.tags = Array.from(new Set([...(existing.tags ?? []).filter((t) => t !== 'plan-sent'), 'plan-pending']));
+      }
+      if (Object.keys(update).length) await admin.from('crm_contacts').update(update).eq('id', contactId);
     }
     if (!contactId) return false;
 

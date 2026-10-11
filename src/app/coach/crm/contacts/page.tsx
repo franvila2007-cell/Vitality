@@ -34,7 +34,7 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
 
   let query = supabase
     .from('crm_contacts')
-    .select('id, full_name, email, phone, source, stage, tags, last_activity_at, client_id, brand, package, payment_plan')
+    .select('id, full_name, email, phone, source, stage, tags, last_activity_at, client_id, brand, package, payment_plan, list_position')
     .order('last_activity_at', { ascending: false })
     .limit(1000);
   if (STAGES.some((s) => s.key === stage)) query = query.eq('stage', stage as CrmStage);
@@ -63,7 +63,12 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
   const href = (over: Partial<typeof params>) =>
     `/coach/crm/contacts?${new URLSearchParams(Object.entries({ ...params, ...over }).filter(([, v]) => v)).toString()}`;
   const filtered = !!(term || stage || source || tag || brand || type);
-  const groups = BRANDS.map((b) => ({ brand: b, rows: rows.filter((r) => r.brand === b.key) })).filter((g) => g.rows.length > 0);
+  // Vitality: most recent activity first. IronBodyFit: the order of the
+  // coach's client sheet, new meal-plan form sign-ups at the bottom.
+  const groups = BRANDS.map((b) => ({
+    brand: b,
+    rows: rows.filter((r) => r.brand === b.key).sort((x, y) => (b.key === 'ironbodyfit' ? x.list_position - y.list_position : 0)),
+  })).filter((g) => g.rows.length > 0);
   const activeType = TYPES.some((t) => t.key === type) ? type : type ? 'clients' : '';
 
   return (
@@ -158,7 +163,7 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
                       <span className={`text-3xs font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 flex-shrink-0 ${STAGE_META[c.stage].className} ${c.tags.includes('plan-sent') || c.tags.includes('plan-pending') ? 'hidden sm:inline' : ''}`}>{STAGE_META[c.stage].short}</span>
                       <span className="hidden sm:block text-2xs text-neutral-400 w-16 text-right flex-shrink-0">{ago(c.last_activity_at, nowMs)}</span>
                     </Link>
-                    <CrmPlanStatus id={c.id} tags={c.tags} size="sm" />
+                    <CrmPlanStatus id={c.id} tags={c.tags} email={c.email} size="sm" />
                     <CrmRowDelete id={c.id} name={c.full_name} />
                   </div>
                 );

@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   // Log it on the CRM contact after the response — never slows or fails the form.
   after(() => recordFunnelEvent(admin, {
     fullName: clean.full_name as string, email: clean.email as string, phone: clean.phone as string,
-    source: 'ironbodyfit', form: 'ironbodyfit', summary: `Requested an IronBodyFit meal plan${clean.goal ? ` · goal: ${clean.goal}` : ''}`, submissionId,
+    source: 'ironbodyfit', form: 'ironbodyfit', mealPlanClient: true, summary: `Requested an IronBodyFit meal plan${clean.goal ? ` · goal: ${clean.goal}` : ''}`, submissionId,
   }));
   return NextResponse.json({ ok: true });
 }

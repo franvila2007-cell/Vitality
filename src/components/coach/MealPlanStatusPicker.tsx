@@ -8,7 +8,9 @@ import { MEAL_PLAN_STATUS_META, MEAL_PLAN_STATUSES } from '@/lib/mealPlan/status
 
 // Moves a meal-plan request along as the plan gets written and delivered.
 // RLS (meal_plan_requests_update_coach) only lets the coach do this.
-export default function MealPlanStatusPicker({ id, initial }: { id: string; initial: MealPlanStatus }) {
+// For IronBodyFit requests (syncCrm) it also flips the CRM contact's
+// ✓ Sent / ⏳ To send badge, so the two never disagree.
+export default function MealPlanStatusPicker({ id, initial, email, syncCrm }: { id: string; initial: MealPlanStatus; email?: string; syncCrm?: boolean }) {
   const supabase = createClient();
   const router = useRouter();
   const [status, setStatus] = useState(initial);
@@ -22,6 +24,16 @@ export default function MealPlanStatusPicker({ id, initial }: { id: string; init
     const { error } = await supabase.from('meal_plan_requests').update({ status: next }).eq('id', id);
     if (error) setError("Couldn't update the status.");
     else {
+      if (syncCrm && email) {
+        const { data: contact } = await supabase.from('crm_contacts').select('id, tags').eq('email', email.toLowerCase()).maybeSingle();
+        if (contact) {
+          const tag = next === 'sent' ? 'plan-sent' : 'plan-pending';
+          if (!contact.tags.includes(tag)) {
+            await supabase.from('crm_contacts').update({ tags: contact.tags.filter((t) => t !== 'plan-sent' && t !== 'plan-pending').concat(tag) }).eq('id', contact.id);
+            await supabase.from('crm_activities').insert({ contact_id: contact.id, kind: 'system', body: next === 'sent' ? 'Meal plan sent out' : 'Meal plan marked as still to send' });
+          }
+        }
+      }
       setStatus(next);
       // Refresh the server-rendered row badge and the "new" count.
       router.refresh();

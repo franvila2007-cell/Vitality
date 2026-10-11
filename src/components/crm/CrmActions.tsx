@@ -97,7 +97,7 @@ export function planStatus(tags: string[]): 'sent' | 'pending' | null {
   return tags.includes('plan-pending') ? 'pending' : tags.includes('plan-sent') ? 'sent' : null;
 }
 
-export function CrmPlanStatus({ id, tags, size = 'md' }: { id: string; tags: string[]; size?: 'sm' | 'md' }) {
+export function CrmPlanStatus({ id, tags, email, size = 'md' }: { id: string; tags: string[]; email?: string | null; size?: 'sm' | 'md' }) {
   const [supabase] = useState(() => createClient());
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -112,7 +112,16 @@ export function CrmPlanStatus({ id, tags, size = 'md' }: { id: string; tags: str
     setBusy(true);
     const nextTags = tags.filter((t) => t !== 'plan-pending' && t !== 'plan-sent').concat(`plan-${next}`);
     const { error } = await supabase.from('crm_contacts').update({ tags: nextTags }).eq('id', id);
-    if (!error) await supabase.from('crm_activities').insert({ contact_id: id, kind: 'system', body: next === 'sent' ? 'Meal plan sent out' : 'Meal plan marked as still to send' });
+    if (!error) {
+      await supabase.from('crm_activities').insert({ contact_id: id, kind: 'system', body: next === 'sent' ? 'Meal plan sent out' : 'Meal plan marked as still to send' });
+      // Keep their latest IronBodyFit form request in the inbox in step.
+      if (email) {
+        const { data: req } = await supabase.from('meal_plan_requests').select('id, status').eq('email', email).eq('source', 'ironbodyfit').order('created_at', { ascending: false }).limit(1).maybeSingle();
+        if (req && (next === 'sent' ? req.status !== 'sent' : req.status === 'sent')) {
+          await supabase.from('meal_plan_requests').update({ status: next === 'sent' ? 'sent' : 'new' }).eq('id', req.id);
+        }
+      }
+    }
     setBusy(false);
     if (error) setOverride(null);
     else router.refresh();

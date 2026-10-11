@@ -23,6 +23,8 @@ export type CrmContactRow = {
   client_id: string | null; stage_changed_at: string; last_activity_at: string; created_at: string;
   brand: CrmBrand; package: CrmPackage | null; package_price: number | null; package_start: string | null;
   payment_plan: CrmPaymentPlan | null; payment_method: string | null;
+  /** list order — IronBodyFit follows the coach's sheet; new contacts go last */
+  list_position: number;
 };
 export type CrmPaymentPlan = 'full' | 'monthly';
 export type CrmBrand = 'vitality' | 'ironbodyfit';

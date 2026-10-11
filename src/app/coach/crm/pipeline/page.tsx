@@ -22,7 +22,7 @@ export default async function CrmPipelinePage() {
 
   const [contactsRes, tasksRes] = await Promise.all([
     supabase.from('crm_contacts')
-      .select('id, full_name, source, stage, brand, package, stage_changed_at, last_activity_at, tags')
+      .select('id, full_name, email, source, stage, brand, package, stage_changed_at, last_activity_at, tags, list_position')
       .in('stage', COLUMNS)
       .order('last_activity_at', { ascending: false })
       .limit(2000),
@@ -37,7 +37,9 @@ export default async function CrmPipelinePage() {
     <div className="-mx-4 px-4 overflow-x-auto pb-2">
       <div className="flex gap-3 min-w-max">
         {COLUMNS.map((stage) => {
-          const cards = contacts.filter((c) => c.stage === stage).sort((a, b) => brandOrder(a.brand) - brandOrder(b.brand));
+          // Vitality first (most recent activity), then IronBodyFit in sheet order.
+          const cards = contacts.filter((c) => c.stage === stage)
+            .sort((a, b) => brandOrder(a.brand) - brandOrder(b.brand) || (a.brand === 'ironbodyfit' ? a.list_position - b.list_position : 0));
           const ibf = cards.filter((c) => c.brand === 'ironbodyfit').length;
           return (
             <div key={stage} className="w-64 flex-shrink-0">
@@ -73,7 +75,7 @@ export default async function CrmPipelinePage() {
                         </div>
                       )}
                       <div className="relative mt-2 flex items-center justify-end gap-1.5">
-                        <CrmPlanStatus id={c.id} tags={c.tags} size="sm" />
+                        <CrmPlanStatus id={c.id} tags={c.tags} email={c.email} size="sm" />
                         <CrmStagePicker id={c.id} initial={c.stage} compact />
                       </div>
                     </div>

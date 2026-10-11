@@ -73,7 +73,7 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
                     {new Date(r.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </span>
                 </div>
-                <MealPlanStatusPicker id={r.id} initial={r.status} />
+                <MealPlanStatusPicker id={r.id} initial={r.status} email={r.email} syncCrm={source === 'ironbodyfit'} />
                 <AssessmentAnswers answers={a} sections={sections} />
               </div>
             </details>
