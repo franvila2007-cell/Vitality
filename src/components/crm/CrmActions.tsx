@@ -89,3 +89,26 @@ export function CrmRowDelete({ id, name }: { id: string; name: string }) {
     </button>
   );
 }
+
+// For meal-plan contacts tagged plan-pending / plan-sent (e.g. the
+// IronBodyFit client sheet): flip the tag in one tap.
+export function CrmPlanStatus({ id, tags }: { id: string; tags: string[] }) {
+  const [supabase] = useState(() => createClient());
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const pending = tags.includes('plan-pending');
+  if (!pending && !tags.includes('plan-sent')) return null;
+  async function flip() {
+    setBusy(true);
+    const next = tags.filter((t) => t !== 'plan-pending' && t !== 'plan-sent').concat(pending ? 'plan-sent' : 'plan-pending');
+    const { error } = await supabase.from('crm_contacts').update({ tags: next }).eq('id', id);
+    if (!error) await supabase.from('crm_activities').insert({ contact_id: id, kind: 'system', body: pending ? 'Meal plan sent out' : 'Meal plan marked as pending again' });
+    setBusy(false);
+    if (!error) router.refresh();
+  }
+  return pending ? (
+    <button onClick={flip} disabled={busy} className="rounded-full bg-ibf-red text-white px-3 py-1.5 text-xs font-medium disabled:opacity-50">✓ Mark meal plan as sent</button>
+  ) : (
+    <button onClick={flip} disabled={busy} className="rounded-full border border-border px-3 py-1.5 text-xs font-medium text-neutral-500 disabled:opacity-50">Meal plan sent ✓ · undo</button>
+  );
+}

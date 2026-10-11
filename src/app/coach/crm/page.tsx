@@ -41,7 +41,8 @@ export default async function CrmOverviewPage() {
   const [contactsRes, tasksRes, activityRes, clientsRes, paymentsRes] = await Promise.all([
     supabase.from('crm_contacts').select('id, full_name, source, stage, brand, created_at, client_id, package, package_price, package_start, payment_plan').limit(10000),
     supabase.from('crm_tasks').select('id, title, due_on, done_at, contact_id').is('done_at', null).order('due_on').limit(50),
-    supabase.from('crm_activities').select('id, contact_id, kind, body, meta, created_at').order('created_at', { ascending: false }).limit(10),
+    // Bulk-import entries (e.g. the IronBodyFit client sheet) would drown out real activity.
+    supabase.from('crm_activities').select('id, contact_id, kind, body, meta, created_at').is('meta->>import', null).order('created_at', { ascending: false }).limit(10),
     supabase.from('profiles').select('id, created_at').eq('role', 'client'),
     supabase.from('crm_payments').select('id, contact_id, amount, due_on, paid_on, method, note').order('due_on').limit(20000),
   ]);

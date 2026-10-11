@@ -13,7 +13,7 @@ import { ago, daysSince, euro, shortDate } from '@/lib/crm/format';
 import CrmStagePicker from '@/components/crm/CrmStagePicker';
 import CrmTaskList from '@/components/crm/CrmTaskList';
 import CrmActivityComposer from '@/components/crm/CrmActivityComposer';
-import { CrmDeleteContact, CrmEditDetails } from '@/components/crm/CrmActions';
+import { CrmDeleteContact, CrmEditDetails, CrmPlanStatus } from '@/components/crm/CrmActions';
 import AddClientFromAssessment from '@/components/coach/AddClientFromAssessment';
 
 // One contact: who they are, where they are in the pipeline, what's next,
@@ -100,6 +100,7 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
           {c.phone && <Action href={`tel:${c.phone.replace(/[^\d+]/g, '')}`}>📞 Call</Action>}
           {c.email && <Action href={`mailto:${c.email}`}>✉️ Email</Action>}
           {c.client_id && <Action href={`/coach/clients/${c.client_id}`}>⭐ Client page</Action>}
+          <CrmPlanStatus id={c.id} tags={c.tags} />
         </div>
         <p className="text-2xs text-neutral-400 mt-2">{[c.email, c.phone].filter(Boolean).join(' · ') || 'No email or phone yet — add them in Edit details.'}</p>
 

@@ -85,6 +85,14 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
             className={`flex-shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${activeType === t.key ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-border text-neutral-600 hover:border-neutral-300'}`}
           >{t.label}</Link>
         ))}
+        {/* IronBodyFit meal plans: has their plan gone out yet? */}
+        {[{ tag: 'plan-pending', label: 'Plan pending' }, { tag: 'plan-sent', label: 'Plan sent' }].map((t) => (
+          <Link
+            key={t.tag}
+            href={href({ tag: tag === t.tag ? '' : t.tag })}
+            className={`flex-shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${tag === t.tag ? 'border-ibf-red bg-ibf-red text-white' : 'border-ibf-red/30 text-ibf-red hover:border-ibf-red'}`}
+          >{t.label}</Link>
+        ))}
       </div>
 
       <form className="flex flex-wrap gap-2 mb-3" action="/coach/crm/contacts">
