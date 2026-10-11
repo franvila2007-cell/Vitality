@@ -24,6 +24,8 @@ export async function recordFunnelEvent(admin: Admin, ev: {
   summary: string;
   submissionId?: string;
   extra?: Record<string, unknown>;
+  /** The channel the person says they came from (e.g. 'instagram'); stored as the contact's source instead of the form's. */
+  contactSource?: string;
   /** IronBodyFit meal-plan form: they're a meal-plan client straight away, plan still to send */
   mealPlanClient?: boolean;
 }): Promise<boolean> {
@@ -40,8 +42,8 @@ export async function recordFunnelEvent(admin: Admin, ev: {
     const typed = ev.fullName.trim().replace(/\s+/g, ' ');
     // "maria borg" → "Maria Borg"; names typed with capitals are left alone.
     const name = typed === typed.toLowerCase() ? typed.replace(/(^|[\s'-])(\p{L})/gu, (_, p, c) => p + c.toUpperCase()) : typed;
-    const cols = 'id, phone, stage, package, tags';
-    type Match = { id: string; phone: string | null; stage: CrmStage; package: CrmContactRow['package']; tags: string[] };
+    const cols = 'id, phone, stage, package, tags, source';
+    type Match = { id: string; phone: string | null; stage: CrmStage; package: CrmContactRow['package']; tags: string[]; source: string };
     let existing: Match | null = null;
     if (email) {
       existing = (await admin.from('crm_contacts').select(cols).eq('email', email).maybeSingle()).data;
@@ -74,7 +76,7 @@ export async function recordFunnelEvent(admin: Admin, ev: {
         full_name: name || email || 'Unknown',
         email: email || null,
         phone,
-        source: ev.source,
+        source: ev.contactSource ?? ev.source,
         brand,
         stage,
         client_id: isClient ? profile!.id : null,
@@ -90,6 +92,9 @@ export async function recordFunnelEvent(admin: Admin, ev: {
     } else {
       const update: Partial<CrmContactRow> = {};
       if (!existing?.phone && phone) update.phone = phone;
+      // A contact whose source is just "which form they filled in" learns
+      // where they really came from; a real channel already on file stays.
+      if (ev.contactSource && existing && ['other', 'assessment', 'v_plan', 'join_form'].includes(existing.source)) update.source = ev.contactSource;
       // An existing lead / past contact asking for a meal plan becomes a
       // meal-plan client with the plan to send; existing 1-1 clients keep
       // their package.

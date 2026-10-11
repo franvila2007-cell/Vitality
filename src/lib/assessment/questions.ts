@@ -38,6 +38,8 @@ export type Section = {
 
 export type Answers = Record<string, string | string[]>;
 
+import { HEARD_QUESTIONS } from '@/lib/crm/heard';
+
 const FREQ = ['Rarely', 'Sometimes', 'Often'];
 
 export const SECTIONS: Section[] = [
@@ -55,6 +57,7 @@ export const SECTIONS: Section[] = [
       { id: 'occupation', type: 'text', label: 'Occupation', required: true, autoComplete: 'organization-title' },
       { id: 'working_hours', type: 'text', label: 'Typical working hours', placeholder: 'e.g. Mon–Fri, 8:30–17:30' },
       { id: 'weekday', type: 'textarea', label: 'Give us a quick idea of what a normal weekday looks like for you.', placeholder: 'Wake up, commute, work, gym, family time…' },
+      ...HEARD_QUESTIONS,
     ],
   },
   {

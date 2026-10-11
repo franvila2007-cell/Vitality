@@ -1,4 +1,5 @@
 import type { Section } from '@/lib/assessment/questions';
+import { HEARD_QUESTIONS } from '@/lib/crm/heard';
 
 // Single source of truth for the V Plans form — meal-plan requests from
 // Vitality's own clients. The public form at /vitality-meal-plan renders from this,
@@ -20,6 +21,7 @@ export const V_PLAN_SECTIONS: Section[] = [
         id: 'goal', type: 'choice', label: 'What is the main goal of this meal plan?', required: true,
         options: ['Lose fat', 'Build muscle', 'Lose fat & build muscle', 'Improve performance', 'Better health & energy'],
       },
+      ...HEARD_QUESTIONS,
     ],
   },
   {

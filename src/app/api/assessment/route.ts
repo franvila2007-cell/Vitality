@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { SECTIONS } from '@/lib/assessment/questions';
 import { parseFormSubmission } from '@/lib/assessment/submit';
 import { recordFunnelEvent } from '@/lib/crm/ingest';
+import { heardInfo } from '@/lib/crm/heard';
 
 // Public (no login): a brand-new client submits their onboarding assessment.
 // The insert uses the service-role key because the assessments table has no
@@ -29,9 +30,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "We couldn't save your assessment. Please try again in a moment." }, { status: 500 });
   }
   // Log it on the CRM contact after the response — never slows or fails the form.
+  const heard = heardInfo(clean);
   after(() => recordFunnelEvent(admin, {
     fullName: clean.full_name as string, email: clean.email as string, phone: clean.phone as string,
-    source: 'assessment', form: 'assessment', summary: 'Submitted the onboarding assessment', submissionId,
+    source: 'assessment', form: 'assessment', submissionId,
+    summary: `Submitted the onboarding assessment${heard.phrase ? ` · ${heard.phrase}` : ''}`,
+    contactSource: heard.source, extra: heard.extra,
   }));
   return NextResponse.json({ ok: true });
 }
