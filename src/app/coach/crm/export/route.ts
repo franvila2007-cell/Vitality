@@ -30,10 +30,11 @@ export async function GET(req: Request) {
     const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
     return `"${safe.replace(/"/g, '""')}"`;
   };
-  const header = ['Name', 'Business', 'Email', 'Phone', 'Stage', 'Source', 'Package', 'Price €', 'Package start', 'Package end', 'Tags', 'Lost reason', 'Notes', 'Added', 'Last activity'];
+  const header = ['Name', 'Business', 'Email', 'Phone', 'Stage', 'Source', 'Package', 'Price €', 'Paid', 'Method', 'Package start', 'Package end', 'Tags', 'Lost reason', 'Notes', 'Added', 'Last activity'];
   const lines = (data || []).map((c) => [
     c.full_name, BRAND_META[c.brand]?.label ?? c.brand, c.email, c.phone, STAGE_META[c.stage]?.label ?? c.stage, sourceLabel(c.source),
-    c.package ? PACKAGE_META[c.package].label : '', c.package_price, c.package_start, c.package && c.package_start ? packageEnd(c.package_start, c.package) : '',
+    c.package ? PACKAGE_META[c.package].label : '', c.package_price,
+    c.payment_plan === 'monthly' ? 'Monthly' : c.payment_plan === 'full' ? 'In full' : '', c.payment_method, c.package_start, c.package && c.package_start ? packageEnd(c.package_start, c.package) : '',
     c.tags.join(', '), c.lost_reason, c.notes, c.created_at.slice(0, 10), c.last_activity_at.slice(0, 10),
   ].map(cell).join(','));
   const csv = '﻿' + [header.map(cell).join(','), ...lines].join('\r\n');

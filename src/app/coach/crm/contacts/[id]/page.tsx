@@ -3,7 +3,9 @@ import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import type { Answers } from '@/lib/assessment/questions';
 import { clientSetupFromAssessment, type ClientSetup } from '@/lib/assessment/clientSetup';
-import { ACTIVITY_META, BRAND_META, FORM_INBOX, SOURCE_META, STAGE_META, sourceLabel, waLink } from '@/lib/crm/constants';
+import { ACTIVITY_META, BRAND_META, CLIENT_TYPE_META, FORM_INBOX, SOURCE_META, STAGE_META, clientType, sourceLabel, waLink } from '@/lib/crm/constants';
+import { weightProgress } from '@/lib/crm/progress';
+import CrmPayments from '@/components/crm/CrmPayments';
 import { packageContext } from '@/lib/crm/packages';
 import CrmPackageEditor from '@/components/crm/CrmPackageEditor';
 import Image from 'next/image';
@@ -22,10 +24,11 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
 
-  const [contactRes, activitiesRes, tasksRes] = await Promise.all([
+  const [contactRes, activitiesRes, tasksRes, paymentsRes] = await Promise.all([
     supabase.from('crm_contacts').select('*').eq('id', id).maybeSingle(),
     supabase.from('crm_activities').select('*').eq('contact_id', id).order('created_at', { ascending: false }).limit(200),
     supabase.from('crm_tasks').select('*').eq('contact_id', id).order('done_at', { ascending: false, nullsFirst: true }).order('due_on').limit(50),
+    supabase.from('crm_payments').select('*').eq('contact_id', id).order('due_on').limit(100),
   ]);
   const c = contactRes.data;
   if (!c) notFound();
@@ -49,7 +52,13 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
     }
   }
 
-  const pkgCtx = await packageContext(supabase, c.client_id);
+  const [pkgCtx, weights] = await Promise.all([
+    packageContext(supabase, c.client_id),
+    weightProgress(supabase, c.client_id ? [c.client_id] : []),
+  ]);
+  const weight = c.client_id ? weights.get(c.client_id) : undefined;
+  const type = clientType(c);
+  const payments = paymentsRes.data || [];
   const isClient = c.stage === 'won' || c.stage === 'past' || !!c.package;
   const tasks = tasksRes.data || [];
   const openTasks = tasks.filter((t) => !t.done_at);
@@ -72,6 +81,7 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
               <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide ${BRAND_META[c.brand].chip}`}>
                 <Image src={BRAND_META[c.brand].logo} alt="" width={12} height={11} />{BRAND_META[c.brand].label}
               </span>
+              {type && <span className={`rounded-full px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide ${CLIENT_TYPE_META[type].chip}`}>{CLIENT_TYPE_META[type].label}</span>}
             </div>
             <p className="text-2xs text-neutral-400 mt-0.5">
               {SOURCE_META[c.source]?.emoji} {sourceLabel(c.source)} · added {shortDate(c.created_at)} · {STAGE_META[c.stage].label} for {daysSince(c.stage_changed_at, nowMs)}d
@@ -114,14 +124,47 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
 
       <div className={`bg-surface border rounded-xl p-4 ${isClient && !c.package ? 'border-brand/40 shadow-[0_4px_16px_-10px_rgba(15,168,166,0.5)]' : 'border-border'}`}>
         <p className="text-sm font-medium mb-1">{c.package ? 'Package' : isClient ? 'Which package did they join?' : 'Joined? Record their package'}</p>
-        {!c.package && <p className="text-2xs text-neutral-400 mb-3">{isClient ? 'Every client is on 6 months or 1 year — add it so revenue and renewals are tracked.' : 'Saving a package marks them as a Client.'}</p>}
+        {!c.package && <p className="text-2xs text-neutral-400 mb-3">{isClient ? '1-1 coaching (3 months, 6 months or 1 year) or a €69.99 meal plan — add it, with how they pay, so revenue and cash collected are tracked.' : 'Saving a package marks them as a Client.'}</p>}
         <CrmPackageEditor
           contactId={c.id}
-          initial={{ package: c.package, price: c.package_price != null ? Number(c.package_price) : null, start: c.package_start }}
+          brand={c.brand}
+          initial={{ package: c.package, price: c.package_price != null ? Number(c.package_price) : null, start: c.package_start, plan: c.payment_plan, method: c.payment_method }}
           defaultStart={pkgCtx.defaultStart}
           suggestedPrices={pkgCtx.suggestedPrices}
         />
       </div>
+
+      {(c.package || payments.length > 0) && (
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <p className="text-sm font-medium mb-3">Payments</p>
+          <CrmPayments payments={payments} contactId={c.id} emptyText="No payments recorded yet." />
+        </div>
+      )}
+
+      {weight && (
+        <div className="bg-surface border border-border rounded-xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-sm font-medium">Weight progress</p>
+            <Link href={`/coach/clients/${c.client_id}`} className="text-xs font-medium text-brand-dark hover:opacity-70">Client page →</Link>
+          </div>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <WeightStat label="First weigh-in" value={`${weight.first}kg`} sub={shortDate(weight.firstDate)} />
+            <WeightStat label="Latest" value={`${weight.latest}kg`} />
+            <WeightStat
+              label="Change"
+              value={`${weight.change > 0 ? '+' : ''}${weight.change}kg`}
+              tone={weight.change === 0 ? undefined : (weight.goalType === 'lose') === (weight.change < 0) ? 'good' : 'bad'}
+            />
+            <WeightStat label="Goal" value={weight.goal ? `${weight.goal}kg` : '–'} />
+          </div>
+          {weight.pctToGoal != null && (
+            <div className="mt-3">
+              <div className="h-1.5 rounded-full bg-neutral-100 overflow-hidden"><div className="h-full rounded-full bg-brand" style={{ width: `${weight.pctToGoal}%` }} /></div>
+              <p className="text-2xs text-neutral-400 mt-1">{weight.pctToGoal}% of the way to their goal</p>
+            </div>
+          )}
+        </div>
+      )}
 
       {!c.client_id && setup && c.stage !== 'past' && (
         <div className="bg-surface border border-border rounded-xl p-4">
@@ -185,6 +228,16 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
           })}
         </ol>
       </div>
+    </div>
+  );
+}
+
+function WeightStat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'good' | 'bad' }) {
+  return (
+    <div className="rounded-lg bg-neutral-50 py-2 px-1">
+      <div className="text-3xs uppercase tracking-wide text-neutral-400 leading-tight">{label}</div>
+      <div className={`text-sm font-semibold ${tone === 'good' ? 'text-status-good-text' : tone === 'bad' ? 'text-status-bad-text' : ''}`}>{value}</div>
+      {sub && <div className="text-3xs text-neutral-400">{sub}</div>}
     </div>
   );
 }

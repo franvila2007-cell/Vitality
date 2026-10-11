@@ -67,17 +67,41 @@ export const BRAND_META = Object.fromEntries(BRANDS.map((b) => [b.key, b])) as R
 export const brandOrder = (b: CrmBrand) => (b === 'vitality' ? 0 : 1);
 export const brandForSource = (source: string): CrmBrand => (source === 'ironbodyfit' ? 'ironbodyfit' : 'vitality');
 
-// The two packages a client can join.
-export const PACKAGES: { key: CrmPackage; label: string; short: string; months: number }[] = [
-  { key: '6_months', label: '6 months', short: '6 mo', months: 6 },
-  { key: '12_months', label: '1 year', short: '1 yr', months: 12 },
+// What a client can buy: 1-1 coaching (3-month offer, 6 months, 1 year) or a
+// one-off meal plan. A meal plan's business (Vitality / IronBodyFit) is the
+// contact's brand.
+export const PACKAGES: { key: CrmPackage; label: string; short: string; months: number | null; kind: 'coaching' | 'meal_plan'; note?: string; defaultPrice?: number }[] = [
+  { key: '3_months', label: '3 months', short: '3 mo', months: 3, kind: 'coaching', note: 'Offer' },
+  { key: '6_months', label: '6 months', short: '6 mo', months: 6, kind: 'coaching' },
+  { key: '12_months', label: '1 year', short: '1 yr', months: 12, kind: 'coaching' },
+  { key: 'meal_plan', label: 'Meal plan', short: 'Meal plan', months: null, kind: 'meal_plan', defaultPrice: 69.99 },
 ];
 export const PACKAGE_META = Object.fromEntries(PACKAGES.map((p) => [p.key, p])) as Record<CrmPackage, (typeof PACKAGES)[number]>;
 
-// Last day the package covers (start + 6/12 months, minus a day).
-export function packageEnd(start: string, pkg: CrmPackage): string {
+// Last day a coaching package covers (start + N months, minus a day). Meal
+// plans are one-off, so they have no end.
+export function packageEnd(start: string, pkg: CrmPackage): string | null {
+  const months = PACKAGE_META[pkg].months;
+  if (!months) return null;
   const [y, m, d] = start.split('-').map(Number);
-  const end = new Date(Date.UTC(y, m - 1 + PACKAGE_META[pkg].months, d));
+  const end = new Date(Date.UTC(y, m - 1 + months, d));
   end.setUTCDate(end.getUTCDate() - 1);
   return end.toISOString().slice(0, 10);
 }
+
+// What kind of client someone is. Anyone with an app account counts as 1-1
+// coaching even before their package is recorded.
+export type ClientType = 'coaching' | 'vitality_meal_plan' | 'ibf_meal_plan';
+export const CLIENT_TYPES: { key: ClientType; label: string; chip: string }[] = [
+  { key: 'coaching', label: '1-1 Coaching', chip: 'bg-brand-light text-brand-dark' },
+  { key: 'vitality_meal_plan', label: 'Vitality Meal Plan', chip: 'bg-[#e6f4fb] text-[#2a8fbf]' },
+  { key: 'ibf_meal_plan', label: 'IronBodyFit Meal Plan', chip: 'bg-ibf-red-light text-ibf-red' },
+];
+export const CLIENT_TYPE_META = Object.fromEntries(CLIENT_TYPES.map((t) => [t.key, t])) as Record<ClientType, (typeof CLIENT_TYPES)[number]>;
+export function clientType(c: { package: CrmPackage | null; brand: CrmBrand; client_id: string | null; stage: CrmStage }): ClientType | null {
+  if (c.package === 'meal_plan') return c.brand === 'ironbodyfit' ? 'ibf_meal_plan' : 'vitality_meal_plan';
+  if (c.package || c.client_id) return 'coaching';
+  return null;
+}
+
+export const PAYMENT_METHODS = ['Cash', 'Card', 'Bank transfer', 'Revolut', 'Other'];

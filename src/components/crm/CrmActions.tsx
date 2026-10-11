@@ -41,13 +41,13 @@ export function CrmDeleteContact({ id, name }: { id: string; name: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   async function del() {
-    if (!confirm(`Delete ${name} from the CRM? Their timeline and follow-ups are deleted too. Client accounts and form submissions are not affected.`)) return;
+    if (!confirm(`Remove ${name} from the CRM?\n\nTheir timeline, follow-ups and payment records are deleted. Their app account and form submissions are not affected.`)) return;
     setBusy(true);
     const { error } = await supabase.from('crm_contacts').delete().eq('id', id);
     setBusy(false);
     if (!error) { router.push('/coach/crm/contacts'); router.refresh(); }
   }
-  return <button onClick={del} disabled={busy} className="text-xs text-neutral-400 hover:text-status-bad-text disabled:opacity-50">Delete contact</button>;
+  return <button onClick={del} disabled={busy} className="rounded-lg border border-status-bad/30 px-3 py-1.5 text-xs font-medium text-status-bad-text hover:bg-status-bad-bg disabled:opacity-50">Remove from CRM</button>;
 }
 
 // Copy-to-clipboard for funnel links on the overview.
@@ -60,6 +60,32 @@ export function CopyLink({ path }: { path: string }) {
   return (
     <button onClick={copy} className={`flex-shrink-0 rounded-md border px-2 py-0.5 text-2xs font-medium ${copied ? 'border-status-good/40 text-status-good-text bg-status-good-bg' : 'border-border text-neutral-500 hover:text-neutral-800'}`}>
       {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
+// Small bin button at the end of a contact row: removes them from the CRM
+// only (their app account and form submissions stay).
+export function CrmRowDelete({ id, name }: { id: string; name: string }) {
+  const [supabase] = useState(() => createClient());
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  async function del() {
+    if (!confirm(`Remove ${name} from the CRM?\n\nTheir timeline, follow-ups and payment records are deleted. Their app account and form submissions are not affected.`)) return;
+    setBusy(true);
+    const { error } = await supabase.from('crm_contacts').delete().eq('id', id);
+    setBusy(false);
+    if (!error) router.refresh();
+  }
+  return (
+    <button
+      onClick={del}
+      disabled={busy}
+      aria-label={`Remove ${name} from the CRM`}
+      title="Remove from CRM"
+      className="self-stretch px-3 text-neutral-300 hover:text-status-bad-text hover:bg-status-bad-bg rounded-r-xl transition-colors disabled:opacity-40"
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" /></svg>
     </button>
   );
 }

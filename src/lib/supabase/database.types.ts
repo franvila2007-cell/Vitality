@@ -22,9 +22,11 @@ export type CrmContactRow = {
   lost_reason: string | null; tags: string[]; value_eur: number | null; next_follow_up: string | null; notes: string;
   client_id: string | null; stage_changed_at: string; last_activity_at: string; created_at: string;
   brand: CrmBrand; package: CrmPackage | null; package_price: number | null; package_start: string | null;
+  payment_plan: CrmPaymentPlan | null; payment_method: string | null;
 };
+export type CrmPaymentPlan = 'full' | 'monthly';
 export type CrmBrand = 'vitality' | 'ironbodyfit';
-export type CrmPackage = '6_months' | '12_months';
+export type CrmPackage = '3_months' | '6_months' | '12_months' | 'meal_plan';
 
 export type MealPlanStatus = 'new' | 'in_progress' | 'sent';
 export type MealPlanSource = 'ironbodyfit' | 'vitality';
@@ -192,6 +194,11 @@ export type Database = {
         { id: string; contact_id: string; kind: CrmActivityKind; body: string; meta: Json; created_at: string },
         { id?: string; contact_id: string; kind: CrmActivityKind; body?: string; meta?: Json; created_at?: string },
         { id?: string; contact_id?: string; kind?: CrmActivityKind; body?: string; meta?: Json; created_at?: string }
+      >;
+      crm_payments: Table<
+        { id: string; contact_id: string; amount: number; due_on: string; paid_on: string | null; method: string | null; note: string; created_at: string },
+        { id?: string; contact_id: string; amount: number; due_on: string; paid_on?: string | null; method?: string | null; note?: string; created_at?: string },
+        { id?: string; contact_id?: string; amount?: number; due_on?: string; paid_on?: string | null; method?: string | null; note?: string; created_at?: string }
       >;
       crm_tasks: Table<
         { id: string; contact_id: string; title: string; due_on: string; done_at: string | null; created_at: string },
