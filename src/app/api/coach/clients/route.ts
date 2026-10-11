@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { markContactWon } from '@/lib/crm/ingest';
 
 const DEFAULT_HABITS = [
   { key: 'sunlight', label: 'Get 10+ minutes of sunlight', tag: 'Morning' },
@@ -55,6 +56,7 @@ export async function POST(req: Request) {
       const { data: existing } = await admin.from('profiles').select('id, role, archived_at, full_name').ilike('email', email).maybeSingle();
       if (existing?.role === 'client' && existing.archived_at) {
         await admin.from('profiles').update({ archived_at: null }).eq('id', existing.id);
+        after(() => markContactWon(admin, { email, fullName: existing.full_name || fullName, clientId: existing.id, restored: true }));
         return NextResponse.json({ id: existing.id, email, restored: true });
       }
       if (existing?.role === 'client') {
@@ -83,5 +85,6 @@ export async function POST(req: Request) {
     admin.from('habits').insert(DEFAULT_HABITS.map((h, i) => ({ user_id: clientId, key: h.key, label: h.label, tag: h.tag, sort_order: i }))),
   ]);
 
+  after(() => markContactWon(admin, { email, fullName, clientId, restored: false }));
   return NextResponse.json({ id: clientId, email: invited.user.email, restored: false });
 }

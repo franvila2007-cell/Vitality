@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { V_PLAN_SECTIONS } from '@/lib/mealPlan/vPlanQuestions';
 import { parseFormSubmission } from '@/lib/assessment/submit';
+import { recordFunnelEvent } from '@/lib/crm/ingest';
 
 // Public (no login): a Vitality client requests a V Plan (meal plan). Shares
 // meal_plan_requests with the IronBodyFit form, tagged source = 'vitality',
@@ -29,5 +30,10 @@ export async function POST(req: Request) {
     console.error('v plan request insert failed', error);
     return NextResponse.json({ error: "We couldn't send your answers. Please try again in a moment." }, { status: 500 });
   }
+  // Log it on the CRM contact after the response — never slows or fails the form.
+  after(() => recordFunnelEvent(admin, {
+    fullName: clean.full_name as string, email: clean.email as string, phone: clean.phone as string,
+    source: 'v_plan', form: 'v_plan', summary: `Requested a Vitality meal plan${clean.goal ? ` · goal: ${clean.goal}` : ''}`, submissionId,
+  }));
   return NextResponse.json({ ok: true });
 }

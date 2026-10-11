@@ -15,6 +15,14 @@ type HabitScheduleFields = {
   starts_on: string; archived_on: string | null; added_by: 'coach' | 'client';
 };
 
+export type CrmStage = 'lead' | 'contacted' | 'consult' | 'proposal' | 'won' | 'lost' | 'past';
+export type CrmActivityKind = 'note' | 'call' | 'message' | 'meeting' | 'email' | 'stage' | 'form' | 'system';
+export type CrmContactRow = {
+  id: string; full_name: string; email: string | null; phone: string | null; source: string; stage: CrmStage;
+  lost_reason: string | null; tags: string[]; value_eur: number | null; next_follow_up: string | null; notes: string;
+  client_id: string | null; stage_changed_at: string; last_activity_at: string; created_at: string;
+};
+
 export type MealPlanStatus = 'new' | 'in_progress' | 'sent';
 export type MealPlanSource = 'ironbodyfit' | 'vitality';
 
@@ -170,6 +178,22 @@ export type Database = {
         { id: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; created_at: string },
         { id?: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; created_at?: string },
         { id?: string; submission_id?: string; full_name?: string; email?: string; phone?: string; answers?: Json; created_at?: string }
+      >;
+      // CRM (0012_crm.sql) — coach-only; see src/lib/crm.
+      crm_contacts: Table<
+        CrmContactRow,
+        Partial<CrmContactRow> & { full_name: string },
+        Partial<CrmContactRow>
+      >;
+      crm_activities: Table<
+        { id: string; contact_id: string; kind: CrmActivityKind; body: string; meta: Json; created_at: string },
+        { id?: string; contact_id: string; kind: CrmActivityKind; body?: string; meta?: Json; created_at?: string },
+        { id?: string; contact_id?: string; kind?: CrmActivityKind; body?: string; meta?: Json; created_at?: string }
+      >;
+      crm_tasks: Table<
+        { id: string; contact_id: string; title: string; due_on: string; done_at: string | null; created_at: string },
+        { id?: string; contact_id: string; title: string; due_on: string; done_at?: string | null; created_at?: string },
+        { id?: string; contact_id?: string; title?: string; due_on?: string; done_at?: string | null; created_at?: string }
       >;
       meal_plan_requests: Table<
         { id: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; status: MealPlanStatus; source: MealPlanSource; created_at: string },

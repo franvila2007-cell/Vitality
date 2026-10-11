@@ -1,7 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { SECTIONS } from '@/lib/assessment/questions';
 import { parseFormSubmission } from '@/lib/assessment/submit';
+import { recordFunnelEvent } from '@/lib/crm/ingest';
 
 // Public (no login): a brand-new client submits their onboarding assessment.
 // The insert uses the service-role key because the assessments table has no
@@ -27,5 +28,10 @@ export async function POST(req: Request) {
     console.error('assessment insert failed', error);
     return NextResponse.json({ error: "We couldn't save your assessment. Please try again in a moment." }, { status: 500 });
   }
+  // Log it on the CRM contact after the response — never slows or fails the form.
+  after(() => recordFunnelEvent(admin, {
+    fullName: clean.full_name as string, email: clean.email as string, phone: clean.phone as string,
+    source: 'assessment', form: 'assessment', summary: 'Submitted the onboarding assessment', submissionId,
+  }));
   return NextResponse.json({ ok: true });
 }

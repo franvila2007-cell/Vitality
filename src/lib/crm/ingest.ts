@@ -1,0 +1,96 @@
+import type { createAdminClient } from '@/lib/supabase/admin';
+import type { CrmStage } from '@/lib/supabase/database.types';
+
+type Admin = ReturnType<typeof createAdminClient>;
+
+// Records a funnel event on the matching CRM contact (by email), creating
+// the contact if it's new. Called server-side from every public form route
+// with the service-role client, after the submission itself is saved.
+// Never throws: for forms that save their own submission the CRM is a side
+// effect, so a failure here must not turn a saved submission into an error.
+// Returns whether the event was recorded (/join relies on it — the CRM is
+// the only place a join lead is stored).
+export async function recordFunnelEvent(admin: Admin, ev: {
+  fullName: string;
+  email: string;
+  phone?: string | null;
+  source: string;
+  form: string;
+  summary: string;
+  submissionId?: string;
+  extra?: Record<string, unknown>;
+}): Promise<boolean> {
+  try {
+    // A retried / double-clicked submission is saved once; log it once too.
+    if (ev.submissionId) {
+      const { data: seen } = await admin.from('crm_activities').select('id').eq('meta->>submission_id', ev.submissionId).limit(1);
+      if (seen?.length) return true;
+    }
+    const email = ev.email.trim().toLowerCase();
+    const { data: existing } = await admin.from('crm_contacts').select('id, phone').eq('email', email).maybeSingle();
+
+    let contactId = existing?.id;
+    if (!contactId) {
+      // Someone who already has a client account is a client, not a lead.
+      const { data: profile } = await admin.from('profiles').select('id, role, archived_at').ilike('email', email).maybeSingle();
+      const isClient = profile?.role === 'client';
+      const stage: CrmStage = isClient ? (profile.archived_at ? 'past' : 'won') : 'lead';
+      const { data: created, error } = await admin.from('crm_contacts').insert({
+        full_name: ev.fullName.trim() || email,
+        email,
+        phone: ev.phone || null,
+        source: ev.source,
+        stage,
+        client_id: isClient ? profile.id : null,
+      }).select('id').single();
+      if (error) {
+        // Lost a race with a parallel submission for the same email — use theirs.
+        const { data: again } = await admin.from('crm_contacts').select('id').eq('email', email).maybeSingle();
+        contactId = again?.id;
+      } else {
+        contactId = created.id;
+      }
+    } else if (!existing?.phone && ev.phone) {
+      await admin.from('crm_contacts').update({ phone: ev.phone }).eq('id', contactId);
+    }
+    if (!contactId) return false;
+
+    const { error } = await admin.from('crm_activities').insert({
+      contact_id: contactId,
+      kind: 'form',
+      body: ev.summary,
+      meta: { form: ev.form, submission_id: ev.submissionId ?? null, ...(ev.extra ?? {}) },
+    });
+    return !error;
+  } catch (err) {
+    console.error('crm: recordFunnelEvent failed', err);
+    return false;
+  }
+}
+
+// A client account was created (or restored) for this email: link the CRM
+// contact and mark them won, creating the contact if needed.
+export async function markContactWon(admin: Admin, ev: { email: string; fullName: string; clientId: string; restored: boolean }): Promise<void> {
+  try {
+    const email = ev.email.trim().toLowerCase();
+    const { data: existing } = await admin.from('crm_contacts').select('id').eq('email', email).maybeSingle();
+    let contactId = existing?.id;
+    if (contactId) {
+      await admin.from('crm_contacts').update({ stage: 'won', client_id: ev.clientId, lost_reason: null }).eq('id', contactId);
+    } else {
+      const { data: created } = await admin.from('crm_contacts').insert({
+        full_name: ev.fullName.trim() || email, email, source: 'other', stage: 'won', client_id: ev.clientId,
+      }).select('id').single();
+      contactId = created?.id;
+    }
+    if (contactId) {
+      await admin.from('crm_activities').insert({
+        contact_id: contactId, kind: 'system',
+        body: ev.restored ? 'Client account restored' : 'Client account created — invite sent',
+        meta: { client_id: ev.clientId },
+      });
+    }
+  } catch (err) {
+    console.error('crm: markContactWon failed', err);
+  }
+}
