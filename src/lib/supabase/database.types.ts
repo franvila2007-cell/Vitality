@@ -10,6 +10,11 @@ type Json = string | number | boolean | null | { [key: string]: Json | undefined
 // in this app selects a single table at a time.
 type Table<Row, Insert, Update> = { Row: Row; Insert: Insert; Update: Update; Relationships: [] };
 
+type HabitScheduleFields = {
+  emoji: string; days: number[] | null; on_date: string | null;
+  starts_on: string; archived_on: string | null; added_by: 'coach' | 'client';
+};
+
 export type MealPlanStatus = 'new' | 'in_progress' | 'sent';
 export type MealPlanSource = 'ironbodyfit' | 'vitality';
 
@@ -95,10 +100,11 @@ export type Database = {
         { user_id: string; date: string; water_l?: number; steps?: number; sleep_hours?: number },
         { user_id?: string; date?: string; water_l?: number; steps?: number; sleep_hours?: number }
       >;
+      // Schedule columns from 0011_habit_schedule.sql — see src/lib/habits.ts.
       habits: Table<
-        { id: string; user_id: string; key: string; label: string; tag: string; sort_order: number },
-        { id?: string; user_id: string; key: string; label: string; tag?: string; sort_order?: number },
-        { id?: string; user_id?: string; key?: string; label?: string; tag?: string; sort_order?: number }
+        { id: string; user_id: string; key: string; label: string; tag: string; sort_order: number } & HabitScheduleFields,
+        { id?: string; user_id: string; key: string; label: string; tag?: string; sort_order?: number } & Partial<HabitScheduleFields>,
+        { id?: string; user_id?: string; key?: string; label?: string; tag?: string; sort_order?: number } & Partial<HabitScheduleFields>
       >;
       habit_completions: Table<
         { user_id: string; habit_id: string; date: string; completed: boolean },

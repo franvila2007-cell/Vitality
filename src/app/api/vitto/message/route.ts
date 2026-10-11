@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { processVittoMessage, finishWithLLM, type VittoContext, type VittoAction, type MealEntry, type PendingState } from '@/lib/vitto/parser';
 import { buildVittoFoods } from '@/lib/vitto/buildFoods';
+import { HABIT_SCHEDULE_COLUMNS, completionsByDate, dailyStreak } from '@/lib/habits';
 import { llmParseFoodMessage, llmEstimateFoodInsights, llmAnswerQuestion } from '@/lib/vitto/llmFallback';
 
 export const runtime = 'nodejs';
@@ -147,23 +148,16 @@ async function applyActions(supabase: Awaited<ReturnType<typeof createClient>>, 
   }
 }
 
-// Ported from computeDailyStreak() in the original app: a day counts only if
-// it has >=1 logged meal AND >=1 completed habit; walk backward from `date`
-// until the first day that fails either condition.
+// A day counts if it has >=1 logged meal and >=1 ticked habit — or no habits
+// due that day at all (see dailyStreak in src/lib/habits.ts); walk back from
+// `date` until the first day that fails.
 async function computeStreak(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, date: string): Promise<number> {
   const windowStart = addDaysUTC(date, -90);
-  const [mealDatesRes, habitDatesRes] = await Promise.all([
+  const [mealDatesRes, habitsRes, completionsRes] = await Promise.all([
     supabase.from('food_log_entries').select('date').eq('user_id', userId).gte('date', windowStart).lte('date', date),
-    supabase.from('habit_completions').select('date').eq('user_id', userId).eq('completed', true).gte('date', windowStart).lte('date', date),
+    supabase.from('habits').select(HABIT_SCHEDULE_COLUMNS).eq('user_id', userId),
+    supabase.from('habit_completions').select('habit_id, date').eq('user_id', userId).eq('completed', true).gte('date', windowStart).lte('date', date),
   ]);
   const mealDates = new Set((mealDatesRes.data || []).map((r) => r.date));
-  const habitDates = new Set((habitDatesRes.data || []).map((r) => r.date));
-
-  let streak = 0;
-  let cursor = date;
-  while (mealDates.has(cursor) && habitDates.has(cursor)) {
-    streak++;
-    cursor = addDaysUTC(cursor, -1);
-  }
-  return streak;
+  return dailyStreak(date, mealDates, habitsRes.data || [], completionsByDate(completionsRes.data || []), (d) => addDaysUTC(d, -1));
 }

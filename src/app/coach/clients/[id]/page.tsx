@@ -11,6 +11,7 @@ import WeightTrendGraph from '@/components/WeightTrendGraph';
 import AssessmentAnswers from '@/components/coach/AssessmentAnswers';
 import type { Answers } from '@/lib/assessment/questions';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
+import { HABIT_SCHEDULE_COLUMNS, completionsByDate, habitDay } from '@/lib/habits';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
 import { getProjections, computeMonthColors, STATUS_META, type GoalType } from '@/lib/progress';
 
@@ -25,11 +26,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     supabase.from('targets').select('*').eq('user_id', id).maybeSingle(),
     supabase.from('weight_checkpoints').select('*').eq('user_id', id).order('month_index'),
     supabase.from('food_log_entries').select('*').eq('user_id', id).order('date', { ascending: false }).limit(500),
-    supabase.from('habits').select('id').eq('user_id', id),
-    // Retroactively scoring past days assumes today's habit list and targets
-    // applied then too — a reasonable approximation, since this app doesn't
-    // track historical versions of either.
-    supabase.from('habit_completions').select('date').eq('user_id', id).eq('completed', true).order('date', { ascending: false }).limit(2000),
+    supabase.from('habits').select(HABIT_SCHEDULE_COLUMNS).eq('user_id', id),
+    // Past days are scored against each habit's own schedule (starts_on /
+    // archived_on / days), but against today's targets — this app doesn't
+    // track historical versions of targets.
+    supabase.from('habit_completions').select('habit_id, date').eq('user_id', id).eq('completed', true).order('date', { ascending: false }).limit(2000),
   ]);
 
   if (profileRes.error || !profileRes.data) notFound();
@@ -41,13 +42,14 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   const clientProfile = clientProfileRes.data;
   const targets = targetsRes.data;
-  const habitsTotal = habitsRes.data?.length ?? 0;
+  const habits = habitsRes.data || [];
   const rankTargets = targets ? { calories: targets.calories, protein_g: targets.protein_g, carbs_g: targets.carbs_g, fat_g: targets.fat_g } : null;
 
-  const habitsDoneByDate = new Map<string, number>();
-  for (const row of habitCompletionsRes.data || []) {
-    habitsDoneByDate.set(row.date, (habitsDoneByDate.get(row.date) ?? 0) + 1);
-  }
+  const doneByDate = completionsByDate(habitCompletionsRes.data || []);
+  const habitInputs = (date: string) => {
+    const { total, done } = habitDay(habits, doneByDate, date);
+    return { habitsTotal: total, habitsDone: done };
+  };
 
   type DayMeal = { name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null; estimated: boolean } & Record<MicronutrientKey, number | null>;
   const mealsByDate = new Map<string, DayMeal[]>();
@@ -68,7 +70,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const historyDays = historyDates.map((date) => {
     const meals = mealsByDate.get(date)!;
     const t = meals.reduce((a, m) => ({ cal: a.cal + m.calories, prot: a.prot + m.protein_g, carb: a.carb + m.carbs_g, fat: a.fat + m.fat_g }), { cal: 0, prot: 0, carb: 0, fat: 0 });
-    const rank = computeDayRank({ habitsTotal, habitsDone: habitsDoneByDate.get(date) ?? 0, meals, targets: rankTargets }).rank;
+    const rank = computeDayRank({ ...habitInputs(date), meals, targets: rankTargets }).rank;
     return { date, t, count: meals.length, rank };
   });
 
@@ -77,7 +79,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   let currentOverride: 'gold' | 'silver' | 'bronze' | null = null;
   if (latestDate) {
     const overrideRes = await supabase.from('rank_overrides').select('rank').eq('user_id', id).eq('date', latestDate).maybeSingle();
-    rankBreakdown = computeDayRank({ habitsTotal, habitsDone: habitsDoneByDate.get(latestDate) ?? 0, meals: mealsByDate.get(latestDate) ?? [], targets: rankTargets });
+    rankBreakdown = computeDayRank({ ...habitInputs(latestDate), meals: mealsByDate.get(latestDate) ?? [], targets: rankTargets });
     currentOverride = overrideRes.data?.rank ?? null;
   }
 

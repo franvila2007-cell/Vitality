@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-// Same four tabs as the client's own nav, pointed at the coach's read-only
+// Same tabs as the client's own nav, pointed at the coach's read-only
 // mirror of each one.
 export default function CoachViewTabs({ clientId }: { clientId: string }) {
   const pathname = usePathname();
   const base = `/coach/clients/${clientId}/view`;
   const tabs = [
     { href: base, label: 'Today' },
+    { href: `${base}/habits`, label: 'Habits' },
     { href: `${base}/nutrition`, label: 'Nutrition' },
     { href: `${base}/progress`, label: 'Progress' },
     { href: `${base}/milestones`, label: 'Milestones' },

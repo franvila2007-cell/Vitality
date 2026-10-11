@@ -7,6 +7,7 @@ import RestoreClientButton from '@/components/coach/RestoreClientButton';
 import DeleteForeverButton from '@/components/coach/DeleteForeverButton';
 import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
 import { InboxCards } from '@/components/coach/FormInboxes';
+import { HABIT_SCHEDULE_COLUMNS, completionsByDate, habitDay } from '@/lib/habits';
 import { getInboxCounts } from '@/lib/coach/formInboxes';
 
 // Auth/role guard and the top header bar now live in coach/layout.tsx.
@@ -33,14 +34,14 @@ export default async function CoachPage() {
         // call "today" themselves.
         supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', c.id).order('date', { ascending: false }).limit(100),
         supabase.from('weight_checkpoints').select('*').eq('user_id', c.id),
-        supabase.from('habits').select('id').eq('user_id', c.id),
+        supabase.from('habits').select(HABIT_SCHEDULE_COLUMNS).eq('user_id', c.id),
         // Separate, explicitly date-bounded queries for the weekly gold
         // count — the recentMeals query above intentionally has no date
         // filter (so an inactive client's last-ever entry still surfaces),
         // which wouldn't reliably cover "the last 7 days" for clients who
         // log many times a day.
         supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', c.id).gte('date', weekStart).lte('date', serverToday),
-        supabase.from('habit_completions').select('date').eq('user_id', c.id).eq('completed', true).gte('date', weekStart).lte('date', serverToday),
+        supabase.from('habit_completions').select('habit_id, date').eq('user_id', c.id).eq('completed', true).gte('date', weekStart).lte('date', serverToday),
         supabase.from('rank_overrides').select('date, rank').eq('user_id', c.id).gte('date', weekStart).lte('date', serverToday),
       ]);
       const latestDate = recentMealsRes.data?.[0]?.date ?? null;
@@ -57,7 +58,7 @@ export default async function CoachPage() {
         status = [...colors].reverse().find((c) => c !== null) || null;
       }
 
-      const habitsTotal = habitsRes.data?.length ?? 0;
+      const habits = habitsRes.data || [];
       const rankTargets = targetsRes.data ? { calories: targetsRes.data.calories, protein_g: targetsRes.data.protein_g, carbs_g: targetsRes.data.carbs_g, fat_g: targetsRes.data.fat_g } : null;
       const weekMealsByDate = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null }[]>();
       for (const m of weekMealsRes.data || []) {
@@ -65,10 +66,7 @@ export default async function CoachPage() {
         arr.push(m);
         weekMealsByDate.set(m.date, arr);
       }
-      const weekHabitsDoneByDate = new Map<string, number>();
-      for (const row of weekCompletionsRes.data || []) {
-        weekHabitsDoneByDate.set(row.date, (weekHabitsDoneByDate.get(row.date) ?? 0) + 1);
-      }
+      const weekDoneByDate = completionsByDate(weekCompletionsRes.data || []);
       const weekOverrideByDate = new Map((weekOverridesRes.data || []).map((r) => [r.date, r.rank]));
 
       let rank = null as ReturnType<typeof computeDayRank>['rank'] | null;
@@ -77,19 +75,19 @@ export default async function CoachPage() {
         // latestDate is almost always within the 7-day window already
         // fetched above — only fire a dedicated round trip for the rarer
         // case of a client whose last-ever entry is older than that.
-        let habitsDone: number;
+        let doneByDate = weekDoneByDate;
         let override: 'gold' | 'silver' | 'bronze' | undefined;
         if (latestDate >= weekStart) {
-          habitsDone = weekHabitsDoneByDate.get(latestDate) ?? 0;
           override = weekOverrideByDate.get(latestDate);
         } else {
           const [completionsRes, overrideRes] = await Promise.all([
-            supabase.from('habit_completions').select('habit_id').eq('user_id', c.id).eq('date', latestDate).eq('completed', true),
+            supabase.from('habit_completions').select('habit_id, date').eq('user_id', c.id).eq('date', latestDate).eq('completed', true),
             supabase.from('rank_overrides').select('rank').eq('user_id', c.id).eq('date', latestDate).maybeSingle(),
           ]);
-          habitsDone = completionsRes.data?.length ?? 0;
+          doneByDate = completionsByDate(completionsRes.data || []);
           override = overrideRes.data?.rank;
         }
+        const { total: habitsTotal, done: habitsDone } = habitDay(habits, doneByDate, latestDate);
         const breakdown = computeDayRank({
           habitsTotal, habitsDone,
           meals: latestMeals.map((m) => ({ calories: m.calories, protein_g: m.protein_g, carbs_g: m.carbs_g, fat_g: m.fat_g, quality_score: m.quality_score })),
@@ -106,8 +104,9 @@ export default async function CoachPage() {
       for (let i = 0; i <= 6; i++) {
         const d = addDays(serverToday, -i);
         const dayMeals = weekMealsByDate.get(d) || [];
-        if (dayMeals.length === 0 && !weekHabitsDoneByDate.has(d) && !weekOverrideByDate.has(d)) continue;
-        const dayRank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal, habitsDone: weekHabitsDoneByDate.get(d) ?? 0, meals: dayMeals, targets: rankTargets }).rank;
+        if (dayMeals.length === 0 && !weekDoneByDate.has(d) && !weekOverrideByDate.has(d)) continue;
+        const { total: habitsTotal, done: habitsDone } = habitDay(habits, weekDoneByDate, d);
+        const dayRank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal, habitsDone, meals: dayMeals, targets: rankTargets }).rank;
         if (dayRank === 'gold') weeklyGolds++;
       }
 

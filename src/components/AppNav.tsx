@@ -8,6 +8,7 @@ import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
 
 const TABS = [
   { href: '/', label: 'Today' },
+  { href: '/habits', label: 'Habits' },
   { href: '/nutrition', label: 'Nutrition' },
   { href: '/progress', label: 'Progress' },
   { href: '/milestones', label: 'Milestones' },
@@ -34,9 +35,9 @@ export default function AppNav() {
           Sign out
         </button>
       </div>
-      {/* All 4 tabs are visible together on every page, and each destination
+      {/* All tabs are visible together on every page, and each destination
           is a fully dynamic, per-request Supabase-backed page — default
-          prefetch would fire all 4 pages' worth of queries on every single
+          prefetch would fire every tab's worth of queries on every single
           page view, not just the one being shown, so this only prefetches
           the tab actually being touched/hovered. */}
       <div className="max-w-2xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto">

@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { addDays } from '@/lib/date';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
+import { completionsByDate, dailyStreak, habitDay, habitsDueOn } from '@/lib/habits';
 import { computeMicroTotals } from '@/lib/micronutrients';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
 import VittoRecommends from '@/components/VittoRecommends';
@@ -38,12 +39,12 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
     supabase.from('habit_completions').select('habit_id').eq('user_id', id).eq('date', today).eq('completed', true),
     supabase.from('rank_overrides').select('rank').eq('user_id', id).eq('date', today).maybeSingle(),
     supabase.from('food_log_entries').select('date').eq('user_id', id).gte('date', weekStart).lte('date', today),
-    supabase.from('habit_completions').select('date').eq('user_id', id).eq('completed', true).gte('date', weekStart).lte('date', today),
+    supabase.from('habit_completions').select('habit_id, date').eq('user_id', id).eq('completed', true).gte('date', weekStart).lte('date', today),
     // Same shape as the daily-history section further down — needed to
     // compute each of the last 7 days' actual gold/silver/bronze rank for
     // the week-pip row, not just whether the day counted for the streak.
     supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', id).gte('date', weekStart).lte('date', today),
-    supabase.from('habit_completions').select('date').eq('user_id', id).eq('completed', true).gte('date', weekStart).lte('date', today),
+    supabase.from('habit_completions').select('habit_id, date').eq('user_id', id).eq('completed', true).gte('date', weekStart).lte('date', today),
     supabase.from('rank_overrides').select('date, rank').eq('user_id', id).gte('date', weekStart).lte('date', today),
   ]);
 
@@ -51,10 +52,13 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
 
   const targets = targetsRes.data || DEFAULT_TARGETS;
   const meals = mealsRes.data || [];
-  const habits = habitsRes.data || [];
-  const doneHabitIds = new Set((completionsRes.data || []).map((c) => c.habit_id));
+  const allHabits = habitsRes.data || [];
+  // Only what's due today shows (and counts) — scheduled habits on other
+  // days live in the client's Habits calendar.
+  const habits = habitsDueOn(allHabits, today);
+  const doneHabitIds = new Set((completionsRes.data || []).map((c) => c.habit_id).filter((hid) => habits.some((h) => h.id === hid)));
   const mealDates = new Set((weekMealDatesRes.data || []).map((r) => r.date));
-  const habitDates = new Set((weekHabitDatesRes.data || []).map((r) => r.date));
+  const streakDoneByDate = completionsByDate(weekHabitDatesRes.data || []);
 
   const weekMealsByDate = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null }[]>();
   for (const m of weekMealsRes.data || []) {
@@ -62,22 +66,18 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
     arr.push(m);
     weekMealsByDate.set(m.date, arr);
   }
-  const weekHabitsDoneByDate = new Map<string, number>();
-  for (const row of weekCompletionsRes.data || []) {
-    weekHabitsDoneByDate.set(row.date, (weekHabitsDoneByDate.get(row.date) ?? 0) + 1);
-  }
+  const weekDoneByDate = completionsByDate(weekCompletionsRes.data || []);
   const weekOverrideByDate = new Map((weekOverridesRes.data || []).map((r) => [r.date, r.rank]));
   const weekHistory = Array.from({ length: 7 }, (_, i) => {
     const d = addDays(today, -(6 - i));
     const dayMeals = weekMealsByDate.get(d) || [];
-    const hasData = dayMeals.length > 0 || weekHabitsDoneByDate.has(d) || weekOverrideByDate.has(d);
+    const hasData = dayMeals.length > 0 || weekDoneByDate.has(d) || weekOverrideByDate.has(d);
     if (!hasData) return { date: d, rank: null as 'gold' | 'silver' | 'bronze' | null };
-    const rank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal: habits.length, habitsDone: weekHabitsDoneByDate.get(d) ?? 0, meals: dayMeals, targets }).rank;
+    const { total, done } = habitDay(allHabits, weekDoneByDate, d);
+    const rank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal: total, habitsDone: done, meals: dayMeals, targets }).rank;
     return { date: d, rank };
   });
-  let streak = 0;
-  let cursor = today;
-  while (mealDates.has(cursor) && habitDates.has(cursor)) { streak++; cursor = addDays(cursor, -1); }
+  const streak = dailyStreak(today, mealDates, allHabits, streakDoneByDate);
 
   const totals = meals.reduce((a, m) => ({ cal: a.cal + m.calories, prot: a.prot + m.protein_g, carb: a.carb + m.carbs_g, fat: a.fat + m.fat_g }), { cal: 0, prot: 0, carb: 0, fat: 0 });
   const calPct = Math.min(100, Math.round((totals.cal / (targets.calories || 1)) * 100));
@@ -204,13 +204,14 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
 
         <div className="bg-surface border border-border rounded-2xl p-4">
           <p className="text-sm font-medium mb-3">Today&rsquo;s habits</p>
-          {habits.length === 0 && <p className="text-sm text-neutral-400">No habits set up yet.</p>}
+          {habits.length === 0 && <p className="text-sm text-neutral-400">No habits due today.</p>}
           <div className="flex flex-col gap-2">
             {habits.map((h) => {
               const done = doneHabitIds.has(h.id);
               return (
                 <div key={h.id} className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-sm ${done ? 'bg-brand-light border-brand text-brand-dark' : 'border-border text-neutral-700'}`}>
                   <span className={`w-5 h-5 rounded-md flex items-center justify-center text-xs flex-shrink-0 ${done ? 'bg-brand text-white' : 'border border-neutral-300'}`}>{done ? '✓' : ''}</span>
+                  {h.emoji && <span className="text-base leading-none">{h.emoji}</span>}
                   <span className={done ? 'line-through opacity-75' : ''}>{h.label}</span>
                 </div>
               );

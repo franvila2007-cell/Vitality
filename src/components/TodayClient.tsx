@@ -11,10 +11,12 @@ import { computeMicroTotals, MICRONUTRIENT_KEYS, type MicronutrientKey } from '@
 import MicronutrientPanel from '@/components/MicronutrientPanel';
 import VittoRecommends from '@/components/VittoRecommends';
 import BarcodeScanner from '@/components/BarcodeScanner';
+import VittoComposer from '@/components/VittoComposer';
 import type { Database } from '@/lib/supabase/database.types';
+import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
+import { completionsByDate, dailyStreak, habitDay, habitsDueOn, isHabitDue, scheduleLabel, type Habit } from '@/lib/habits';
 
 type Meal = Database['public']['Tables']['food_log_entries']['Row'];
-type Habit = Database['public']['Tables']['habits']['Row'];
 type Targets = Database['public']['Tables']['targets']['Row'];
 
 type ChatMsg = { role: 'user' | 'bot'; text: string; id: string };
@@ -81,28 +83,25 @@ export default function TodayClient() {
   // that only affects one number.
   const refreshStreak = useCallback(async (
     userId: string,
-    habitsTotal: number,
+    habitList: Habit[],
     tgt: Pick<Targets, 'calories' | 'protein_g' | 'carbs_g' | 'fat_g'>
   ) => {
     const windowStart = addDays(today, -90);
     const weekStart = addDays(today, -6);
     const [mealDatesRes, habitDatesRes, weekMealsRes, weekCompletionsRes, weekOverridesRes] = await Promise.all([
       supabase.from('food_log_entries').select('date').eq('user_id', userId).gte('date', windowStart).lte('date', today),
-      supabase.from('habit_completions').select('date').eq('user_id', userId).eq('completed', true).gte('date', windowStart).lte('date', today),
+      supabase.from('habit_completions').select('habit_id, date').eq('user_id', userId).eq('completed', true).gte('date', windowStart).lte('date', today),
       // Separate, week-scoped fetch with the actual macro/quality columns —
       // the two queries above only carry dates (enough for the streak's
       // hit/miss walk), but the week pips now show the real computed rank
       // for each day, which needs the same shape computeDayRank uses on the
       // coach dashboard.
       supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', userId).gte('date', weekStart).lte('date', today),
-      supabase.from('habit_completions').select('date').eq('user_id', userId).eq('completed', true).gte('date', weekStart).lte('date', today),
+      supabase.from('habit_completions').select('habit_id, date').eq('user_id', userId).eq('completed', true).gte('date', weekStart).lte('date', today),
       supabase.from('rank_overrides').select('date, rank').eq('user_id', userId).gte('date', weekStart).lte('date', today),
     ]);
     const mealDates = new Set((mealDatesRes.data || []).map((r) => r.date));
-    const habitDates = new Set((habitDatesRes.data || []).map((r) => r.date));
-    let s = 0, cursor = today;
-    while (mealDates.has(cursor) && habitDates.has(cursor)) { s++; cursor = addDays(cursor, -1); }
-    setStreak(s);
+    setStreak(dailyStreak(today, mealDates, habitList, completionsByDate(habitDatesRes.data || [])));
 
     const weekMealsByDate = new Map<string, { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null }[]>();
     for (const m of weekMealsRes.data || []) {
@@ -110,19 +109,17 @@ export default function TodayClient() {
       arr.push(m);
       weekMealsByDate.set(m.date, arr);
     }
-    const weekHabitsDoneByDate = new Map<string, number>();
-    for (const row of weekCompletionsRes.data || []) {
-      weekHabitsDoneByDate.set(row.date, (weekHabitsDoneByDate.get(row.date) ?? 0) + 1);
-    }
+    const weekDoneByDate = completionsByDate(weekCompletionsRes.data || []);
     const weekOverrideByDate = new Map((weekOverridesRes.data || []).map((r) => [r.date, r.rank]));
 
     const week: { date: string; rank: Rank | null }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = addDays(today, -i);
       const dayMeals = weekMealsByDate.get(d) || [];
-      const hasData = dayMeals.length > 0 || weekHabitsDoneByDate.has(d) || weekOverrideByDate.has(d);
+      const hasData = dayMeals.length > 0 || weekDoneByDate.has(d) || weekOverrideByDate.has(d);
       if (!hasData) { week.push({ date: d, rank: null }); continue; }
-      const rank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal, habitsDone: weekHabitsDoneByDate.get(d) ?? 0, meals: dayMeals, targets: tgt }).rank;
+      const day = habitDay(habitList, weekDoneByDate, d);
+      const rank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal: day.total, habitsDone: day.done, meals: dayMeals, targets: tgt }).rank;
       week.push({ date: d, rank });
     }
     setWeekHistory(week);
@@ -170,7 +167,7 @@ export default function TodayClient() {
     }
     setQuickAdd({ recipes: recipeNames, recent: recentNames });
     setLoading(false);
-    refreshStreak(user.id, habitsRes.data?.length ?? 0, targetsRes.data || DEFAULT_TARGETS);
+    refreshStreak(user.id, habitsRes.data || [], targetsRes.data || DEFAULT_TARGETS);
   }, [supabase, today, refreshStreak]);
 
   useEffect(() => { load(); }, [load]);
@@ -214,7 +211,7 @@ export default function TodayClient() {
         // chat path is how most food actually gets logged — without this,
         // the welcome card's streak stays stale until a habit gets toggled.
         const { data: { user } } = await supabase.auth.getUser();
-        if (user) refreshStreak(user.id, habits.length, targets);
+        if (user) refreshStreak(user.id, habits, targets);
       }
     } catch {
       setChat((c) => [...c, { id: 'e' + Date.now(), role: 'bot', text: "I couldn't reach the server just now — try again in a moment." }]);
@@ -349,7 +346,7 @@ export default function TodayClient() {
     setMeals((m) => m.filter((x) => x.id !== id));
     await supabase.from('food_log_entries').delete().eq('id', id);
     const { data: { user } } = await supabase.auth.getUser();
-    if (user) refreshStreak(user.id, habits.length, targets);
+    if (user) refreshStreak(user.id, habits, targets);
   }
 
   async function toggleHabit(habitId: string) {
@@ -363,7 +360,7 @@ export default function TodayClient() {
       { user_id: user.id, habit_id: habitId, date: today, completed: !isDone },
       { onConflict: 'user_id,habit_id,date' }
     );
-    refreshStreak(user.id, habits.length, targets);
+    refreshStreak(user.id, habits, targets);
   }
 
   async function handleBarcodeDetected(code: string) {
@@ -419,9 +416,22 @@ export default function TodayClient() {
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
   const greetingEmoji = hour < 17 ? '☀️' : '🌙';
+  // Only habits due today show here and count towards today's rank — the
+  // rest of a client's schedule lives in the Habits tab calendar.
+  const dueToday = habitsDueOn(habits, today);
+  const doneTodayCount = dueToday.filter((h) => doneHabitIds.has(h.id)).length;
+  const undoneToday = dueToday.filter((h) => !doneHabitIds.has(h.id));
+  const nextUp = (() => {
+    for (let i = 1; i <= 7; i++) {
+      const d = addDays(today, i);
+      const due = habits.filter((h) => isHabitDue(h, d));
+      if (due.length) return { date: d, habits: due };
+    }
+    return null;
+  })();
   const rank = rankOverride ?? computeDayRank({
-    habitsTotal: habits.length,
-    habitsDone: doneHabitIds.size,
+    habitsTotal: dueToday.length,
+    habitsDone: doneTodayCount,
     meals: meals.map((m) => ({ calories: m.calories, protein_g: m.protein_g, carbs_g: m.carbs_g, fat_g: m.fat_g, quality_score: m.quality_score })),
     targets,
   }).rank;
@@ -449,7 +459,7 @@ export default function TodayClient() {
             <div className="text-3xs uppercase text-white/50 mt-0.5">Streak</div>
           </div>
           <div>
-            <div className="text-xl font-medium flex items-center gap-1"><span className="text-base">✅</span>{doneHabitIds.size}/{habits.length}</div>
+            <div className="text-xl font-medium flex items-center gap-1"><span className="text-base">✅</span>{doneTodayCount}/{dueToday.length}</div>
             <div className="text-3xs uppercase text-white/50 mt-0.5">Habits today</div>
           </div>
           <div>
@@ -488,10 +498,35 @@ export default function TodayClient() {
         </div>
       </div>
 
+      {/* Reminder: today's planned habits that aren't ticked yet */}
+      {undoneToday.length > 0 && (
+        <div className="bg-surface border border-brand/25 rounded-2xl p-4 shadow-[0_4px_16px_-10px_rgba(15,168,166,0.5)]">
+          <div className="flex items-center justify-between mb-2.5">
+            <p className="text-sm font-medium">📅 On your plan today</p>
+            <PrefetchOnIntentLink href="/habits" className="text-xs font-medium text-brand-dark hover:opacity-70">Calendar →</PrefetchOnIntentLink>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {undoneToday.map((h) => (
+              <button
+                key={h.id}
+                onClick={() => toggleHabit(h.id)}
+                className="flex items-center gap-2 rounded-full border border-border bg-neutral-50 pl-2.5 pr-3.5 py-1.5 text-sm text-neutral-800 transition-transform active:scale-95 hover:border-brand"
+              >
+                <span className="w-4 h-4 rounded-full border border-neutral-300 bg-white flex-shrink-0" />
+                {h.emoji && <span>{h.emoji}</span>}
+                {h.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-2xs text-neutral-400 mt-2.5">Tap to tick it off — hitting your habits pushes today towards gold.</p>
+        </div>
+      )}
+
       <GoldStreakMeter
         meals={meals}
-        habitsTotal={habits.length}
-        habitsDone={doneHabitIds.size}
+        habitsTotal={dueToday.length}
+        habitsDone={doneTodayCount}
+        habits={habits}
         targets={targets}
         rankOverride={rankOverride}
       />
@@ -573,50 +608,25 @@ export default function TodayClient() {
             ))}
           </div>
         )}
-        <div className="flex gap-2">
-          <button
-            onClick={() => { setScanError(null); setScanning(true); }}
-            title="Scan a barcode"
-            className="w-10 h-10 flex-shrink-0 rounded-full border border-border text-neutral-500 flex items-center justify-center transition-transform active:scale-95 hover:text-neutral-800"
-          >
-            ▤
-          </button>
-          <input
-            ref={photoInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            onChange={handlePhotoSelected}
-            className="hidden"
-          />
-          <button
-            onClick={() => { setPhotoError(null); photoInputRef.current?.click(); }}
-            disabled={photoLoading}
-            title="Log from a photo"
-            className="w-10 h-10 flex-shrink-0 rounded-full border border-border text-neutral-500 flex items-center justify-center transition-transform active:scale-95 hover:text-neutral-800 disabled:opacity-50"
-          >
-            {photoLoading ? '…' : '📷'}
-          </button>
-          <input
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') sendChat(); }}
-            placeholder={listening ? 'Listening…' : 'Add whatever you want to log...'}
-            className="flex-1 min-w-0 rounded-full border border-border bg-neutral-50 px-4 py-2 text-sm outline-none focus:border-brand transition-colors"
-          />
-          {typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition) && (
-            <button
-              onClick={toggleVoiceInput}
-              title="Log by voice"
-              className={`w-10 h-10 flex-shrink-0 rounded-full border flex items-center justify-center transition-transform active:scale-95 ${
-                listening ? 'bg-red-500 border-red-500 text-white animate-pulse' : 'border-border text-neutral-500 hover:text-neutral-800'
-              }`}
-            >
-              🎤
-            </button>
-          )}
-          <button onClick={sendChat} disabled={sending} className="w-10 h-10 rounded-full bg-brand text-white flex items-center justify-center disabled:opacity-50 transition-transform active:scale-95">➤</button>
-        </div>
+        <input
+          ref={photoInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handlePhotoSelected}
+          className="hidden"
+        />
+        <VittoComposer
+          value={chatInput}
+          onChange={setChatInput}
+          onSend={sendChat}
+          sending={sending}
+          listening={listening}
+          photoLoading={photoLoading}
+          onPhoto={() => { setPhotoError(null); photoInputRef.current?.click(); }}
+          onScan={() => { setScanError(null); setScanning(true); }}
+          onVoice={typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition) ? toggleVoiceInput : undefined}
+        />
         {scanLoading && <p className="text-xs text-neutral-400 mt-2">Looking up that barcode…</p>}
         {scanError && <p className="text-xs text-red-500 mt-2">{scanError}</p>}
         {voiceError && <p className="text-xs text-red-500 mt-2">{voiceError}</p>}
@@ -684,11 +694,14 @@ export default function TodayClient() {
 
       {/* Habits */}
       <div className="bg-surface border border-border rounded-2xl p-4">
-        <p className="text-sm font-medium mb-1">Today&rsquo;s habits</p>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-sm font-medium">Today&rsquo;s habits</p>
+          <PrefetchOnIntentLink href="/habits" className="text-xs font-medium text-brand-dark hover:opacity-70">+ Add / calendar</PrefetchOnIntentLink>
+        </div>
         <p className="text-xs text-neutral-400 mb-3">Get a gold. Get one day closer to reaching your goals.</p>
-        {habits.length === 0 && <p className="text-sm text-neutral-400">No habits set up yet — your coach can add these.</p>}
+        {dueToday.length === 0 && <p className="text-sm text-neutral-400">Nothing planned for today — add your own habits in the Habits tab.</p>}
         <div className="flex flex-col gap-2">
-          {habits.map((h) => {
+          {dueToday.map((h) => {
             const done = doneHabitIds.has(h.id);
             return (
               <button
@@ -697,11 +710,18 @@ export default function TodayClient() {
                 className={`flex items-center gap-3 rounded-xl border px-3.5 py-3 text-left text-sm ${done ? 'bg-brand-light border-brand text-brand-dark' : 'border-border text-neutral-700'}`}
               >
                 <span className={`w-5 h-5 rounded-md flex items-center justify-center text-xs flex-shrink-0 ${done ? 'bg-brand text-white' : 'border border-neutral-300'}`}>{done ? '✓' : ''}</span>
-                <span className={done ? 'line-through opacity-75' : ''}>{h.label}</span>
+                {h.emoji && <span className="text-base leading-none">{h.emoji}</span>}
+                <span className={`flex-1 ${done ? 'line-through opacity-75' : ''}`}>{h.label}</span>
+                {(h.days || h.on_date) && <span className="text-2xs text-neutral-400">{scheduleLabel(h)}</span>}
               </button>
             );
           })}
         </div>
+        {nextUp && (
+          <p className="text-2xs text-neutral-400 mt-3">
+            Next up · {new Date(nextUp.date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long' })}: {nextUp.habits.map((h) => `${h.emoji} ${h.label}`.trim()).join(', ')}
+          </p>
+        )}
       </div>
 
       {/* Note from your coach */}

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { localDateStr, addDays } from '@/lib/date';
 import { computeDayRank, type Rank, type RankMealInput, type RankTargetsInput } from '@/lib/ranking';
+import { completionsByDate, habitDay, type HabitSchedule } from '@/lib/habits';
 
 const GOLD_SCORE = 85; // computeDayRank's gold threshold — the bar fills toward this
 const WINDOW_DAYS = 60; // how far back to walk before giving up on an unbroken streak
@@ -34,8 +35,11 @@ const EMBERS = [
 
 type Props = {
   meals: RankMealInput[];
+  /** Today's due habits / ticked — drives the live bar. */
   habitsTotal: number;
   habitsDone: number;
+  /** Every habit with its schedule, for judging past days. */
+  habits: HabitSchedule[];
   targets: RankTargetsInput;
   /** A coach-confirmed rank for today, which beats the auto-computed one. */
   rankOverride: Rank | null;
@@ -45,7 +49,7 @@ type Props = {
 // props, so the bar moves the instant it happens. Only the unbroken run of
 // gold days *before* today is fetched (once) — today's own progress never
 // waits on a round trip.
-export default function GoldStreakMeter({ meals, habitsTotal, habitsDone, targets, rankOverride }: Props) {
+export default function GoldStreakMeter({ meals, habitsTotal, habitsDone, habits, targets, rankOverride }: Props) {
   const [supabase] = useState(() => createClient());
   const [priorStreak, setPriorStreak] = useState<number | null>(null);
 
@@ -59,7 +63,7 @@ export default function GoldStreakMeter({ meals, habitsTotal, habitsDone, target
 
     const [mealsRes, completionsRes, overridesRes] = await Promise.all([
       supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', user.id).gte('date', windowStart).lte('date', yesterday),
-      supabase.from('habit_completions').select('date').eq('user_id', user.id).eq('completed', true).gte('date', windowStart).lte('date', yesterday),
+      supabase.from('habit_completions').select('habit_id, date').eq('user_id', user.id).eq('completed', true).gte('date', windowStart).lte('date', yesterday),
       supabase.from('rank_overrides').select('date, rank').eq('user_id', user.id).gte('date', windowStart).lte('date', yesterday),
     ]);
 
@@ -69,23 +73,23 @@ export default function GoldStreakMeter({ meals, habitsTotal, habitsDone, target
       arr.push(m);
       mealsByDate.set(m.date, arr);
     }
-    const habitsDoneByDate = new Map<string, number>();
-    for (const row of completionsRes.data || []) habitsDoneByDate.set(row.date, (habitsDoneByDate.get(row.date) ?? 0) + 1);
+    const doneByDate = completionsByDate(completionsRes.data || []);
     const overrideByDate = new Map((overridesRes.data || []).map((r) => [r.date, r.rank]));
 
     let s = 0;
     let cursor = yesterday;
     while (cursor >= windowStart) {
       const dayMeals = mealsByDate.get(cursor) || [];
-      const hasData = dayMeals.length > 0 || habitsDoneByDate.has(cursor) || overrideByDate.has(cursor);
+      const hasData = dayMeals.length > 0 || doneByDate.has(cursor) || overrideByDate.has(cursor);
       if (!hasData) break;
-      const rank = overrideByDate.get(cursor) ?? computeDayRank({ habitsTotal, habitsDone: habitsDoneByDate.get(cursor) ?? 0, meals: dayMeals, targets }).rank;
+      const day = habitDay(habits, doneByDate, cursor);
+      const rank = overrideByDate.get(cursor) ?? computeDayRank({ habitsTotal: day.total, habitsDone: day.done, meals: dayMeals, targets }).rank;
       if (rank !== 'gold') break;
       s++;
       cursor = addDays(cursor, -1);
     }
     setPriorStreak(s);
-    // habitsTotal/targets only matter for judging past days; they're stable after load
+    // habits/targets only matter for judging past days; they're stable after load
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
