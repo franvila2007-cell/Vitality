@@ -2,9 +2,9 @@ import { MICRONUTRIENTS, MICRONUTRIENT_KEYS, type MicronutrientTotals } from '@/
 
 const GROUPS = ['Everyday', 'Minerals', 'Vitamins'] as const;
 
-export default function MicronutrientPanel({ totals, hasAnyData }: { totals: MicronutrientTotals; hasAnyData: boolean }) {
+export default function MicronutrientPanel({ totals, hasAnyData, emptyText }: { totals: MicronutrientTotals; hasAnyData: boolean; emptyText?: string }) {
   if (!hasAnyData) {
-    return <p className="text-sm text-neutral-400">No micronutrient estimates yet — Vitto adds these when your AI fallback is available (needs an Anthropic API key configured).</p>;
+    return <p className="text-sm text-neutral-400">{emptyText ?? 'No micronutrient estimates yet — Vitto adds these when your AI fallback is available (needs an Anthropic API key configured).'}</p>;
   }
   return (
     <div className="flex flex-col gap-4">

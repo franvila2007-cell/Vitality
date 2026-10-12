@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import TargetsEditor from '@/components/coach/TargetsEditor';
 import RankOverride from '@/components/coach/RankOverride';
 import CoachNoteEditor from '@/components/coach/CoachNoteEditor';
+import DailyMessageEditor from '@/components/coach/DailyMessageEditor';
 import RemoveClientButton from '@/components/coach/RemoveClientButton';
 import ResendInviteButton from '@/components/coach/ResendInviteButton';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
@@ -43,6 +44,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     .ilike('email', profileRes.data.email.replace(/[\\%_]/g, '\\$&'))
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   // Their CRM contact (every client has one) — for the package card.
+  const { data: dayMessages } = await supabase
+    .from('coach_daily_messages').select('date, body').eq('user_id', id)
+    .order('date', { ascending: false }).limit(40);
   const [{ data: crmContact }, pkgCtx] = await Promise.all([
     supabase.from('crm_contacts').select('id, brand, package, package_price, package_start, payment_plan, payment_method').eq('client_id', id).maybeSingle(),
     packageContext(supabase, id),
@@ -132,6 +136,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             👁 View their app
           </Link>
         </div>
+
+        <DailyMessageEditor userId={id} firstName={(profileRes.data.full_name || profileRes.data.email).trim().split(/\s+/)[0]} initial={dayMessages || []} />
 
         {crmContact && (
           <div className={`bg-surface border rounded-2xl p-4 ${crmContact.package ? 'border-border' : 'border-brand/40'}`}>
@@ -235,6 +241,19 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                 </summary>
                 <div className="mt-2 pl-1">
                   <FoodList meals={mealsByDate.get(date) ?? []} />
+                  <details className="mt-3 rounded-xl border border-border group/micro">
+                    <summary className="flex items-center justify-between px-3 py-2 text-xs font-medium text-neutral-600 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                      Micronutrients
+                      <span className="text-neutral-400 text-2xs group-open/micro:rotate-180 transition-transform">▾</span>
+                    </summary>
+                    <div className="px-3 pb-3">
+                      <MicronutrientPanel
+                        totals={computeMicroTotals(mealsByDate.get(date) ?? [])}
+                        hasAnyData={(mealsByDate.get(date) ?? []).some((m) => m.quality_score != null)}
+                        emptyText="Vitto hasn't estimated micronutrients for this day's entries (manual or older entries don't get them)."
+                      />
+                    </div>
+                  </details>
                 </div>
               </details>
             ))}

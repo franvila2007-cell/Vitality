@@ -14,3 +14,9 @@ export function addDays(dateStr: string, days: number): string {
   dt.setDate(dt.getDate() + days);
   return localDateStr(dt);
 }
+
+// "Today" as the coach experiences it (Malta) — used when the coach picks a
+// day to message a client; the client's own app uses their device's local day.
+export function coachToday(now = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'Europe/Malta' });
+}

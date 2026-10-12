@@ -136,6 +136,11 @@ export type Database = {
         { id?: string; user_id: string; name: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; default_grams?: number; ingredients_text?: string | null },
         { id?: string; user_id?: string; name?: string; calories?: number; protein_g?: number; carbs_g?: number; fat_g?: number; default_grams?: number; ingredients_text?: string | null }
       >;
+      coach_daily_messages: Table<
+        { id: string; user_id: string; date: string; body: string; created_at: string; updated_at: string },
+        { id?: string; user_id: string; date: string; body: string; created_at?: string; updated_at?: string },
+        { id?: string; user_id?: string; date?: string; body?: string; created_at?: string; updated_at?: string }
+      >;
       workouts: Table<
         { id: string; user_id: string; name: string; sort_order: number; created_at: string },
         { id?: string; user_id: string; name: string; sort_order?: number; created_at?: string },

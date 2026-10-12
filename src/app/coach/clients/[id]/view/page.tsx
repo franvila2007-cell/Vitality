@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { addDays } from '@/lib/date';
+import { addDays, coachToday } from '@/lib/date';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import { completionsByDate, dailyStreak, habitDay, habitsDueOn } from '@/lib/habits';
 import { computeMicroTotals } from '@/lib/micronutrients';
@@ -30,7 +30,8 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
   const today = new Date().toISOString().slice(0, 10);
   const weekStart = addDays(today, -6);
 
-  const [profileRes, clientProfileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes, weekMealDatesRes, weekHabitDatesRes, weekMealsRes, weekCompletionsRes, weekOverridesRes] = await Promise.all([
+  const [dayMessageRes, profileRes, clientProfileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes, weekMealDatesRes, weekHabitDatesRes, weekMealsRes, weekCompletionsRes, weekOverridesRes] = await Promise.all([
+    supabase.from('coach_daily_messages').select('body').eq('user_id', id).eq('date', coachToday()).maybeSingle(),
     supabase.from('profiles').select('full_name, email, role').eq('id', id).single(),
     supabase.from('client_profiles').select('coach_note').eq('user_id', id).maybeSingle(),
     supabase.from('targets').select('*').eq('user_id', id).maybeSingle(),
@@ -145,6 +146,13 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
             </div>
           </div>
         </div>
+
+        {dayMessageRes.data?.body && (
+          <div className="rounded-2xl border border-brand/25 bg-brand-light p-4">
+            <p className="text-3xs uppercase tracking-wide text-brand-dark/60 mb-1.5">💬 Their message for today</p>
+            <p className="text-sm text-brand-dark leading-relaxed whitespace-pre-line">{dayMessageRes.data.body}</p>
+          </div>
+        )}
 
         <div className="bg-surface border border-border rounded-2xl p-4 opacity-90">
           <div className="flex items-center gap-3 mb-3">

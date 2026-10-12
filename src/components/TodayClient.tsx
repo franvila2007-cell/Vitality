@@ -52,6 +52,7 @@ export default function TodayClient() {
   const [weekHistory, setWeekHistory] = useState<{ date: string; rank: Rank | null }[]>([]);
   const [rankOverride, setRankOverride] = useState<Rank | null>(null);
   const [coachNote, setCoachNote] = useState('');
+  const [dayMessage, setDayMessage] = useState('');
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -131,7 +132,7 @@ export default function TodayClient() {
 
     // All independent of each other — fired together instead of the streak
     // window waiting on the first batch to resolve first.
-    const [profileRes, clientProfileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes, recipesRes, recentRes] = await Promise.all([
+    const [profileRes, clientProfileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes, recipesRes, recentRes, dayMessageRes] = await Promise.all([
       supabase.from('profiles').select('full_name').eq('id', user.id).single(),
       supabase.from('client_profiles').select('coach_note').eq('user_id', user.id).maybeSingle(),
       supabase.from('targets').select('*').eq('user_id', user.id).maybeSingle(),
@@ -141,10 +142,12 @@ export default function TodayClient() {
       supabase.from('rank_overrides').select('rank').eq('user_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('custom_foods').select('name').eq('user_id', user.id).order('name').limit(12),
       supabase.from('food_log_entries').select('name').eq('user_id', user.id).gte('date', addDays(today, -14)).order('logged_at', { ascending: false }).limit(60),
+      supabase.from('coach_daily_messages').select('body').eq('user_id', user.id).eq('date', today).maybeSingle(),
     ]);
 
     setFullName(profileRes.data?.full_name || '');
     setCoachNote(clientProfileRes.data?.coach_note || '');
+    setDayMessage(dayMessageRes.data?.body || '');
     if (targetsRes.data) setTargets(targetsRes.data);
     else await supabase.from('targets').insert({ user_id: user.id, ...DEFAULT_TARGETS, updated_by: 'client' });
     setMeals(mealsRes.data || []);
@@ -519,6 +522,14 @@ export default function TodayClient() {
             ))}
           </div>
           <p className="text-2xs text-neutral-400 mt-2.5">Tap to tick it off — hitting your habits pushes today towards gold.</p>
+        </div>
+      )}
+
+      {/* A message from the coach for today specifically (the standing note stays at the bottom) */}
+      {dayMessage && (
+        <div className="relative overflow-clip rounded-2xl border border-brand/25 bg-brand-light p-4">
+          <p className="text-3xs uppercase tracking-wide text-brand-dark/60 mb-1.5">💬 Your message for today · from Francesco</p>
+          <p className="text-sm text-brand-dark leading-relaxed whitespace-pre-line">{dayMessage}</p>
         </div>
       )}
 
