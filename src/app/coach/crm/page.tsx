@@ -107,7 +107,7 @@ export default async function CrmOverviewPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <Section title={`Money · ${monthName}`}>
+      <Section title={`Money · ${monthName}`} action={<Link href="/coach/crm/revenue" className="text-xs font-medium text-brand-dark hover:opacity-70">Revenue breakdown →</Link>}>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <Kpi label="Revenue" value={euro(revenue)} sub={`${soldThisMonth.length} package${soldThisMonth.length === 1 ? '' : 's'} sold`} tone="brand" />
           <Kpi label="Cash collected" value={euro(cash)} sub={`${collectedThisMonth.length} payment${collectedThisMonth.length === 1 ? '' : 's'} received`} tone="good" />

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { localDateStr } from '@/lib/date';
 import type { CrmBrand, CrmPackage, CrmPaymentPlan } from '@/lib/supabase/database.types';
-import { BRAND_META, PACKAGES, PACKAGE_META, PAYMENT_METHODS, packageEnd } from '@/lib/crm/constants';
+import { BRAND_META, IBF_MEAL_PLAN_PRICE, PACKAGES, PACKAGE_META, PAYMENT_METHODS, packageEnd } from '@/lib/crm/constants';
 import { buildSchedule } from '@/lib/crm/payments';
 import { euro, shortDate } from '@/lib/crm/format';
 
@@ -26,7 +26,8 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
 }) {
   const [supabase] = useState(() => createClient());
   const router = useRouter();
-  const priceFor = (p: CrmPackage) => suggestedPrices[p] ?? PACKAGE_META[p].defaultPrice;
+  // IronBodyFit meal plans are €10, not the Vitality meal-plan price.
+  const priceFor = (p: CrmPackage) => (p === 'meal_plan' && brand === 'ironbodyfit' ? IBF_MEAL_PLAN_PRICE : suggestedPrices[p] ?? PACKAGE_META[p].defaultPrice);
   const [editing, setEditing] = useState(!initial.package);
   const [pkg, setPkg] = useState<CrmPackage>(initial.package ?? '6_months');
   const [price, setPrice] = useState(() => {

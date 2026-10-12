@@ -8,6 +8,7 @@ import { weightProgress } from '@/lib/crm/progress';
 import CrmPayments from '@/components/crm/CrmPayments';
 import { packageContext } from '@/lib/crm/packages';
 import CrmPackageEditor from '@/components/crm/CrmPackageEditor';
+import CrmIbfPaid from '@/components/crm/CrmIbfPaid';
 import Image from 'next/image';
 import { ago, daysSince, euro, shortDate } from '@/lib/crm/format';
 import CrmStagePicker from '@/components/crm/CrmStagePicker';
@@ -122,6 +123,12 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
           <CrmDeleteContact id={c.id} name={c.full_name} />
         </div>
       </div>
+
+      {c.brand === 'ironbodyfit' && c.package === 'meal_plan' && (
+        <div className="bg-surface border border-ibf-red/20 rounded-xl p-4">
+          <CrmIbfPaid id={c.id} price={c.package_price != null ? Number(c.package_price) : null} start={c.package_start} size="md" />
+        </div>
+      )}
 
       <div className={`bg-surface border rounded-xl p-4 ${isClient && !c.package ? 'border-brand/40 shadow-[0_4px_16px_-10px_rgba(15,168,166,0.5)]' : 'border-border'}`}>
         <p className="text-sm font-medium mb-1">{c.package ? 'Package' : isClient ? 'Which package did they join?' : 'Joined? Record their package'}</p>

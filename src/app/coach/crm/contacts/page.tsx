@@ -9,6 +9,7 @@ import {
 import { weightProgress } from '@/lib/crm/progress';
 import { ago } from '@/lib/crm/format';
 import { CrmPlanStatus, CrmRowDelete } from '@/components/crm/CrmActions';
+import CrmIbfPaid from '@/components/crm/CrmIbfPaid';
 
 const input = 'rounded-lg border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-brand';
 
@@ -34,7 +35,7 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
 
   let query = supabase
     .from('crm_contacts')
-    .select('id, full_name, email, phone, source, stage, tags, last_activity_at, client_id, brand, package, payment_plan, list_position')
+    .select('id, full_name, email, phone, source, stage, tags, last_activity_at, client_id, brand, package, package_price, package_start, payment_plan, list_position')
     .order('last_activity_at', { ascending: false })
     .limit(1000);
   if (STAGES.some((s) => s.key === stage)) query = query.eq('stage', stage as CrmStage);
@@ -163,6 +164,9 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
                       <span className={`text-3xs font-semibold uppercase tracking-wide rounded-full border px-2 py-0.5 flex-shrink-0 ${STAGE_META[c.stage].className} ${c.tags.includes('plan-sent') || c.tags.includes('plan-pending') ? 'hidden sm:inline' : ''}`}>{STAGE_META[c.stage].short}</span>
                       <span className="hidden sm:block text-2xs text-neutral-400 w-16 text-right flex-shrink-0">{ago(c.last_activity_at, nowMs)}</span>
                     </Link>
+                    {c.brand === 'ironbodyfit' && c.package === 'meal_plan' && (
+                      <span className="flex-shrink-0 mr-1.5"><CrmIbfPaid id={c.id} price={c.package_price != null ? Number(c.package_price) : null} start={c.package_start} /></span>
+                    )}
                     <CrmPlanStatus id={c.id} tags={c.tags} email={c.email} name={c.full_name} size="sm" />
                     <CrmRowDelete id={c.id} name={c.full_name} />
                   </div>

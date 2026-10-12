@@ -7,12 +7,13 @@ const TABS = [
   { href: '/coach/crm', label: 'Overview' },
   { href: '/coach/crm/pipeline', label: 'Pipeline' },
   { href: '/coach/crm/contacts', label: 'Contacts' },
+  { href: '/coach/crm/revenue', label: 'Revenue' },
 ];
 
 export default function CrmTabs() {
   const pathname = usePathname();
   return (
-    <nav className="grid grid-cols-3 gap-1 rounded-2xl bg-neutral-100 p-1">
+    <nav className="grid grid-cols-4 gap-1 rounded-2xl bg-neutral-100 p-1">
       {TABS.map((t) => {
         const on = t.href === '/coach/crm' ? pathname === t.href : pathname.startsWith(t.href);
         return (

@@ -104,4 +104,10 @@ export function clientType(c: { package: CrmPackage | null; brand: CrmBrand; cli
   return null;
 }
 
+// IronBodyFit meal plans are free for some members and €10 for others — the
+// coach flips a switch per client (CrmIbfPaid). The payment it creates carries
+// this note so switching it off removes exactly that payment and nothing else.
+export const IBF_MEAL_PLAN_PRICE = 10;
+export const IBF_PLAN_NOTE = 'IronBodyFit meal plan';
+
 export const PAYMENT_METHODS = ['Cash', 'Card', 'Bank transfer', 'Revolut', 'Other'];
