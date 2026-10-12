@@ -36,6 +36,8 @@ export type ParsedFoodPart = {
   estimated: boolean;
   confidence: number;
   cal: number; prot: number; carb: number; fat: number;
+  /** set when a misspelling was understood: what they typed, so the reply can say how it was read */
+  read?: string;
   /** a short plain-English assumption worth telling the client about */
   note?: string;
 };
@@ -192,21 +194,28 @@ export function getIndex(foods: VittoFoods): PhraseEntry[] {
   if (cached) return cached;
   const entries: PhraseEntry[] = [];
   const seen = new Map<string, number>();
-  const push = (phrase: string, key: string) => {
+  // Two passes so a name that is itself a real food/synonym ("nuggets") keeps
+  // its own phrase instead of being filed as a plural of a shorter one
+  // ("nugget") — the typo matcher sizes its tolerance from the phrase.
+  const push = (phrase: string, key: string, exactOnly: boolean) => {
+    const exact = fold(phrase.toLowerCase());
     for (const v of variantsOf(phrase)) {
+      if ((v === exact) !== exactOnly) continue;
       if (seen.has(v)) continue;
       seen.set(v, 1);
       entries.push({ variant: v, phrase, key, words: v.split(' ').length });
     }
   };
-  for (const key of Object.keys(foods.db)) push(key, key);
-  for (const [phrase, canonical] of Object.entries(foods.synonyms)) if (foods.db[canonical]) push(phrase, canonical);
+  for (const pass of [true, false]) {
+    for (const key of Object.keys(foods.db)) push(key, key, pass);
+    for (const [phrase, canonical] of Object.entries(foods.synonyms)) if (foods.db[canonical]) push(phrase, canonical, pass);
+  }
   entries.sort((a, b) => b.words - a.words || b.variant.length - a.variant.length);
   INDEX_CACHE.set(foods, entries);
   return entries;
 }
 
-type Span = { start: number; end: number; key: string; phrase: string; fuzzy?: number };
+type Span = { start: number; end: number; key: string; phrase: string; fuzzy?: number; typed?: string };
 
 function findSpans(lower: string, index: PhraseEntry[]): Span[] {
   const taken: Span[] = [];
@@ -229,6 +238,8 @@ function findSpans(lower: string, index: PhraseEntry[]): Span[] {
 
 // ── Fuzzy matching (typos) ──────────────────────────────────────────────
 
+// Damerau-Levenshtein (optimal string alignment): a swapped pair of letters
+// ("chicekn", "protien") costs one edit, like the other typo kinds.
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
   if (m === 0) return n;
@@ -237,7 +248,9 @@ function levenshtein(a: string, b: string): number {
   for (let j = 0; j <= n; j++) d[0][j] = j;
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
-      d[i][j] = a[i - 1] === b[j - 1] ? d[i - 1][j - 1] : 1 + Math.min(d[i - 1][j], d[i][j - 1], d[i - 1][j - 1]);
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
     }
   }
   return d[m][n];
@@ -254,24 +267,112 @@ const FUZZY_STOPWORDS = new Set([
   'small', 'smaller', 'large', 'larger', 'medium', 'handful', 'slices', 'pieces', 'bowl', 'plate', 'glass', 'scoop', 'serving', 'portion',
   'little', 'double', 'triple', 'couple', 'dozen', 'three', 'four', 'five', 'eight', 'twelve', 'quarter', 'third', 'packet', 'bottle', 'spoon',
   'spoonful', 'tablespoon', 'teaspoon', 'cups', 'lunch', 'dinner', 'breakfast', 'snack', 'morning', 'evening', 'night', 'drink', 'drank', 'meal',
+  // everyday words from fitness / chat that sit one letter from a food ("steps"/"stews")
+  'steps', 'step', 'walk', 'walked', 'walking', 'workout', 'workouts', 'trained', 'training', 'train', 'gym', 'calories', 'calorie', 'macros', 'macro',
+  'sleep', 'slept', 'hours', 'minutes', 'weight', 'weigh', 'weighed', 'goals', 'target', 'targets', 'thanks', 'thank', 'please', 'hello', 'tonight',
+  'tomorrow', 'yesterday', 'weekend', 'coach', 'message', 'amazing', 'great', 'good', 'ready', 'start', 'started', 'finish', 'finished', 'skipped', 'skip',
+  'thousand', 'hundred', 'would', 'could', 'should', 'think', 'thing', 'things', 'really', 'maybe', 'because', 'something', 'anything', 'everything',
 ]);
 
-function fuzzyFind(lower: string, index: PhraseEntry[]): { span: Span; confidence: number } | null {
-  const tokensRe = /[a-z0-9']+/g;
+// How many typos a food name of this length can absorb. Short names get one
+// edit at most — the shorter the word, the more other words sit that close.
+function typoBudget(len: number): number {
+  return len <= 6 ? 1 : len <= 14 ? 2 : 3;
+}
+
+type FuzzyHit = { span: Span; confidence: number };
+
+function tokenize(lower: string) {
+  const re = /[a-z0-9']+/g;
   const toks: { w: string; s: number; e: number }[] = [];
   let mm: RegExpExecArray | null;
-  while ((mm = tokensRe.exec(lower))) toks.push({ w: mm[0], s: mm.index, e: mm.index + mm[0].length });
-  let best: { span: Span; confidence: number; dist: number } | null = null;
-  const cands = toks.filter((t) => t.w.length >= 5 && !FUZZY_STOPWORDS.has(t.w) && !/\d/.test(t.w) && !UNIT_WORDS[t.w] && !IGNORE.has(t.w));
-  if (cands.length === 0) return null;
-  const single = index.filter((e) => e.words === 1 && e.variant.length >= 5);
+  while ((mm = re.exec(lower))) toks.push({ w: mm[0], s: mm.index, e: mm.index + mm[0].length });
+  return toks;
+}
+const isPlainWord = (w: string) => !FUZZY_STOPWORDS.has(w) && !/\d/.test(w) && !UNIT_WORDS[w] && !IGNORE.has(w);
+
+// How many letters differ between two words, ignoring order (0 = anagram).
+function letterGap(a: string, b: string): number {
+  const f = new Map<string, number>();
+  for (const ch of a) f.set(ch, (f.get(ch) ?? 0) + 1);
+  for (const ch of b) f.set(ch, (f.get(ch) ?? 0) - 1);
+  let sum = 0;
+  for (const v of f.values()) sum += Math.abs(v);
+  return sum / 2;
+}
+
+// Lower is better: relative edit distance, with a small penalty when the first
+// letter differs (typos almost never change it — "grappes" is grapes, not frappes).
+function fuzzyScore(dist: number, baseLen: number, firstSame: boolean): number {
+  return dist / baseLen + (firstSame ? 0 : 0.06);
+}
+
+// One misspelt word ("oaths", "brocoli", "chicekn"). Food names down to 4
+// letters are targets, but only for typed words of 5+ letters that start the
+// same way — "oaths" is "oats"; "mile" is not "milk" (4-letter slips like
+// "bred" are covered by the misspelling list in foodDbExtra instead).
+function fuzzyFind(lower: string, index: PhraseEntry[]): FuzzyHit | null {
+  const toks = tokenize(lower);
+  let best: (FuzzyHit & { score: number; len: number }) | null = null;
+  const cands = toks.filter((t) => t.w.length >= 5 && isPlainWord(t.w));
+  const single = index.filter((e) => e.words === 1 && e.variant.length >= 4);
   for (const c of cands) {
+    const verbish = /(ed|ing)$/.test(c.w);
     for (const e of single) {
       if (Math.abs(c.w.length - e.variant.length) > 3) continue;
+      const first = c.w[0] === e.variant[0];
+      if (e.variant.length <= 6 && !first) continue;
+      // "walked"/"skipped" are verbs, not misspelt foods
+      if (verbish && !/(ed|ing)$/.test(e.variant)) continue;
       const dist = levenshtein(c.w, e.variant);
-      const budget = e.variant.length <= 6 ? 1 : e.variant.length <= 9 ? 2 : 3;
-      if (dist <= budget && (!best || dist < best.dist)) {
-        best = { span: { start: c.s, end: c.e, key: e.key, phrase: e.phrase, fuzzy: Math.max(0.5, 1 - dist / e.variant.length) }, confidence: Math.max(0.5, 1 - dist / e.variant.length), dist };
+      if (dist === 0) continue;
+      const baseLen = Math.min(e.variant.length, e.phrase.length); // plural forms don't earn extra edits
+      if (dist > typoBudget(baseLen)) continue;
+      // two substitutions in a same-length word is a different word ("skipped"/"skimmed"),
+      // unless it's the same letters shuffled about ("brocolli", "nugetts")
+      if (dist === 2 && c.w.length === e.variant.length && letterGap(c.w, e.variant) > 1) continue;
+      const score = fuzzyScore(dist, baseLen, first);
+      if (!best || score < best.score || (score === best.score && e.variant.length > best.len)) {
+        const conf = Math.max(0.5, 1 - dist / baseLen);
+        best = { span: { start: c.s, end: c.e, key: e.key, phrase: e.phrase, fuzzy: conf, typed: c.w }, confidence: conf, score, len: e.variant.length };
+      }
+    }
+  }
+  return best ? { span: best.span, confidence: best.confidence } : null;
+}
+
+// Misspelt or mis-spaced multi-word names ("peanut buter", "greek yoghrt",
+// "whole meal bread", "cous cous"): runs of 2-3 words compared, spaces ignored,
+// against food names. Runs even when part of the phrase already matched on its
+// own ("peanut" alone would otherwise log peanuts and drop "buter").
+function fuzzyMulti(lower: string, index: PhraseEntry[]): FuzzyHit | null {
+  const toks = tokenize(lower);
+  let best: (FuzzyHit & { score: number; len: number }) | null = null;
+  const strip = (x: string) => x.replace(/ /g, '');
+  const exactVariants = new Set(index.map((e) => e.variant));
+  for (let n = 2; n <= 3; n++) {
+    for (let i = 0; i + n <= toks.length; i++) {
+      const win = toks.slice(i, i + n);
+      if (!win.every((t) => t.w.length >= 3 && !FUZZY_STOPWORDS.has(t.w) && !/\d/.test(t.w))) continue;
+      const joined = win.map((t) => t.w).join('');
+      const typed = win.map((t) => t.w).join(' ');
+      if (exactVariants.has(typed)) continue; // already a real food name, spelt right
+      for (const e of index) {
+        if (e.words < 1 || e.words > 3) continue;
+        const target = strip(e.variant);
+        if (target.length < 7 || Math.abs(joined.length - target.length) > 2) continue;
+        const first = joined[0] === target[0];
+        if (!first) continue;
+        const dist = levenshtein(joined, target);
+        const baseLen = Math.min(target.length, strip(e.phrase).length);
+        if (dist > typoBudget(baseLen)) continue;
+        if (dist === 2 && joined.length === target.length && letterGap(joined, target) > 1) continue;
+        if (dist === 0 && typed === e.variant) continue; // already an exact match
+        const score = fuzzyScore(dist, baseLen, true) - 0.01 * n; // prefer the longer run
+        if (!best || score < best.score || (score === best.score && e.variant.length > best.len)) {
+          const conf = Math.max(0.5, 1 - dist / baseLen);
+          best = { span: { start: win[0].s, end: win[n - 1].e, key: e.key, phrase: e.phrase, fuzzy: conf, typed: dist === 0 ? undefined : typed }, confidence: conf, score, len: e.variant.length };
+        }
       }
     }
   }
@@ -485,8 +586,9 @@ function pluralize(label: string, n: number): string {
 }
 
 // Resolves one matched food + its surrounding modifiers into a logged item.
-function resolveItem(key: string, raw: FoodEntry, mods: Modifiers, lowerSeg: string, confidence: number): ParsedFoodPart {
-  const fuzzyTag = confidence < 1 ? ' (assumed)' : '';
+function resolveItem(key: string, raw: FoodEntry, mods: Modifiers, lowerSeg: string, confidence: number, typed?: string): ParsedFoodPart {
+  // A confidently-read typo is just the food; only a shaky guess gets flagged in the name.
+  const fuzzyTag = confidence < 0.7 ? ' (assumed)' : '';
   let useKey = key;
   let useRaw = raw;
   let remapNote: string | undefined;
@@ -513,10 +615,10 @@ function resolveItem(key: string, raw: FoodEntry, mods: Modifiers, lowerSeg: str
   const sizeWord = hasSize ? mods.size + ' ' : '';
   const out = (grams: number, label: string, amount: number, unit: string, estimated: boolean, note?: string): ParsedFoodPart => {
     const f = grams / 100;
-    return { label: label + fuzzyTag, matchedFood: useKey, amount, unit, estimated, confidence, cal: Math.round(per100.cal * f), prot: r1(per100.prot * f), carb: r1(per100.carb * f), fat: r1(per100.fat * f), note: note || remapNote };
+    return { label: label + fuzzyTag, matchedFood: useKey, amount, unit, estimated, confidence, read: typed, cal: Math.round(per100.cal * f), prot: r1(per100.prot * f), carb: r1(per100.carb * f), fat: r1(per100.fat * f), note: note || remapNote };
   };
   const exact = (n: number, scaled: number, label: string, unit: string, estimated: boolean, note?: string): ParsedFoodPart => ({
-    label: label + fuzzyTag, matchedFood: useKey, amount: n, unit, estimated, confidence,
+    label: label + fuzzyTag, matchedFood: useKey, amount: n, unit, estimated, confidence, read: typed,
     cal: Math.round(food.cal * scaled), prot: r1(food.prot * scaled), carb: r1(food.carb * scaled), fat: r1(food.fat * scaled), note: note || remapNote,
   });
 
@@ -647,6 +749,18 @@ function parseSegment(text: string, foods: VittoFoods, index: PhraseEntry[]): Se
   const lower = text;
   let spans = findSpans(lower, index);
   let fuzzyConf = 1;
+  // A misspelt/mis-spaced multi-word food overrides the partial exact matches
+  // inside it ("peanut buter" is peanut butter, not peanuts).
+  const multi = fuzzyMulti(lower, index);
+  if (multi) {
+    const overlapped = spans.filter((sp) => sp.start < multi.span.end && sp.end > multi.span.start);
+    const same = overlapped.length === 1 && overlapped[0].key === multi.span.key && overlapped[0].start === multi.span.start && overlapped[0].end === multi.span.end;
+    // only when it explains more of the text than what already matched exactly
+    const coversMore = overlapped.every((sp) => sp.end - sp.start < multi.span.end - multi.span.start);
+    if (!same && coversMore) {
+      spans = spans.filter((sp) => !overlapped.includes(sp)).concat(multi.span).sort((x, y) => x.start - y.start);
+    }
+  }
   if (spans.length === 0) {
     const f = fuzzyFind(lower, index);
     if (f) { spans = [f.span]; fuzzyConf = f.confidence; }
@@ -701,11 +815,11 @@ function parseSegment(text: string, foods: VittoFoods, index: PhraseEntry[]): Se
     postMods.leftover.forEach((w) => leftover.add(w));
     const entry = foods.db[s.key];
     if (!entry) continue;
-    items.push(resolveItem(s.key, entry, mods, lower, s.fuzzy ?? fuzzyConf));
+    items.push(resolveItem(s.key, entry, mods, lower, s.fuzzy ?? fuzzyConf, s.typed));
   }
   if (items.length === 0) return { text, status: 'unmatched', items: [], reasons: ['no-entry'] };
   if (leftover.size > 0) reasons.push('suspect:' + [...leftover].join(' '));
-  if (fuzzyConf < 0.7) reasons.push('fuzzy');
+  if (fuzzyConf < 0.7 || use.some((sp) => (sp.fuzzy ?? 1) < 0.7)) reasons.push('fuzzy');
   return { text, status: reasons.length ? 'flagged' : 'ok', items, reasons };
 }
 

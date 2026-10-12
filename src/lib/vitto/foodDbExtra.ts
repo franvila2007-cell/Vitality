@@ -430,7 +430,23 @@ export const EXTRA_FOODS: Record<string, FoodEntry> = {
   cannoli: u(250, 5, 25, 14, 'cannoli', 80),
 };
 
+// Slips the typo matcher can't safely catch on its own: 4-letter words (where
+// near-misses are other real words — "mile" is not "milk"), spellings more than
+// one edit away, and everyday alternative names. Each maps onto a food that
+// already exists; entries pointing at a missing food are ignored.
+const MISSPELLINGS: Record<string, string> = {
+  stake: 'steak', bred: 'bread', aple: 'apple', apel: 'apple', bacn: 'bacon', bakon: 'bacon', frys: 'fries', fries: 'fries', piza: 'pizza', pitza: 'pizza',
+  porage: 'porridge', poridge: 'porridge', porrige: 'porridge', porige: 'porridge', oatmeal: 'oats', 'oat meal': 'oats', oaths: 'oats', oatz: 'oats',
+  hamburger: 'burger', hambuger: 'burger', 'ham burger': 'burger', cofe: 'coffee', cofee: 'coffee', coffe: 'coffee', capuchino: 'cappuccino',
+  egs: 'egg', egss: 'egg', eggz: 'egg', omlet: 'omelette', yog: 'yogurt', yogert: 'yogurt', yoghourt: 'yogurt', yougurt: 'yogurt',
+  avo: 'avocado', choc: 'chocolate', choccy: 'chocolate', rcie: 'rice', ryce: 'rice', pasts: 'pasta', pastaa: 'pasta',
+  spagetti: 'pasta', spaghetti: 'pasta', spagheti: 'pasta', macaroni: 'pasta', penne: 'pasta', fusilli: 'pasta', zucchini: 'courgette',
+  tuna: 'tuna', tunna: 'tuna', milkk: 'milk', mik: 'milk', chiken: 'chicken breast', chickn: 'chicken breast', chikn: 'chicken breast',
+  salad: 'mixed salad', sarnie: 'sandwich', brekkie: 'scrambled eggs', cuppa: 'tea', whey: 'protein shake',
+};
+
 export const EXTRA_SYNONYMS: Record<string, string> = {
+  ...MISSPELLINGS,
   // coffee/cafe
   'black coffee': 'coffee', 'coffee black': 'coffee', 'filter coffee': 'coffee', 'instant coffee': 'coffee',
   'long black': 'americano', 'cafe latte': 'latte', 'caffe latte': 'latte', 'flat whites': 'flat white',

@@ -488,6 +488,9 @@ export function composeLogReply(ctx: VittoContext, text: string, items: ParsedFo
   let reply = opener + ' ' + foodList + '. Around ' + Math.round(totals.cal) + ' kcal, ' + roundedProt + 'g protein, ' + roundedCarb + 'g carbs and ' + roundedFat + 'g fat.';
 
   // Be upfront about every assumption, and make correcting it one short message.
+  // Say how a misspelling was read, so a wrong guess is easy to spot and fix.
+  const reads = [...new Set(items.filter((m) => m.read).map((m) => `"${m.read}" as ${m.matchedFood}`))];
+  if (reads.length > 0) reply += ' (I read ' + reads.join(' and ') + ' 👍 — say so if I got it wrong.)';
   const notes = [...new Set(items.map((m) => m.note).filter((n): n is string => !!n))];
   if (notes.length > 0) {
     reply += ' (' + notes.join('; ') + ' — if that\'s off, just tell me the real amount (like "actually 2" or "it was large") and I\'ll fix it.)';
