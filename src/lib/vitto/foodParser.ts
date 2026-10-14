@@ -84,6 +84,10 @@ export function normalizeText(text: string): string {
   t = t.replace(/(\d)\s*[x×]\s+(?=[a-z])/g, '$1 ').replace(/\b[x×](\d+)\b/g, '$1');
   // "a slice of (any flavour) pizza" -> "a pizza slice" so it hits the per-slice entry, not the whole pizza
   t = t.replace(/\b(?:slices?|pieces?|wedges?)\s+of\s+(?:(?!and\b|with\b|then\b|on\b)[a-z]+\s+){0,3}?pizza\b/g, ' pizza slice ');
+  // fat-content labels ("greek yoghurt 0%", "2% milk") describe the food — they're not a quantity
+  t = t.replace(/\b\d+(?:\.\d+)?\s*%\s*(?:fat\b)?/g, ' ');
+  // apostrophes inside brand names ("mcdonald's", "nando's") so they match the plain spelling
+  t = t.replace(/\b(mcdonald|nando|domino|wendy|sainsbury|waitrose|kellogg|cadbury|tunnock|farson|pret|greg|papa john|wagamama)'s\b/g, '$1s');
   // British "chips" are fries unless it's clearly a packet of crisps
   t = t.replace(/\b(bag|packet|pack|share bag|snack)\s+(?:of\s+)?chips\b/g, '$1 of crisps');
   t = t.replace(/\b(salt and vinegar|cheese and onion|ready salted|prawn cocktail)\s+chips\b/g, '$1 crisps');
@@ -151,7 +155,7 @@ const NATURAL_SCALE: Record<Size, number> = { tiny: 0.5, mini: 0.5, personal: 0.
 
 // Words that carry no food information. Anything NOT in here and NOT a known
 // food/quantity/size/unit marks a segment as "has something I don't understand".
-const IGNORE = new Set(`i me my mine we our you your it its it's is are was were be been being am a an the of for to at on in out up down off over
+const IGNORE = new Set(`mcdonalds mcdonald macdonalds maccies maccy mcd kfc bk subway dominos pizzahut nandos greggs costa starbucks nero pret wagamama wagamamas tesco sainsburys asda lidl aldi waitrose cadbury cadburys nestle mcvities kelloggs heinz mars walkers from at i me my mine we our you your it its it's is are was were be been being am a an the of for to at on in out up down off over
 with without and or but so then than that this these those there here some any each every just also still only even about around roughly approx
 approximately like really very quite pretty bit little more less most much many lot lots plenty extra another other one ones had have has having ate
 eat eating eaten drank drink drinking drunk got get getting grabbed grab made make making finished consumed snacked snacking cooked cook cooking
@@ -613,13 +617,16 @@ function resolveItem(key: string, raw: FoodEntry, mods: Modifiers, lowerSeg: str
   const cafe = mods.cafe;
   const hasSize = !!mods.size && (mods.size !== 'medium' || SIZE_OVERRIDES[useKey]?.medium !== undefined);
   const sizeWord = hasSize ? mods.size + ' ' : '';
+  // Brand / restaurant items carry typical numbers — always an estimate, and said so.
+  const approx = !!(useRaw as { approx?: boolean }).approx;
+  const approxNote = approx ? 'chain and brand portions vary, so treat that as a close estimate' : undefined;
   const out = (grams: number, label: string, amount: number, unit: string, estimated: boolean, note?: string): ParsedFoodPart => {
     const f = grams / 100;
-    return { label: label + fuzzyTag, matchedFood: useKey, amount, unit, estimated, confidence, read: typed, cal: Math.round(per100.cal * f), prot: r1(per100.prot * f), carb: r1(per100.carb * f), fat: r1(per100.fat * f), note: note || remapNote };
+    return { label: label + fuzzyTag, matchedFood: useKey, amount, unit, estimated: estimated || approx, confidence, read: typed, cal: Math.round(per100.cal * f), prot: r1(per100.prot * f), carb: r1(per100.carb * f), fat: r1(per100.fat * f), note: note || remapNote || approxNote };
   };
   const exact = (n: number, scaled: number, label: string, unit: string, estimated: boolean, note?: string): ParsedFoodPart => ({
-    label: label + fuzzyTag, matchedFood: useKey, amount: n, unit, estimated, confidence, read: typed,
-    cal: Math.round(food.cal * scaled), prot: r1(food.prot * scaled), carb: r1(food.carb * scaled), fat: r1(food.fat * scaled), note: note || remapNote,
+    label: label + fuzzyTag, matchedFood: useKey, amount: n, unit, estimated: estimated || approx, confidence, read: typed,
+    cal: Math.round(food.cal * scaled), prot: r1(food.prot * scaled), carb: r1(food.carb * scaled), fat: r1(food.fat * scaled), note: note || remapNote || approxNote,
   });
 
   // 1. explicit weight / volume always wins
@@ -745,6 +752,21 @@ function contentTokens(lower: string): string[] {
   return m.leftover;
 }
 
+// Two matches that are really one food: a brand + its generic name ("walkers
+// crisps" = crisps twice) or a milk type + the drink it goes in ("oat milk
+// latte" = a latte, not 250ml of oat milk plus a latte).
+function tidySpans(lower: string, spans: Span[]): Span[] {
+  const out: Span[] = [];
+  for (const sp of spans) {
+    const prev = out[out.length - 1];
+    const gapIsBlank = prev && lower.slice(prev.end, sp.start).trim() === '';
+    if (prev && gapIsBlank && prev.key === sp.key) { prev.end = sp.end; continue; }
+    if (prev && gapIsBlank && MILK_KEYS.has(prev.key) && MILKY_DRINKS.has(sp.key)) { out[out.length - 1] = sp; continue; }
+    out.push({ ...sp });
+  }
+  return out;
+}
+
 function parseSegment(text: string, foods: VittoFoods, index: PhraseEntry[]): SegmentResult {
   const lower = text;
   let spans = findSpans(lower, index);
@@ -761,6 +783,7 @@ function parseSegment(text: string, foods: VittoFoods, index: PhraseEntry[]): Se
       spans = spans.filter((sp) => !overlapped.includes(sp)).concat(multi.span).sort((x, y) => x.start - y.start);
     }
   }
+  spans = tidySpans(lower, spans);
   if (spans.length === 0) {
     const f = fuzzyFind(lower, index);
     if (f) { spans = [f.span]; fuzzyConf = f.confidence; }

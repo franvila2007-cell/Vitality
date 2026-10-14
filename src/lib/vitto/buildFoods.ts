@@ -6,16 +6,17 @@
 import type { FoodEntry } from './foodDb';
 import type { VittoFoods } from './foodParser';
 import { EXTRA_FOODS, EXTRA_SYNONYMS } from './foodDbExtra';
+import { BRAND_FOODS, BRAND_SYNONYMS } from './foodDbBrands';
 
 type GlobalRow = { name: string; type: string; data: unknown };
 type SynonymRow = { phrase: string; canonical: string };
 type CustomRow = { name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; default_grams: number | null };
 
 export function buildVittoFoods(globalRows: GlobalRow[], synonymRows: SynonymRow[], customRows: CustomRow[]): VittoFoods {
-  const db: Record<string, FoodEntry> = { ...EXTRA_FOODS };
+  const db: Record<string, FoodEntry> = { ...EXTRA_FOODS, ...BRAND_FOODS };
   for (const row of globalRows) db[row.name] = { type: row.type, ...(row.data as object) } as FoodEntry;
 
-  const synonyms: Record<string, string> = { ...EXTRA_SYNONYMS };
+  const synonyms: Record<string, string> = { ...EXTRA_SYNONYMS, ...BRAND_SYNONYMS };
   for (const s of synonymRows) synonyms[s.phrase] = s.canonical;
 
   // The coach's seed calls potato crisps "chips" (US usage). Clients here

@@ -12,6 +12,8 @@ export type UnitFields = {
   pieceGrams?: number; sliceGrams?: number; cupGrams?: number; tbspGrams?: number; tspGrams?: number;
   glassGrams?: number; canGrams?: number; bottleGrams?: number; scoopGrams?: number; handfulGrams?: number;
   barGrams?: number; packGrams?: number; shotGrams?: number;
+  /** brand / restaurant item: numbers are typical, not exact — logged as an estimate and said so */
+  approx?: boolean;
 };
 
 export type FoodEntry =

@@ -1,0 +1,155 @@
+# fast food & chains
+big mac
+mcdonalds big mac meal
+mcchicken sandwich
+6 chicken mcnuggets
+large fries
+quarter pounder with cheese
+kfc zinger burger
+kfc 3 piece meal
+nandos half chicken
+nandos peri peri chicken wrap
+subway 6 inch chicken teriyaki
+subway meatball sub
+dominos pepperoni pizza slice
+burger king whopper
+five guys cheeseburger
+greggs sausage roll
+greggs steak bake
+costa flat white
+starbucks caramel frappuccino
+pret chicken avocado sandwich
+wagamama chicken katsu curry
+nutella crepe
+# snacks & sweets
+kitkat
+twix
+snickers
+mars bar
+maltesers
+kinder bueno
+2 digestive biscuits
+3 hobnobs
+3 jaffa cakes
+4 oreos
+pringles
+doritos
+walkers crisps
+twistees
+small bag of popcorn
+haribo
+4 squares of dairy milk
+flapjack
+cereal bar
+rice krispie square
+protein bar
+quest bar
+# breakfast
+weetabix x2 with milk
+cheerios with milk
+granola with yoghurt
+overnight oats
+avocado on toast
+full english breakfast
+beans on toast
+poached eggs on sourdough
+pancakes with maple syrup
+porridge with banana and honey
+croissant with jam
+scrambled eggs on toast
+bacon sandwich
+bagel with cream cheese
+# mains
+spag bol
+chicken curry with rice
+sweet and sour chicken with rice
+chicken tikka masala and naan
+sunday roast
+fish and chips
+lasagne and salad
+chilli con carne with rice
+chicken stir fry
+shepherds pie
+sausage and mash
+mac and cheese
+chicken fajitas
+2 tacos
+sushi 8 pieces
+pad thai
+chicken ramen
+pho
+doner kebab
+chicken shawarma
+falafel wrap
+halloumi wrap
+tuna mayo sandwich
+ham and cheese toastie
+jacket potato with beans and cheese
+tomato soup and a bread roll
+chicken caesar salad
+burrito bowl
+chicken and rice
+steak and chips
+pasta with pesto
+carbonara
+margherita pizza
+# maltese
+pastizzi
+2 pastizzi
+ftira
+hobz biz-zejt
+timpana
+ross il-forn
+bragioli
+stuffat tal-fenek
+qassatat
+imqaret
+kinnie
+cisk
+gbejniet
+ftira with tuna
+# drinks & alcohol
+pint of lager
+glass of red wine
+gin and tonic
+pina colada
+coke zero
+red bull
+oat milk latte
+protein shake with milk
+glass of orange juice
+smoothie
+cup of tea with 2 sugars
+hot chocolate
+# gym / protein
+1 scoop whey
+chicken breast 200g
+tin of tuna
+greek yoghurt 0%
+cottage cheese
+4 egg whites
+rice cakes with peanut butter
+myprotein impact whey
+protein pancakes
+skyr
+# misc
+a handful of almonds
+tbsp olive oil
+slice of cheese
+salami
+olives
+hummus and carrots
+mozzarella
+prosciutto
+parmesan
+mixed nuts
+dark chocolate
+banana
+apple
+grapes
+blueberries
+sweet potato
+brown rice
+quinoa
+lentil soup
+chicken noodle soup
