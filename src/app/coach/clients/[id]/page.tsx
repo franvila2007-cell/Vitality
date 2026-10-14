@@ -5,6 +5,7 @@ import TargetsEditor from '@/components/coach/TargetsEditor';
 import RankOverride from '@/components/coach/RankOverride';
 import CoachNoteEditor from '@/components/coach/CoachNoteEditor';
 import DailyMessageEditor from '@/components/coach/DailyMessageEditor';
+import HabitHistory from '@/components/coach/HabitHistory';
 import RemoveClientButton from '@/components/coach/RemoveClientButton';
 import ResendInviteButton from '@/components/coach/ResendInviteButton';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
@@ -12,7 +13,8 @@ import WeightTrendGraph from '@/components/WeightTrendGraph';
 import AssessmentAnswers from '@/components/coach/AssessmentAnswers';
 import type { Answers } from '@/lib/assessment/questions';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
-import { HABIT_SCHEDULE_COLUMNS, completionsByDate, habitDay } from '@/lib/habits';
+import { HABIT_SCHEDULE_COLUMNS, completionsByDate, habitDay, type Habit } from '@/lib/habits';
+import { coachToday } from '@/lib/date';
 import { packageContext } from '@/lib/crm/packages';
 import CrmPackageEditor from '@/components/crm/CrmPackageEditor';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
@@ -44,6 +46,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     .ilike('email', profileRes.data.email.replace(/[\\%_]/g, '\\$&'))
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   // Their CRM contact (every client has one) — for the package card.
+  // Full habit rows (labels, emoji, who added them) for the habit history card.
+  const { data: habitRows } = await supabase.from('habits').select('*').eq('user_id', id).order('sort_order', { ascending: true });
   const { data: dayMessages } = await supabase
     .from('coach_daily_messages').select('date, body').eq('user_id', id)
     .order('date', { ascending: false }).limit(40);
@@ -198,6 +202,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         )}
 
         <TargetsEditor userId={id} initial={targets} />
+
+        <HabitHistory
+          habits={(habitRows || []) as Habit[]}
+          doneByDate={doneByDate}
+          today={coachToday()}
+          firstName={(profileRes.data.full_name || profileRes.data.email).trim().split(/\s+/)[0]}
+        />
 
         {clientProfile && <CoachNoteEditor userId={id} initial={clientProfile.coach_note} />}
 

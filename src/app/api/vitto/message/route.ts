@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { processVittoMessage, finishWithLLM, type VittoContext, type VittoAction, type MealEntry, type PendingState } from '@/lib/vitto/parser';
 import { buildVittoFoods } from '@/lib/vitto/buildFoods';
+import { learnUnknownFoods } from '@/lib/vitto/learn';
 import { HABIT_SCHEDULE_COLUMNS, completionsByDate, dailyStreak } from '@/lib/habits';
 import { llmParseFoodMessage, llmEstimateFoodInsights, llmAnswerQuestion } from '@/lib/vitto/llmFallback';
 
@@ -69,12 +70,33 @@ export async function POST(req: Request) {
   // like a person would; anything it maps onto a known food is re-computed
   // from the database numbers, the rest is flagged as an estimate. The local
   // best-effort result stands if the call fails or no key is configured.
-  if (result.needsLLM && result.llmTexts && result.llmTexts.length > 0 && process.env.ANTHROPIC_API_KEY) {
-    const items = await llmParseFoodMessage(result.llmTexts.join(', '), Object.keys(foods.db), process.env.ANTHROPIC_API_KEY);
-    if (items && items.length > 0) {
-      const merged = finishWithLLM(result, items, ctx, text);
+  if (result.needsLLM && result.llmTexts && result.llmTexts.length > 0) {
+    const llmKey = process.env.ANTHROPIC_API_KEY;
+    // Two helpers run side by side: Open Food Facts (real label values for a
+    // product Vitto has never heard of — learned and kept for everyone) and the
+    // LLM (reads messy wording). Whichever resolves it wins; the numbers for
+    // known foods always come from the database.
+    const [llmItems, learnedRes] = await Promise.all([
+      llmKey ? llmParseFoodMessage(result.llmTexts.join(', '), Object.keys(foods.db), llmKey) : Promise.resolve(null),
+      learnUnknownFoods(result.llmTexts, foods, createAdminClient()).catch(() => null),
+    ]);
+    let useCtx = ctx;
+    if (learnedRes && learnedRes.learned.length > 0) {
+      useCtx = { ...ctx, foods: learnedRes.foods };
+      result = processVittoMessage(text, useCtx);
+    }
+    if (result.needsLLM && llmItems && llmItems.length > 0) {
+      const merged = finishWithLLM(result, llmItems, useCtx, text);
       if (merged) result = merged;
     }
+  }
+
+  // A bare product name ("hanini gibniet nixfin", "a muller corner") isn't
+  // food-shaped to the local parser, but it may well be a packaged food Open
+  // Food Facts knows — try learning it before treating it as a question.
+  if (result.unhandled && text.length <= 70 && !text.includes('?')) {
+    const learnedRes = await learnUnknownFoods([text], foods, createAdminClient()).catch(() => null);
+    if (learnedRes && learnedRes.learned.length > 0) result = processVittoMessage(text, { ...ctx, foods: learnedRes.foods });
   }
 
   // Genuine open question ("is peanut butter good for cutting?") rather than

@@ -326,3 +326,65 @@ export async function llmParseFoodMessage(text: string, foodNames: string[], api
     return null; // graceful degradation — the local best-effort result stands
   }
 }
+
+// "Teach Vitto" by photo: read a product's nutrition table (and name) off a
+// package. Used by the coach's Foods page for products Open Food Facts doesn't
+// have — most Maltese brands. Never guesses: anything not clearly legible comes
+// back null and the coach fills it in.
+export type LabelReading = {
+  name: string | null; brand: string | null; liquid: boolean;
+  per100: { cal: number | null; prot: number | null; carb: number | null; fat: number | null };
+  servingG: number | null; packG: number | null; note: string | null;
+};
+
+const LABEL_SYSTEM_PROMPT = `You read food packaging for a nutrition app. The photo shows a product's package — the front, the nutrition table, or both.
+
+Extract:
+- name: the product name as a person would say it (e.g. "Twistees cheese", "Kinnie"), or null if not visible.
+- brand: the brand, or null.
+- liquid: true if it's a drink sold by volume (values are per 100ml), else false.
+- per100: energy in kcal, protein, carbohydrate and fat, all PER 100g (or per 100ml). If the table only gives per-serving values, convert them to per 100 using the stated serving size. Energy: use the kcal figure (not kJ).
+- servingG: the stated serving/portion size in g or ml, or null.
+- packG: the total pack size in g or ml, or null.
+- note: one short sentence if something was hard to read or you had to convert, else null.
+
+Rules: copy numbers exactly as printed. If a number is not clearly legible, use null — NEVER estimate or guess a value. Respond with ONLY a JSON object:
+{"name": string|null, "brand": string|null, "liquid": boolean, "per100": {"cal": number|null, "prot": number|null, "carb": number|null, "fat": number|null}, "servingG": number|null, "packG": number|null, "note": string|null}
+If the photo isn't a food or drink package, respond with {"name": null, "brand": null, "liquid": false, "per100": {"cal": null, "prot": null, "carb": null, "fat": null}, "servingG": null, "packG": null, "note": "That doesn't look like a food package."}`;
+
+export async function llmReadNutritionLabel(
+  base64Data: string,
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif',
+  apiKey: string,
+): Promise<LabelReading | null> {
+  try {
+    const anthropic = new Anthropic({ apiKey });
+    const msg = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 600,
+      temperature: 0,
+      system: LABEL_SYSTEM_PROMPT,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64Data } },
+          { type: 'text', text: 'Read this package.' },
+        ],
+      }],
+    });
+    const block = msg.content[0];
+    if (!block || block.type !== 'text') return null;
+    const r = parseJsonLoose(block.text) as Record<string, unknown>;
+    const n = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+    const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 80) : null);
+    const p = (r.per100 && typeof r.per100 === 'object' ? r.per100 : {}) as Record<string, unknown>;
+    return {
+      name: str(r.name), brand: str(r.brand), liquid: r.liquid === true,
+      per100: { cal: n(p.cal), prot: n(p.prot), carb: n(p.carb), fat: n(p.fat) },
+      servingG: n(r.servingG), packG: n(r.packG), note: str(r.note),
+    };
+  } catch (err) {
+    console.error('llmReadNutritionLabel failed', err);
+    return null;
+  }
+}

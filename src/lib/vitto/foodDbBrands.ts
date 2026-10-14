@@ -251,7 +251,10 @@ export const BRAND_FOODS: Record<string, FoodEntry> = {
   'hula hoops': per100(([495, 4, 61, 25]), 24),
   'skips': per100(([495, 4, 61, 25]), 17),
   'monster munch': per100(([480, 5, 63, 22]), 25),
-  'twistees': per100(([520, 6, 58, 29]), 25),
+  // real label values (Open Food Facts, Maltese products)
+  'twistees': per100(([495, 6.6, 55, 26.8]), 30),
+  'twistees sour cream and onion': per100(([464, 5.6, 53, 25]), 30),
+  'twistees reduced fat': per100(([425, 6.3, 59, 18]), 30),
   'popchips': per100(([400, 5, 70, 12]), 23),
   'pork scratchings': per100(([565, 50, 0.3, 40]), 30),
   'peanuts': per100(([600, 26, 12, 50]), 30),
@@ -293,7 +296,15 @@ export const BRAND_FOODS: Record<string, FoodEntry> = {
   'ftira with tuna': dish([700, 30, 75, 28], 380),
   'farsons blue label': drink(44, 0.3, 3.2, 0, 330),
   'cisk lager': drink(42, 0.3, 3, 0, 330),
+  'kinnie': drink(40, 0, 9.8, 0, 330),
   'kinnie zero': drink(1, 0, 0, 0, 330),
+  'cisk excel': drink(35, 0, 1.5, 0, 330),
+  'benna pro milk': drink(46, 5, 4.7, 0.8, 250),
+  'benna skimmed milk': drink(35, 3.2, 4.8, 0.3, 250),
+  'benna lactose free milk': drink(54, 3.2, 4.8, 2.5, 250),
+  'benna iced coffee': drink(76, 2.9, 10.8, 2.3, 250),
+  'benna lactose free yogurt': per100(([89, 4.6, 12.9, 2.1]), 150),
+  'hanini gbejniet': per100(([367, 23.5, 8.9, 26.4]), 25),
 };
 
 function drink(cal: number, prot: number, carb: number, fat: number, ml: number): FoodEntry {
@@ -382,6 +393,9 @@ export const BRAND_SYNONYMS: Record<string, string> = {
   'special k cereal': 'special k', 'rice krispie': 'rice krispies', 'krispies': 'rice krispies', 'nesquik cereal': 'coco pops', 'crunchy nut cornflakes': 'crunchy nut',
   'bran flake': 'bran flakes',
   // Maltese
+  'twistees cheese': 'twistees', 'cheese twistees': 'twistees', 'twistees sour cream': 'twistees sour cream and onion', 'sour cream twistees': 'twistees sour cream and onion',
+  'benna iced coffee milk': 'benna iced coffee', 'benna skim milk': 'benna skimmed milk', 'benna lactose free': 'benna lactose free milk', 'benna yoghurt': 'benna lactose free yogurt',
+  'hanini': 'hanini gbejniet', 'hanini gibniet': 'hanini gbejniet', 'gibniet nixfin': 'hanini gbejniet', 'gbejniet nixfin': 'hanini gbejniet',
   'ftira ghawdxija': 'gozitan ftira', 'ghawdxija': 'gozitan ftira', 'maltese sausage': 'zalzett malti', 'zalzett': 'zalzett malti', 'soppa armla': 'soppa tal-armla',
   'widow soup': 'soppa tal-armla', 'figolli': 'figolla', 'qaghaq': 'qaghaq tal-ghasel', 'honey ring': 'qaghaq tal-ghasel', 'honey rings': 'qaghaq tal-ghasel',
   'cisk lager': 'cisk lager', 'blue label': 'farsons blue label', 'farsons': 'farsons blue label', 'farsons lager': 'cisk lager', 'kinnie diet': 'kinnie zero',
