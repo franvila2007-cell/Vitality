@@ -88,14 +88,14 @@ export async function POST(req: Request) {
     if (answer) result = { reply: answer, actions: result.actions };
   }
 
-  await applyActions(supabase, user.id, date, result.actions, process.env.ANTHROPIC_API_KEY);
+  const logged = await applyActions(supabase, user.id, date, result.actions, process.env.ANTHROPIC_API_KEY);
 
   const { data: freshMeals } = await supabase.from('food_log_entries').select('*').eq('user_id', user.id).eq('date', date).order('logged_at', { ascending: true });
 
-  return NextResponse.json({ reply: result.reply, meals: freshMeals || [] });
+  return NextResponse.json({ reply: result.reply, meals: freshMeals || [], logged });
 }
 
-async function applyActions(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, date: string, actions: VittoAction[], apiKey?: string) {
+async function applyActions(supabase: Awaited<ReturnType<typeof createClient>>, userId: string, date: string, actions: VittoAction[], apiKey?: string): Promise<LoggedRow[]> {
   // Logging a food used to wait on an LLM call here (rating quality +
   // estimating a micronutrient panel) before the client saw anything —
   // meaning even a trivially-matched "3 eggs" paid for a full ~1-2s round
@@ -104,6 +104,7 @@ async function applyActions(supabase: Awaited<ReturnType<typeof createClient>>, 
   // via after() — it only feeds the quality-score ranking and
   // micronutrient panel, neither of which needs to be instant.
   const insertedMeals: { id: string; name: string; cal: number }[] = [];
+  const logged: LoggedRow[] = [];
 
   for (const action of actions) {
     if (action.kind === 'add_meal') {
@@ -112,8 +113,11 @@ async function applyActions(supabase: Awaited<ReturnType<typeof createClient>>, 
         user_id: userId, date, name: e.name, calories: e.cal, protein_g: e.prot, carbs_g: e.carb, fat_g: e.fat,
         original_text: e.originalText ?? null, matched_food: e.matchedFood ?? null, amount: e.amount ?? null, unit: e.unit ?? null,
         estimated: e.estimated ?? false, confidence: e.confidence ?? null, source: 'chat',
-      }).select('id').single();
-      if (inserted) insertedMeals.push({ id: inserted.id, name: e.name, cal: e.cal });
+      }).select('id, name, calories, protein_g, carbs_g, fat_g, amount, unit, matched_food, estimated').single();
+      if (inserted) {
+        insertedMeals.push({ id: inserted.id, name: e.name, cal: e.cal });
+        logged.push(inserted);
+      }
     } else if (action.kind === 'remove_meal') {
       await supabase.from('food_log_entries').delete().eq('id', action.id).eq('user_id', userId);
     } else if (action.kind === 'clear_meals') {
@@ -146,7 +150,11 @@ async function applyActions(supabase: Awaited<ReturnType<typeof createClient>>, 
       }));
     });
   }
+  return logged;
 }
+
+// What the chat card needs to show and adjust an entry that was just logged.
+type LoggedRow = { id: string; name: string; calories: number; protein_g: number; carbs_g: number; fat_g: number; amount: number | null; unit: string | null; matched_food: string | null; estimated: boolean };
 
 // A day counts if it has >=1 logged meal and >=1 ticked habit — or no habits
 // due that day at all (see dailyStreak in src/lib/habits.ts); walk back from

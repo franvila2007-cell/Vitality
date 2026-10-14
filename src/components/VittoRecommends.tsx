@@ -7,11 +7,13 @@ import type { Macros, MealOption, Recommendation } from '@/lib/vitto/mealRecomme
 // Next-meal suggestion built from what's left of today's targets. The server
 // returns a ranked shortlist in one call; "Find Another Meal" just steps
 // through it locally, so it's instant.
-export default function VittoRecommends({ remaining, hasLogged, date }: { remaining: Macros; hasLogged: boolean; date: string }) {
+export default function VittoRecommends({ remaining, hasLogged, date, onLog }: { remaining: Macros; hasLogged: boolean; date: string; /** Only passed where the client can log (not the coach's read-only preview). */ onLog?: (option: MealOption) => Promise<void> }) {
   const [rec, setRec] = useState<Recommendation | null>(null);
   const [error, setError] = useState(false);
   const [idx, setIdx] = useState(0);
   const [fetchedKey, setFetchedKey] = useState('');
+  const [logging, setLogging] = useState(false);
+  const [loggedId, setLoggedId] = useState<string | null>(null);
   const reqId = useRef(0);
 
   // Re-ask only when the numbers genuinely change (rounded, so a 0.3g drift
@@ -107,14 +109,30 @@ export default function VittoRecommends({ remaining, hasLogged, date }: { remain
               <p className="text-2xs text-neutral-400 mt-1">{option.why}</p>
             </div>
           </div>
-          {options.length > 1 && (
-            <button
-              onClick={() => setIdx((i) => (i + 1) % options.length)}
-              className="mt-3 w-full rounded-lg bg-brand text-white py-2.5 text-sm font-medium transition-transform active:scale-[0.98]"
-            >
-              Find Another Meal
-            </button>
-          )}
+          <div className="mt-3 flex gap-2">
+            {onLog && (
+              <button
+                onClick={async () => {
+                  if (logging || loggedId === option.id) return;
+                  setLogging(true);
+                  try { await onLog(option); setLoggedId(option.id); } catch { /* the Today page keeps its own state; just let them retry */ }
+                  setLogging(false);
+                }}
+                disabled={logging || loggedId === option.id}
+                className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-transform active:scale-[0.98] ${loggedId === option.id ? 'bg-status-good-bg text-status-good-text border border-status-good/30' : 'bg-brand text-white disabled:opacity-60'}`}
+              >
+                {loggedId === option.id ? 'Logged ✓' : logging ? 'Logging…' : 'Log this meal'}
+              </button>
+            )}
+            {options.length > 1 && (
+              <button
+                onClick={() => setIdx((i) => (i + 1) % options.length)}
+                className={`rounded-lg py-2.5 text-sm font-medium transition-transform active:scale-[0.98] ${onLog ? 'flex-1 border border-brand text-brand-dark' : 'w-full bg-brand text-white'}`}
+              >
+                Find Another Meal
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

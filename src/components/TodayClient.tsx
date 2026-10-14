@@ -12,6 +12,9 @@ import MicronutrientPanel from '@/components/MicronutrientPanel';
 import VittoRecommends from '@/components/VittoRecommends';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import VittoComposer from '@/components/VittoComposer';
+import LoggedMealCard, { type LoggedItem } from '@/components/LoggedMealCard';
+import { suggestFoods, applySuggestion } from '@/lib/vitto/suggest';
+import type { MealOption } from '@/lib/vitto/mealRecommender';
 import type { Database } from '@/lib/supabase/database.types';
 import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
 import { completionsByDate, dailyStreak, habitDay, habitsDueOn, isHabitDue, scheduleLabel, type Habit } from '@/lib/habits';
@@ -19,7 +22,12 @@ import { completionsByDate, dailyStreak, habitDay, habitsDueOn, isHabitDue, sche
 type Meal = Database['public']['Tables']['food_log_entries']['Row'];
 type Targets = Database['public']['Tables']['targets']['Row'];
 
-type ChatMsg = { role: 'user' | 'bot'; text: string; id: string };
+type ChatMsg = { role: 'user' | 'bot'; text: string; id: string; logged?: LoggedItem[] };
+
+// A food the client logs often — tapping its chip re-logs it exactly as before.
+type RecentEntry = Pick<Meal, 'name' | 'calories' | 'protein_g' | 'carbs_g' | 'fat_g' | 'amount' | 'unit' | 'matched_food' | 'estimated' | 'quality_score'> & Partial<Meal>;
+
+const EXAMPLE_PROMPTS = ['2 eggs and toast', 'a flat white', 'chicken and rice 200g', 'big mac meal'];
 
 type BarcodeProduct = {
   name: string;
@@ -64,7 +72,9 @@ export default function TodayClient() {
   const [scannedProduct, setScannedProduct] = useState<BarcodeProduct | null>(null);
   const [scanGrams, setScanGrams] = useState('100');
   const [logging, setLogging] = useState(false);
-  const [quickAdd, setQuickAdd] = useState<{ recipes: string[]; recent: string[] }>({ recipes: [], recent: [] });
+  const [quickAdd, setQuickAdd] = useState<{ recipes: string[]; recent: RecentEntry[] }>({ recipes: [], recent: [] });
+  const [foodNames, setFoodNames] = useState<string[]>([]);
+  const adjustTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const [listening, setListening] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
@@ -141,7 +151,7 @@ export default function TodayClient() {
       supabase.from('habit_completions').select('habit_id').eq('user_id', user.id).eq('date', today).eq('completed', true),
       supabase.from('rank_overrides').select('rank').eq('user_id', user.id).eq('date', today).maybeSingle(),
       supabase.from('custom_foods').select('name').eq('user_id', user.id).order('name').limit(12),
-      supabase.from('food_log_entries').select('name').eq('user_id', user.id).gte('date', addDays(today, -14)).order('logged_at', { ascending: false }).limit(60),
+      supabase.from('food_log_entries').select('*').eq('user_id', user.id).gte('date', addDays(today, -30)).order('logged_at', { ascending: false }).limit(250),
       supabase.from('coach_daily_messages').select('body').eq('user_id', user.id).eq('date', today).maybeSingle(),
     ]);
 
@@ -157,23 +167,29 @@ export default function TodayClient() {
 
     const recipeNames = (recipesRes.data || []).map((r) => r.name);
     const recipeNamesLower = new Set(recipeNames.map((n) => n.toLowerCase()));
-    const recentNames: string[] = [];
-    const seen = new Set<string>();
+    // Most-logged foods of the last 30 days first (ties: most recent), each
+    // chip remembering the exact entry so a tap re-logs it as it was.
+    const byName = new Map<string, { entry: RecentEntry; count: number }>();
     for (const row of recentRes.data || []) {
       const key = row.name.toLowerCase();
-      // Skip anything already offered as a saved recipe chip, and cap at a
-      // handful so this stays a quick row, not a second meal log.
-      if (seen.has(key) || recipeNamesLower.has(key)) continue;
-      seen.add(key);
-      recentNames.push(row.name);
-      if (recentNames.length >= 8) break;
+      if (recipeNamesLower.has(key)) continue;
+      const hit = byName.get(key);
+      if (hit) hit.count++; else byName.set(key, { entry: row, count: 1 });
     }
+    const recentNames = [...byName.values()].sort((a, b) => b.count - a.count).slice(0, 8).map((h) => h.entry);
     setQuickAdd({ recipes: recipeNames, recent: recentNames });
     setLoading(false);
     refreshStreak(user.id, habitsRes.data || [], targetsRes.data || DEFAULT_TARGETS);
   }, [supabase, today, refreshStreak]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Food names for the as-you-type suggestions (fetched once; the browser caches it).
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/vitto/foods').then((r) => (r.ok ? r.json() : null)).then((d) => { if (!cancelled && d?.names) setFoodNames(d.names); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (chat.length === 0) {
@@ -201,7 +217,7 @@ export default function TodayClient() {
         body: JSON.stringify({ text, date: today }),
       });
       const data = await res.json();
-      setChat((c) => [...c, { id: 'b' + Date.now(), role: 'bot', text: data.reply || "Sorry, something went wrong." }]);
+      setChat((c) => [...c, { id: 'b' + Date.now(), role: 'bot', text: data.reply || "Sorry, something went wrong.", logged: Array.isArray(data.logged) && data.logged.length > 0 ? data.logged : undefined }]);
       if (data.meals) {
         // A logged meal actually landed — give Vitto a visible reaction
         // instead of him just sitting there once the reply text lands.
@@ -220,6 +236,81 @@ export default function TodayClient() {
       setChat((c) => [...c, { id: 'e' + Date.now(), role: 'bot', text: "I couldn't reach the server just now — try again in a moment." }]);
     }
     setSending(false);
+  }
+
+  // ── logged-meal card actions ──────────────────────────────────────────
+  // Optimistic: the numbers move at once, then one request (debounced, so a
+  // run of taps is a single call) lets the server recompute the entry exactly.
+  function changeLogged(msgId: string, itemId: string, newAmount: number) {
+    const item = chat.find((m) => m.id === msgId)?.logged?.find((i) => i.id === itemId);
+    if (!item || !item.amount) return;
+    const f = newAmount / item.amount;
+    const scale = (x: number) => Math.round(x * f * 10) / 10;
+    setChat((c) => c.map((m) => (m.id !== msgId ? m : { ...m, logged: m.logged?.map((i) => (i.id !== itemId ? i : { ...i, amount: newAmount, calories: Math.round(i.calories * f), protein_g: scale(i.protein_g), carbs_g: scale(i.carbs_g), fat_g: scale(i.fat_g) })) })));
+    setMeals((ms) => ms.map((m) => (m.id !== itemId ? m : { ...m, amount: newAmount, calories: Math.round(m.calories * f), protein_g: scale(m.protein_g), carbs_g: scale(m.carbs_g), fat_g: scale(m.fat_g) })));
+    clearTimeout(adjustTimers.current[itemId]);
+    adjustTimers.current[itemId] = setTimeout(() => commitAdjust(msgId, itemId, newAmount), 450);
+  }
+
+  async function commitAdjust(msgId: string, itemId: string, amount: number) {
+    try {
+      const res = await fetch('/api/vitto/adjust', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: itemId, amount }) });
+      if (!res.ok) throw new Error('adjust failed');
+      const { entry } = (await res.json()) as { entry: LoggedItem };
+      setChat((c) => c.map((m) => (m.id !== msgId ? m : { ...m, logged: m.logged?.map((i) => (i.id !== itemId ? i : { ...i, ...entry })) })));
+      setMeals((ms) => ms.map((m) => (m.id !== itemId ? m : { ...m, name: entry.name, calories: entry.calories, protein_g: entry.protein_g, carbs_g: entry.carbs_g, fat_g: entry.fat_g, amount: entry.amount, unit: entry.unit, estimated: entry.estimated })));
+    } catch {
+      load(); // couldn't save — show what's really stored
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) refreshStreak(user.id, habits, targets);
+  }
+
+  function removeLogged(msgId: string, itemId: string) {
+    setChat((c) => c.map((m) => (m.id !== msgId ? m : { ...m, logged: m.logged?.map((i) => (i.id !== itemId ? i : { ...i, removed: true })) })));
+    deleteMeal(itemId);
+  }
+
+  function undoLogged(msgId: string) {
+    chat.find((m) => m.id === msgId)?.logged?.filter((i) => !i.removed).forEach((i) => removeLogged(msgId, i.id));
+  }
+
+  // Re-log a favourite exactly as it was: one insert, no parsing, no waiting.
+  async function relog(entry: RecentEntry) {
+    if (sending) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    setSending(true);
+    const { data: row, error } = await supabase.from('food_log_entries').insert({
+      user_id: user.id, date: today, name: entry.name, calories: entry.calories, protein_g: entry.protein_g, carbs_g: entry.carbs_g, fat_g: entry.fat_g,
+      amount: entry.amount, unit: entry.unit, matched_food: entry.matched_food, estimated: entry.estimated, quality_score: entry.quality_score, source: 'template',
+      ...(Object.fromEntries(MICRONUTRIENT_KEYS.map((k) => [k, (entry as Record<string, unknown>)[k] ?? null])) as Record<MicronutrientKey, number | null>),
+    }).select('*').single();
+    setSending(false);
+    if (error || !row) { setChat((c) => [...c, { id: 'e' + Date.now(), role: 'bot', text: "I couldn't add that just now — try again in a moment." }]); return; }
+    const after = [...meals, row];
+    setMeals(after);
+    const leftCal = Math.round(targets.calories - after.reduce((a, m) => a + m.calories, 0));
+    setChat((c) => [...c, { id: 'b' + Date.now(), role: 'bot', text: `Added again: ${row.name} — about ${Math.round(row.calories)} kcal. ${leftCal >= 0 ? `${leftCal.toLocaleString('en-GB')} kcal left today.` : `That puts you about ${Math.abs(leftCal).toLocaleString('en-GB')} kcal over today's target.`}`, logged: [row as unknown as LoggedItem] }]);
+    setVittoReacting(true);
+    setTimeout(() => setVittoReacting(false), 900);
+    refreshStreak(user.id, habits, targets);
+  }
+
+  // "Log this meal" on the Vitto Recommends card.
+  async function logRecommended(option: MealOption) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: row, error } = await supabase.from('food_log_entries').insert({
+      user_id: user.id, date: today, name: option.name, calories: option.macros.cal, protein_g: option.macros.prot, carbs_g: option.macros.carb, fat_g: option.macros.fat,
+      original_text: option.items.join(', '), estimated: false, source: 'template',
+    }).select('*').single();
+    if (error || !row) throw new Error('log failed');
+    setMeals((ms) => [...ms, row]);
+    setChat((c) => [...c, { id: 'b' + Date.now(), role: 'bot', text: `Logged ${row.name} from Vitto's suggestion — about ${Math.round(row.calories)} kcal (${option.items.join(', ')}).` }]);
+    setVittoReacting(true);
+    setTimeout(() => setVittoReacting(false), 900);
+    refreshStreak(user.id, habits, targets);
   }
 
   async function sendChat() {
@@ -578,11 +669,29 @@ export default function TodayClient() {
               className={`flex items-end gap-1.5 ${m.role === 'user' ? 'justify-end animate-[fade-in_0.15s_ease]' : 'justify-start animate-[bubble-pop_0.35s_cubic-bezier(0.34,1.56,0.64,1)]'}`}
             >
               {m.role === 'bot' && <Image src="/vitto-avatar.png" alt="" width={26} height={26} className="flex-shrink-0" />}
-              <div className={`px-3 py-2 rounded-2xl text-[13px] max-w-[85%] ${m.role === 'user' ? 'bg-brand text-white rounded-br-sm' : 'bg-neutral-100 text-neutral-800 rounded-bl-sm'}`}>
-                {m.text}
+              <div className={`max-w-[85%] ${m.logged ? 'w-[85%]' : ''}`}>
+                <div className={`px-3 py-2 rounded-2xl text-[13px] ${m.role === 'user' ? 'bg-brand text-white rounded-br-sm' : 'bg-neutral-100 text-neutral-800 rounded-bl-sm'}`}>
+                  {m.text}
+                </div>
+                {m.logged && (
+                  <LoggedMealCard
+                    items={m.logged}
+                    leftCal={targets.calories - totals.cal}
+                    onChange={(itemId, amount) => changeLogged(m.id, itemId, amount)}
+                    onRemove={(itemId) => removeLogged(m.id, itemId)}
+                    onUndoAll={() => undoLogged(m.id)}
+                  />
+                )}
               </div>
             </div>
           ))}
+          {meals.length === 0 && chat.length === 1 && !sending && (
+            <div className="flex flex-wrap gap-1.5 pl-8">
+              {EXAMPLE_PROMPTS.map((p) => (
+                <button key={p} onClick={() => logText(p)} className="rounded-full border border-brand/30 bg-brand-light text-brand-dark text-xs font-medium px-3 py-1.5 active:scale-95">{p}</button>
+              ))}
+            </div>
+          )}
           {sending && (
             <div className="flex items-end gap-1.5 justify-start animate-[fade-in_0.15s_ease]">
               <Image src="/vitto-avatar.png" alt="" width={26} height={26} className="flex-shrink-0 vitto-thinking" />
@@ -607,14 +716,15 @@ export default function TodayClient() {
                 📖 {name}
               </button>
             ))}
-            {quickAdd.recent.map((name) => (
+            {quickAdd.recent.map((entry) => (
               <button
-                key={'recent-' + name}
-                onClick={() => logText(name)}
+                key={'recent-' + entry.name}
+                onClick={() => relog(entry)}
                 disabled={sending}
+                title={`Log again: ${entry.name} (${Math.round(entry.calories)} kcal)`}
                 className="flex-shrink-0 rounded-full border border-border bg-neutral-50 text-neutral-600 text-xs font-medium px-3 py-1.5 whitespace-nowrap disabled:opacity-50 transition-transform active:scale-95"
               >
-                {name}
+                {entry.name.length > 26 ? entry.name.slice(0, 25) + '…' : entry.name} <span className="text-neutral-400 font-normal">{Math.round(entry.calories)}</span>
               </button>
             ))}
           </div>
@@ -637,6 +747,8 @@ export default function TodayClient() {
           onPhoto={() => { setPhotoError(null); photoInputRef.current?.click(); }}
           onScan={() => { setScanError(null); setScanning(true); }}
           onVoice={typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition) ? toggleVoiceInput : undefined}
+          suggestions={suggestFoods(foodNames, chatInput, [...quickAdd.recipes, ...quickAdd.recent.map((r) => r.name)])}
+          onPickSuggestion={(sg) => setChatInput((v) => applySuggestion(v, sg))}
         />
         {scanLoading && <p className="text-xs text-neutral-400 mt-2">Looking up that barcode…</p>}
         {scanError && <p className="text-xs text-red-500 mt-2">{scanError}</p>}
@@ -690,6 +802,7 @@ export default function TodayClient() {
         remaining={{ cal: targets.calories - totals.cal, prot: targets.protein_g - totals.prot, carb: targets.carbs_g - totals.carb, fat: targets.fat_g - totals.fat }}
         hasLogged={meals.length > 0}
         date={today}
+        onLog={logRecommended}
       />
 
       {/* Micronutrients */}

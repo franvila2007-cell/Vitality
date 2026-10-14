@@ -466,7 +466,6 @@ export function processVittoMessage(text: string, ctx: VittoContext): VittoResul
 export function composeLogReply(ctx: VittoContext, text: string, items: ParsedFoodPart[], unmatched: string[] = []): { reply: string; actions: VittoAction[] } {
   const isFirstLogToday = ctx.todayMeals.length === 0;
   const totals = items.reduce((a, m) => ({ cal: a.cal + m.cal, prot: a.prot + m.prot, carb: a.carb + m.carb, fat: a.fat + m.fat }), { cal: 0, prot: 0, carb: 0, fat: 0 });
-  const roundedProt = Math.round(totals.prot), roundedCarb = Math.round(totals.carb), roundedFat = Math.round(totals.fat);
 
   // Each food gets its OWN log entry (not merged into one row) — this is
   // what makes "remove the banana" remove only the banana even when it was
@@ -485,15 +484,26 @@ export function composeLogReply(ctx: VittoContext, text: string, items: ParsedFo
     opener = pick(['Got it!', 'Nice one, logged that:', 'Perfect, added:', 'On it!', 'All set —', 'Boom, logged:', 'Nice — added:', "Sweet, that's in:", 'Easy, done:', 'Solid choice —', 'Noted!', "Great, that's in the log:", 'Excellent choice! Logged:', 'Love that pick — logged:', 'Nutritious and delicious — logged:', "That'll do nicely — logged:", 'Nice pick! Locked in:']);
   }
   const foodList = items.map((m) => m.label).join(' and ');
-  let reply = opener + ' ' + foodList + '. Around ' + Math.round(totals.cal) + ' kcal, ' + roundedProt + 'g protein, ' + roundedCarb + 'g carbs and ' + roundedFat + 'g fat.';
+  // The meal card under the reply carries the per-item macros, so the sentence
+  // stays short: what was logged, the kcal, and what's left of the day.
+  let reply = opener + ' ' + foodList + ' — about ' + Math.round(totals.cal) + ' kcal.';
+  const dayCal = ctx.todayMeals.reduce((a, m) => a + m.cal, 0) + totals.cal;
+  const dayProt = ctx.todayMeals.reduce((a, m) => a + m.prot, 0) + totals.prot;
+  const leftCal = Math.round(ctx.targets.cal - dayCal);
+  const leftProt = Math.round(ctx.targets.prot - dayProt);
+  if (ctx.targets.cal > 0) {
+    reply += leftCal >= 0
+      ? ' ' + leftCal.toLocaleString('en-GB') + ' kcal' + (leftProt > 0 ? ' and ' + leftProt + 'g protein' : '') + ' left today.'
+      : ' That puts you about ' + Math.abs(leftCal).toLocaleString('en-GB') + ' kcal over today\'s target.';
+  }
 
-  // Be upfront about every assumption, and make correcting it one short message.
   // Say how a misspelling was read, so a wrong guess is easy to spot and fix.
   const reads = [...new Set(items.filter((m) => m.read).map((m) => `"${m.read}" as ${m.matchedFood}`))];
   if (reads.length > 0) reply += ' (I read ' + reads.join(' and ') + ' 👍 — say so if I got it wrong.)';
+  // Be upfront about every assumption, and make correcting it one tap away.
   const notes = [...new Set(items.map((m) => m.note).filter((n): n is string => !!n))];
   if (notes.length > 0) {
-    reply += ' (' + notes.join('; ') + ' — if that\'s off, just tell me the real amount (like "actually 2" or "it was large") and I\'ll fix it.)';
+    reply += ' (' + notes.join('; ') + ' — change it with − / + below, or just tell me the real amount.)';
   } else if (items.some((m) => m.estimated && m.matchedFood === '')) {
     reply += ' (That one is my best estimate, so treat it as approximate.)';
   }

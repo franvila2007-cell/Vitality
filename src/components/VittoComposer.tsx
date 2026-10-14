@@ -7,7 +7,7 @@ import { useEffect, useRef } from 'react';
 // without scrolling sideways), with photo / barcode / voice along the bottom
 // and send on the right. 16px text so iOS doesn't zoom the page on focus.
 // Enter sends; Shift+Enter adds a line.
-export default function VittoComposer({ value, onChange, onSend, sending, listening, photoLoading, onPhoto, onScan, onVoice }: {
+export default function VittoComposer({ value, onChange, onSend, sending, listening, photoLoading, onPhoto, onScan, onVoice, suggestions = [], onPickSuggestion }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
@@ -18,6 +18,9 @@ export default function VittoComposer({ value, onChange, onSend, sending, listen
   onScan: () => void;
   /** Only passed where the browser supports speech recognition. */
   onVoice?: () => void;
+  /** Food names matching what's being typed — tap one to complete it. */
+  suggestions?: { label: string; from: number }[];
+  onPickSuggestion?: (s: { label: string; from: number }) => void;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
@@ -31,6 +34,24 @@ export default function VittoComposer({ value, onChange, onSend, sending, listen
 
   return (
     <div className={`rounded-3xl border bg-neutral-50 transition-colors focus-within:bg-white ${listening ? 'border-red-300' : 'border-border focus-within:border-brand'}`}>
+      {suggestions.length > 0 && (
+        <div className="flex gap-1.5 overflow-x-auto px-3 pt-2.5 -mb-0.5" role="listbox" aria-label="Food suggestions">
+          {suggestions.map((sg) => (
+            // onMouseDown keeps focus in the text box so the keyboard doesn't flicker shut
+            <button
+              key={sg.label}
+              type="button"
+              role="option"
+              aria-selected={false}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onPickSuggestion?.(sg)}
+              className="flex-shrink-0 rounded-full border border-brand/30 bg-brand-light text-brand-dark text-xs font-medium px-3 py-1 whitespace-nowrap active:scale-95"
+            >
+              {sg.label}
+            </button>
+          ))}
+        </div>
+      )}
       <textarea
         ref={ref}
         value={value}

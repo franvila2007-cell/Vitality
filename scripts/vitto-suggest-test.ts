@@ -1,0 +1,21 @@
+import { suggestFoods, applySuggestion } from '../src/lib/vitto/suggest';
+import { nextAmount } from '../src/components/LoggedMealCard';
+let fail = 0;
+const check = (n: string, ok: boolean, x = '') => { if (!ok) fail++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${n} ${x}`); };
+const names = ['chicken breast', 'chicken thigh', 'chicken wrap', 'chickpeas', 'oats', 'oat milk', 'overnight oats', 'peanut butter', 'peanuts', 'big mac meal', 'banana', 'bacon', 'bagel', 'egg', 'eggs benedict', 'flat white', 'whey protein'];
+const labels = (i: string, prio: string[] = []) => suggestFoods(names, i, prio).map((s) => s.label);
+
+check('prefix', labels('chick').join() === 'chicken breast,chicken thigh,chicken wrap,chickpeas', labels('chick').join());
+check('word inside a name', labels('butt').includes('peanut butter'));
+check('after quantity', labels('2 egg')[0] === 'eggs benedict' && !labels('2 egg').includes('egg'));
+check('after and', labels('2 eggs and ba').slice(0, 2).join() === 'bacon,banana' || labels('2 eggs and ba').includes('bacon'), labels('2 eggs and ba').join());
+check('two-word prefix', labels('peanut but')[0] === 'peanut butter');
+check('no suggestions after a space', labels('chicken ').length === 0);
+check('no suggestions for a bare number/unit', labels('200g').length === 0 && labels('2').length === 0);
+check('recents rank first', labels('oa', ['overnight oats'])[0] === 'overnight oats');
+check('apply replaces the typed fragment', applySuggestion('2 eggs and chick', suggestFoods(names, '2 eggs and chick')[0]) === '2 eggs and chicken breast ');
+check('apply two-word', applySuggestion('big peanut but', suggestFoods(names, 'big peanut but')[0]) === 'big peanut butter ');
+check('step grams', nextAmount(150, 'g', 1) === 175 && nextAmount(150, 'g', -1) === 125 && nextAmount(30, 'g', -1) === 25 && nextAmount(5, 'g', -1) === 5);
+check('step counts', nextAmount(2, 'egg', 1) === 3 && nextAmount(1, 'egg', -1) === 1 && nextAmount(0.5, 'slice', 1) === 1);
+console.log(fail ? `\n${fail} FAILED` : '\nall passed');
+process.exit(fail ? 1 : 0);
