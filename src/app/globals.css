@@ -279,3 +279,40 @@ a, button, input {
 @media (prefers-reduced-motion: reduce) {
   .assess-rise { animation: none; }
 }
+
+/* 8-Week Challenge intake: 1–10 stress slider (teal fill up to the thumb). */
+.challenge-range {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+.challenge-range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(to right, #26A88A var(--fill), #E3EAF0 var(--fill));
+}
+.challenge-range::-moz-range-track { height: 8px; border-radius: 999px; background: #E3EAF0; }
+.challenge-range::-moz-range-progress { height: 8px; border-radius: 999px; background: #26A88A; }
+.challenge-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  margin-top: -10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #fff;
+  border: 3px solid #26A88A;
+  box-shadow: 0 1px 4px rgba(51, 63, 110, 0.2);
+}
+.challenge-range::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #fff;
+  border: 3px solid #26A88A;
+}
+.challenge-range.is-unset::-webkit-slider-runnable-track { background: #E3EAF0; }
+.challenge-range.is-unset::-moz-range-progress { background: transparent; }
+.challenge-range.is-unset::-webkit-slider-thumb { border-color: #B8C2CF; }
+.challenge-range.is-unset::-moz-range-thumb { border-color: #B8C2CF; }

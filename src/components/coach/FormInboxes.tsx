@@ -9,11 +9,21 @@ const LOOK: Record<InboxKey, { stripe: string; badge: string; freshLabel: string
   assessments: { stripe: 'bg-brand', badge: 'bg-brand text-white', freshLabel: 'this week' },
   ironbodyfit: { stripe: 'collab-gradient', badge: 'bg-ibf-red text-white', freshLabel: 'new' },
   vitality: { stripe: 'assess-gradient', badge: 'bg-brand text-white', freshLabel: 'new' },
+  challenge: { stripe: 'bg-[#26A88A]', badge: 'bg-ibf-red text-white', freshLabel: 'health flags' },
 };
 
 function InboxMark({ inbox, size }: { inbox: InboxKey; size: number }) {
   if (inbox === 'ironbodyfit') return <Image src="/ironbodyfit-logo.png" alt="" width={size} height={Math.round(size * 0.9)} />;
   if (inbox === 'vitality') return <Image src="/vitality-logo.png" alt="" width={size} height={Math.round(size * 0.8)} />;
+  if (inbox === 'challenge') {
+    return (
+      <span className="flex items-center justify-center rounded-lg bg-[#D6F5EE] text-[#26A88A]" style={{ width: size, height: size }}>
+        <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M5 21V4M5 4h11l-2 4 2 4H5" />
+        </svg>
+      </span>
+    );
+  }
   return (
     <span className="flex items-center justify-center rounded-lg bg-brand-light text-brand-dark" style={{ width: size, height: size }}>
       <svg width={size * 0.6} height={size * 0.6} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -23,10 +33,10 @@ function InboxMark({ inbox, size }: { inbox: InboxKey; size: number }) {
   );
 }
 
-// Coach home: the three form inboxes side by side.
+// Coach home: the form inboxes side by side.
 export function InboxCards({ counts }: { counts: InboxCounts }) {
   return (
-    <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6">
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-6">
       {INBOXES.map((box) => {
         const { total, fresh } = counts[box.key];
         const look = LOOK[box.key];
@@ -59,7 +69,7 @@ export function InboxCards({ counts }: { counts: InboxCounts }) {
   );
 }
 
-// Top of each inbox page: switch between the three without going home.
+// Top of each inbox page: switch between them without going home.
 export function InboxTabs({ active, counts }: { active: InboxKey; counts: InboxCounts }) {
   const current = INBOXES.find((b) => b.key === active)!;
   return (
@@ -70,7 +80,7 @@ export function InboxTabs({ active, counts }: { active: InboxKey; counts: InboxC
           Form link: <span className="font-mono text-neutral-600">{current.formPath}</span>
         </span>
       </div>
-      <nav className="grid grid-cols-3 gap-1 rounded-2xl bg-neutral-100 p-1">
+      <nav className="grid grid-cols-2 sm:grid-cols-4 gap-1 rounded-2xl bg-neutral-100 p-1">
         {INBOXES.map((box) => {
           const on = box.key === active;
           const { fresh } = counts[box.key];

@@ -11,8 +11,8 @@ type Admin = ReturnType<typeof createAdminClient>;
 // with the service-role client, after the submission itself is saved.
 // Never throws: for forms that save their own submission the CRM is a side
 // effect, so a failure here must not turn a saved submission into an error.
-// Returns whether the event was recorded (/join relies on it — the CRM is
-// the only place a join lead is stored).
+// Returns the contact's id when the event was recorded, null when it wasn't
+// (/join relies on it — the CRM is the only place a join lead is stored).
 export async function recordFunnelEvent(admin: Admin, ev: {
   fullName: string;
   /** may be empty: then the contact is matched by name */
@@ -28,12 +28,16 @@ export async function recordFunnelEvent(admin: Admin, ev: {
   contactSource?: string;
   /** IronBodyFit meal-plan form: they're a meal-plan client straight away, plan still to send */
   mealPlanClient?: boolean;
-}): Promise<boolean> {
+  /** No contact with this email: fall back to one with the same phone number (last 8 digits) */
+  matchPhone?: boolean;
+  /** Tags added to the contact (new or existing), e.g. '8-week-challenge' */
+  addTags?: string[];
+}): Promise<string | null> {
   try {
     // A retried / double-clicked submission is saved once; log it once too.
     if (ev.submissionId) {
-      const { data: seen } = await admin.from('crm_activities').select('id').eq('meta->>submission_id', ev.submissionId).limit(1);
-      if (seen?.length) return true;
+      const { data: seen } = await admin.from('crm_activities').select('contact_id').eq('meta->>submission_id', ev.submissionId).limit(1);
+      if (seen?.length) return seen[0].contact_id;
     }
     const email = ev.email.trim().toLowerCase();
     const brand = ev.brand ?? brandForSource(ev.source);
@@ -47,6 +51,11 @@ export async function recordFunnelEvent(admin: Admin, ev: {
     let existing: Match | null = null;
     if (email) {
       existing = (await admin.from('crm_contacts').select(cols).eq('email', email).maybeSingle()).data;
+      const digits = (ev.phone ?? '').replace(/\D/g, '').slice(-8);
+      if (!existing && ev.matchPhone && digits.length === 8) {
+        const { data: withPhone } = await admin.from('crm_contacts').select(cols).not('phone', 'is', null).order('list_position');
+        existing = (withPhone || []).find((c) => (c.phone ?? '').replace(/\D/g, '').slice(-8) === digits) ?? null;
+      }
     } else {
       // No email (IronBodyFit form): match by name within the brand, then
       // by phone number (last 8 digits) for typos — but only when a first
@@ -81,6 +90,7 @@ export async function recordFunnelEvent(admin: Admin, ev: {
         stage,
         client_id: isClient ? profile!.id : null,
         ...(ev.mealPlanClient && !isClient ? { package: 'meal_plan' as const, tags: ['plan-pending'] } : {}),
+        ...(ev.addTags?.length ? { tags: ev.addTags } : {}),
       }).select('id').single();
       if (error) {
         // Lost a race with a parallel submission for the same email — use theirs.
@@ -107,9 +117,12 @@ export async function recordFunnelEvent(admin: Admin, ev: {
         // Asked again: there's a new plan to send.
         update.tags = Array.from(new Set([...(existing.tags ?? []).filter((t) => t !== 'plan-sent'), 'plan-pending']));
       }
+      if (ev.addTags?.length && existing && ev.addTags.some((t) => !existing.tags?.includes(t))) {
+        update.tags = Array.from(new Set([...(update.tags ?? existing.tags ?? []), ...ev.addTags]));
+      }
       if (Object.keys(update).length) await admin.from('crm_contacts').update(update).eq('id', contactId);
     }
-    if (!contactId) return false;
+    if (!contactId) return null;
 
     const { error } = await admin.from('crm_activities').insert({
       contact_id: contactId,
@@ -117,10 +130,10 @@ export async function recordFunnelEvent(admin: Admin, ev: {
       body: ev.summary,
       meta: { form: ev.form, submission_id: ev.submissionId ?? null, ...(ev.extra ?? {}) },
     });
-    return !error;
+    return error ? null : contactId;
   } catch (err) {
     console.error('crm: recordFunnelEvent failed', err);
-    return false;
+    return null;
   }
 }
 

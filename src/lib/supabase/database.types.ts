@@ -30,6 +30,12 @@ export type CrmPaymentPlan = 'full' | 'monthly';
 export type CrmBrand = 'vitality' | 'ironbodyfit';
 export type CrmPackage = '3_months' | '6_months' | '12_months' | 'meal_plan';
 
+export type ChallengeIntakeRow = {
+  id: string; submission_id: string; cohort: string; full_name: string; email: string; phone: string; instagram: string | null;
+  age: number; height_cm: number; weight_kg: number; main_goal: string; health_flag: boolean; agreed_at: string;
+  answers: Json; crm_contact_id: string | null; created_at: string;
+};
+
 export type MealPlanStatus = 'new' | 'in_progress' | 'sent';
 export type MealPlanSource = 'ironbodyfit' | 'vitality';
 
@@ -211,6 +217,12 @@ export type Database = {
         { id: string; contact_id: string; title: string; due_on: string; done_at: string | null; created_at: string },
         { id?: string; contact_id: string; title: string; due_on: string; done_at?: string | null; created_at?: string },
         { id?: string; contact_id?: string; title?: string; due_on?: string; done_at?: string | null; created_at?: string }
+      >;
+      // Temporary: 8-Week Challenge intake (0018_challenge_intakes.sql).
+      challenge_intakes: Table<
+        ChallengeIntakeRow,
+        Omit<ChallengeIntakeRow, 'id' | 'cohort' | 'health_flag' | 'agreed_at' | 'crm_contact_id' | 'created_at' | 'instagram'> & Partial<ChallengeIntakeRow>,
+        Partial<ChallengeIntakeRow>
       >;
       meal_plan_requests: Table<
         { id: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; status: MealPlanStatus; source: MealPlanSource; created_at: string },

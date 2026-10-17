@@ -27,6 +27,7 @@ export const SOURCES: { key: string; label: string; emoji: string }[] = [
   { key: 'ironbodyfit', label: 'IronBodyFit', emoji: '🛡️' },
   { key: 'v_plan', label: 'Vitality Meal Plan', emoji: '🥗' },
   { key: 'walk_in', label: 'Walk-in / event', emoji: '🚶' },
+  { key: 'challenge', label: '8-Week Challenge', emoji: '🏁' },
   { key: 'existing_client', label: 'Existing client', emoji: '⭐' },
   { key: 'other', label: 'Other', emoji: '•' },
 ];
@@ -51,6 +52,7 @@ export const FORM_INBOX: Record<string, { label: string; href: string }> = {
   ironbodyfit: { label: 'IronBodyFit', href: '/coach/meal-plans' },
   v_plan: { label: 'V Plans', href: '/coach/v-plans' },
   join: { label: 'Join form', href: '/coach/crm/contacts' },
+  challenge: { label: '8-Week Challenge', href: '/coach/challenge' },
 };
 
 export function waLink(phone: string) {

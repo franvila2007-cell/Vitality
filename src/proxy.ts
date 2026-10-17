@@ -28,7 +28,8 @@ export async function proxy(request: NextRequest) {
   );
 
   const path = request.nextUrl.pathname;
-  // /assessment, /ironbodyfit-meal-plans, /vitality-meal-plan and /join (+ their
+  // /assessment, /ironbodyfit-meal-plans, /vitality-meal-plan, /join and
+  // /challenge/intake (+ their
   // submit endpoints, and /v-plan, the old link that redirects) are forms
   // sent as plain links — to brand new clients, IronBodyFit members and
   // Vitality clients — fully public, so skip the Supabase auth round-trip.
@@ -36,7 +37,8 @@ export async function proxy(request: NextRequest) {
     path.startsWith('/assessment') || path.startsWith('/api/assessment') ||
     path.startsWith('/ironbodyfit-meal-plans') || path.startsWith('/api/meal-plan') ||
     path.startsWith('/vitality-meal-plan') || path.startsWith('/v-plan') || path.startsWith('/api/v-plan') ||
-    path.startsWith('/join') || path.startsWith('/api/join')
+    path.startsWith('/join') || path.startsWith('/api/join') ||
+    path.startsWith('/challenge') || path.startsWith('/api/challenge')
   ) return response;
 
   const { data: { user } } = await supabase.auth.getUser();
