@@ -33,6 +33,8 @@ type Template = {
 const g = (food: string, amt: number, name: string, scale = true): Ing => ({ food, amt, unit: 'g', name, scale });
 const n = (food: string, amt: number, name: string, plural?: string, scale = true, min = 1): Ing => ({ food, amt, unit: 'n', name, plural, scale, min });
 
+// Every option includes meat, fish, eggs or dairy: Vitto never suggests a fully
+// plant-based meal or snack (no tofu, bean-and-rice bowls, nuts-only snacks…).
 export const TEMPLATES: Template[] = [
   // ── mains ──────────────────────────────────────────────────────────────
   { id: 'steak-eggs-potatoes', name: 'Steak, Eggs & Potatoes', kind: 'main', group: 'steak', items: [
@@ -71,8 +73,6 @@ export const TEMPLATES: Template[] = [
     n('egg', 3, 'egg', 'eggs'), g('cheese', 30, 'cheese', false), g('spinach', 50, 'spinach', false), g('mushrooms', 60, 'mushrooms', false), g('olive oil', 5, 'olive oil for cooking', false) ] },
   { id: 'halloumi-chickpea', name: 'Halloumi & Chickpea Bowl', kind: 'main', group: 'veggie', items: [
     g('halloumi', 80, 'halloumi'), g('chickpeas', 150, 'chickpeas'), g('mixed salad', 80, 'salad', false), g('olive oil', 5, 'olive oil', false) ] },
-  { id: 'tofu-rice-stir-fry', name: 'Tofu & Rice Stir-Fry', kind: 'main', group: 'stirfry', items: [
-    g('tofu', 150, 'firm tofu'), g('rice', 180, 'cooked rice'), g('mixed vegetables', 150, 'stir-fry veg', false), g('soy sauce', 15, 'soy sauce', false), g('olive oil', 5, 'oil for the pan', false) ] },
   { id: 'lentil-feta', name: 'Lentil & Feta Bowl', kind: 'main', group: 'veggie', items: [
     g('lentils', 200, 'cooked lentils'), g('feta', 40, 'feta', false), g('spinach', 60, 'spinach', false), g('olive oil', 8, 'olive oil', false) ] },
   { id: 'salmon-quinoa', name: 'Salmon & Quinoa Bowl', kind: 'main', group: 'salmon', items: [
@@ -93,8 +93,6 @@ export const TEMPLATES: Template[] = [
     g('potato', 350, 'baked potato'), g('baked beans', 200, 'baked beans'), g('cheese', 20, 'grated cheese', false) ] },
   { id: 'pasta-arrabbiata', name: 'Pasta with Tomato Sauce', kind: 'main', group: 'pasta', items: [
     g('pasta', 300, 'cooked pasta'), g('tomato sauce', 150, 'tomato sauce', false), g('parmesan', 10, 'parmesan', false), g('olive oil', 5, 'olive oil', false) ] },
-  { id: 'rice-beans-bowl', name: 'Rice & Black Bean Bowl', kind: 'main', group: 'rice-beans', items: [
-    g('rice', 250, 'cooked rice'), g('black beans', 150, 'black beans'), g('salsa', 50, 'salsa', false) ] },
 
   // ── breakfasts ─────────────────────────────────────────────────────────
   { id: 'protein-porridge', name: 'Protein Porridge', kind: 'breakfast', group: 'oats', items: [
@@ -109,8 +107,6 @@ export const TEMPLATES: Template[] = [
     g('sourdough', 70, 'sourdough toast'), n('egg', 2, 'egg', 'eggs'), n('avocado', 0.5, 'avocado', undefined, false) ] },
   { id: 'bacon-egg-toast', name: 'Bacon & Egg Toast', kind: 'breakfast', group: 'eggs', items: [
     g('bread', 60, 'toast'), n('egg', 2, 'egg', 'eggs'), g('bacon', 40, 'bacon', false) ] },
-  { id: 'pb-banana-toast', name: 'Peanut Butter Banana Toast', kind: 'breakfast', group: 'toast', items: [
-    g('bread', 60, 'toast'), g('peanut butter', 20, 'peanut butter', false), n('banana', 1, 'banana', 'bananas', false) ] },
 
   // ── snacks ─────────────────────────────────────────────────────────────
   { id: 'yogurt-berries', name: 'Greek Yogurt & Berries', kind: 'snack', group: 'yogurt', items: [
@@ -119,16 +115,10 @@ export const TEMPLATES: Template[] = [
     g('cottage cheese', 150, 'cottage cheese'), n('rice cake', 3, 'rice cake', 'rice cakes'), n('tomato', 1, 'tomato', 'tomatoes', false) ] },
   { id: 'shake-banana', name: 'Protein Shake & Banana', kind: 'snack', group: 'shake', items: [
     n('protein shake', 1, 'scoop protein shake', 'scoops protein shake', false), n('banana', 1, 'banana', 'bananas', false) ] },
-  { id: 'apple-pb', name: 'Apple & Peanut Butter', kind: 'snack', group: 'pb', items: [
-    n('apple', 1, 'apple', 'apples', false), g('peanut butter', 16, 'peanut butter', false) ] },
   { id: 'tuna-ricecakes', name: 'Tuna on Rice Cakes', kind: 'snack', group: 'tuna', items: [
     g('canned tuna', 100, 'tuna'), n('rice cake', 3, 'rice cake', 'rice cakes') ] },
-  { id: 'nuts-orange', name: 'Mixed Nuts & an Orange', kind: 'snack', group: 'nuts', items: [
-    g('mixed nuts', 30, 'mixed nuts'), n('orange', 1, 'orange', 'oranges', false) ] },
   { id: 'skyr-almonds', name: 'Skyr & Almonds', kind: 'snack', group: 'yogurt', items: [
     g('skyr', 200, 'skyr'), g('almonds', 15, 'almonds', false) ] },
-  { id: 'hummus-pitta', name: 'Hummus, Carrots & Pitta', kind: 'snack', group: 'hummus', items: [
-    g('hummus', 60, 'hummus'), n('carrot', 2, 'carrot', 'carrots', false), n('pitta', 1, 'pitta', 'pittas', false) ] },
   { id: 'eggs-avocado', name: 'Boiled Eggs & Avocado', kind: 'snack', group: 'eggs', items: [
     n('boiled egg', 2, 'boiled egg', 'boiled eggs'), n('avocado', 0.5, 'avocado', undefined, false) ] },
   { id: 'cheese-crispbread', name: 'Cheese & Crispbread', kind: 'snack', group: 'cheese', items: [

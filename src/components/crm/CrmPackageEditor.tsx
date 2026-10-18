@@ -27,7 +27,7 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
   const [supabase] = useState(() => createClient());
   const router = useRouter();
   // IronBodyFit meal plans are €10, not the Vitality meal-plan price.
-  const priceFor = (p: CrmPackage) => (p === 'meal_plan' && brand === 'ironbodyfit' ? IBF_MEAL_PLAN_PRICE : suggestedPrices[p] ?? PACKAGE_META[p].defaultPrice);
+  const priceFor = (p: CrmPackage) => (p === 'meal_plan' && brand === 'ironbodyfit' ? IBF_MEAL_PLAN_PRICE : p === '8_week_challenge' ? PACKAGE_META[p].defaultPrice : suggestedPrices[p] ?? PACKAGE_META[p].defaultPrice);
   const [editing, setEditing] = useState(!initial.package);
   const [pkg, setPkg] = useState<CrmPackage>(initial.package ?? '6_months');
   const [price, setPrice] = useState(() => {
@@ -43,7 +43,9 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
 
   const meta = PACKAGE_META[pkg];
   const isMealPlan = meta.kind === 'meal_plan';
-  const effectivePlan: CrmPaymentPlan = isMealPlan ? 'full' : plan;
+  // Meal plans and the 8-Week Challenge are single payments; only 1-1 coaching can be monthly.
+  const payInFullOnly = meta.kind !== 'coaching';
+  const effectivePlan: CrmPaymentPlan = payInFullOnly ? 'full' : plan;
 
   function choose(p: CrmPackage) {
     const prevSuggested = priceFor(pkg);
@@ -100,9 +102,9 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
     const monthly = initial.plan === 'monthly' && m.months && initial.price != null;
     return (
       <div className="flex items-center gap-3">
-        <span className={`rounded-xl px-3 py-2 text-center flex-shrink-0 ${m.kind === 'meal_plan' ? BRAND_META[brand].chip : 'bg-brand-light text-brand-dark'}`}>
+        <span className={`rounded-xl px-3 py-2 text-center flex-shrink-0 ${m.kind === 'meal_plan' ? BRAND_META[brand].chip : m.kind === 'challenge' ? 'bg-[#e8f7f3] text-[#26A88A]' : 'bg-brand-light text-brand-dark'}`}>
           <span className="block text-base font-semibold leading-tight">{m.label}</span>
-          <span className="block text-3xs uppercase tracking-wide opacity-70">{m.kind === 'meal_plan' ? BRAND_META[brand].label : '1-1 coaching'}</span>
+          <span className="block text-3xs uppercase tracking-wide opacity-70">{m.kind === 'meal_plan' ? BRAND_META[brand].label : m.kind === 'challenge' ? 'Vitality' : '1-1 coaching'}</span>
         </span>
         <div className="min-w-0 flex-1 text-sm">
           <p>
@@ -129,6 +131,10 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
         </div>
       </div>
       <div>
+        <p className="text-2xs text-neutral-500 mb-1.5">8-Week Challenge</p>
+        <Choice on={pkg === '8_week_challenge'} onClick={() => choose('8_week_challenge')} title="Vitality 8-Week Challenge" sub={`one payment · ${PACKAGE_META['8_week_challenge'].prices!.map((o) => `${o.label} ${euro(o.price)}`).join(' / ')}`} wide />
+      </div>
+      <div>
         <p className="text-2xs text-neutral-500 mb-1.5">Meal plan</p>
         <Choice on={pkg === 'meal_plan'} onClick={() => choose('meal_plan')} title={`${BRAND_META[brand].label} meal plan`} sub={`one-off · ${euro(priceFor('meal_plan') ?? 69.99)}`} wide />
       </div>
@@ -139,10 +145,26 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
           <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(',', '.'))} placeholder="e.g. 900" className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand" />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs text-neutral-500">{isMealPlan ? 'Bought on' : 'Start date'}</span>
+          <span className="text-2xs text-neutral-500">{isMealPlan ? 'Bought on' : meta.kind === 'challenge' ? 'Challenge starts' : 'Start date'}</span>
           <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand" />
         </label>
       </div>
+
+      {meta.prices && (
+        <div className="flex flex-wrap items-center gap-1.5 -mt-1">
+          <span className="text-2xs text-neutral-500">Price:</span>
+          {meta.prices.map((o) => (
+            <button
+              key={o.label}
+              type="button"
+              onClick={() => setPrice(String(o.price))}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${Number(price) === o.price ? 'border-brand bg-brand text-white' : 'border-border text-neutral-600 hover:border-neutral-300'}`}
+            >
+              {o.label} · {euro(o.price)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1">
@@ -152,7 +174,7 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
               <button
                 key={k}
                 type="button"
-                disabled={isMealPlan && k === 'monthly'}
+                disabled={payInFullOnly && k === 'monthly'}
                 onClick={() => setPlan(k)}
                 className={`rounded-md py-1.5 text-xs font-semibold disabled:opacity-30 ${effectivePlan === k ? 'bg-surface text-neutral-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]' : 'text-neutral-500'}`}
               >{k === 'full' ? 'In full' : 'Monthly'}</button>
@@ -195,7 +217,7 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
 }
 
 export function packageName(pkg: CrmPackage, brand: CrmBrand): string {
-  return pkg === 'meal_plan' ? `${BRAND_META[brand].label} meal plan` : `${PACKAGE_META[pkg].label} 1-1 coaching`;
+  return pkg === 'meal_plan' ? `${BRAND_META[brand].label} meal plan` : pkg === '8_week_challenge' ? 'Vitality 8-Week Challenge' : `${PACKAGE_META[pkg].label} 1-1 coaching`;
 }
 
 function Choice({ on, onClick, title, sub, wide }: { on: boolean; onClick: () => void; title: string; sub: string; wide?: boolean }) {

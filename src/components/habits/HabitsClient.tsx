@@ -8,10 +8,20 @@ import {
   habitDay, habitsDueOn, isHabitActive, scheduleLabel, weekday, type Habit,
 } from '@/lib/habits';
 import HabitCalendar from '@/components/habits/HabitCalendar';
+import { fetchAll } from '@/lib/supabase/paginate';
 
 const HISTORY_DAYS = 180;
 
 type Schedule = 'daily' | 'days' | 'once';
+
+// One tap instead of toggling seven buttons.
+const SCHEDULE_PRESETS: { label: string; days: number[] }[] = [
+  { label: 'Weekdays', days: [1, 2, 3, 4, 5] },
+  { label: 'Weekends', days: [6, 0] },
+  { label: 'Mon · Wed · Fri', days: [1, 3, 5] },
+  { label: 'Tue · Thu', days: [2, 4] },
+  { label: 'Mon · Wed · Sat', days: [1, 3, 6] },
+];
 type Draft = { id: string | null; label: string; emoji: string; schedule: Schedule; days: number[]; onDate: string };
 
 // The client's Habits tab: their own habits plus their coach's, on a
@@ -27,20 +37,35 @@ export default function HabitsClient() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const load = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
     setUserId(user.id);
-    const [habitsRes, completionsRes] = await Promise.all([
-      supabase.from('habits').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
-      supabase.from('habit_completions').select('habit_id, date').eq('user_id', user.id).eq('completed', true).gte('date', addDays(today, -HISTORY_DAYS)),
-    ]);
+    let habitsRes, completions: { habit_id: string; date: string }[];
+    try {
+      [habitsRes, completions] = await Promise.all([
+        supabase.from('habits').select('*').eq('user_id', user.id).order('sort_order', { ascending: true }),
+        // >1000 ticks in 180 days is normal for a busy client — page through them all.
+        fetchAll<{ habit_id: string; date: string }>((from, to) =>
+          supabase.from('habit_completions').select('habit_id, date').eq('user_id', user.id).eq('completed', true).gte('date', addDays(today, -HISTORY_DAYS)).order('date', { ascending: false }).range(from, to)),
+      ]);
+    } catch {
+      setLoadError(true); setLoading(false); return;
+    }
+    if (habitsRes.error) { setLoadError(true); setLoading(false); return; }
+    setLoadError(false);
     setHabits(habitsRes.data || []);
     const byDate: Record<string, string[]> = {};
-    for (const r of completionsRes.data || []) (byDate[r.date] ||= []).push(r.habit_id);
+    for (const r of completions) (byDate[r.date] ||= []).push(r.habit_id);
     setDone(byDate);
     setLoading(false);
+    // Arrived from Today's "+ Add" / "Plan your week": open the sheet straight away.
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('new')) {
+      window.history.replaceState(null, '', window.location.pathname);
+      setDraft({ id: null, label: '', emoji: '✅', schedule: 'daily', days: [weekday(today)], onDate: today });
+    }
   }, [supabase, today]);
 
   // Kicked off after mount rather than called synchronously in the effect
@@ -57,11 +82,13 @@ export default function HabitsClient() {
   async function toggle(habitId: string, date: string) {
     if (!userId || !canToggle(date)) return;
     const isDone = (done[date] || []).includes(habitId);
-    setDone((d) => ({ ...d, [date]: isDone ? (d[date] || []).filter((x) => x !== habitId) : [...(d[date] || []), habitId] }));
-    await supabase.from('habit_completions').upsert(
+    const apply = (on: boolean) => setDone((d) => ({ ...d, [date]: on ? [...new Set([...(d[date] || []), habitId])] : (d[date] || []).filter((x) => x !== habitId) }));
+    apply(!isDone);
+    const { error: saveErr } = await supabase.from('habit_completions').upsert(
       { user_id: userId, habit_id: habitId, date, completed: !isDone },
       { onConflict: 'user_id,habit_id,date' }
     );
+    if (saveErr) { apply(isDone); setError("Couldn't save that tick — check your connection and try again."); setTimeout(() => setError(null), 4000); }
   }
 
   function openNew(preset?: Partial<Draft>) {
@@ -78,7 +105,7 @@ export default function HabitsClient() {
     });
   }
 
-  async function save() {
+  async function save(another = false) {
     if (!draft || !userId) return;
     const label = draft.label.trim();
     if (!label) { setError('Give your habit a name.'); return; }
@@ -105,7 +132,8 @@ export default function HabitsClient() {
         });
     setSaving(false);
     if (res.error) { setError("Couldn't save that habit. Please try again."); return; }
-    setDraft(null);
+    // "Save & add another" keeps the sheet open with the same schedule, ready for the next habit.
+    setDraft(another && !draft.id ? { ...draft, label: '', emoji: '✅' } : null);
     load();
   }
 
@@ -120,6 +148,17 @@ export default function HabitsClient() {
   }
 
   if (loading) return <div className="max-w-2xl mx-auto px-4 py-5"><div className="h-96 rounded-2xl bg-neutral-100 animate-pulse" /></div>;
+  if (loadError) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-5">
+        <div className="bg-surface border border-border rounded-2xl p-5 text-center">
+          <p className="text-sm font-medium mb-1">Couldn&rsquo;t load your habits</p>
+          <p className="text-xs text-neutral-400 mb-3">Check your connection and try again.</p>
+          <button onClick={() => { setLoadError(false); setLoading(true); load(); }} className="rounded-lg bg-brand text-white px-4 py-2 text-sm font-medium">Try again</button>
+        </div>
+      </div>
+    );
+  }
 
   const active = habits.filter((h) => isHabitActive(h, today));
   const doneMap = new Map(Object.entries(done).map(([d, ids]) => [d, new Set(ids)]));
@@ -140,6 +179,7 @@ export default function HabitsClient() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4 page-fade-in">
+      {error && !draft && <p className="rounded-xl bg-status-bad-bg text-status-bad-text text-sm px-4 py-2.5" role="alert">{error}</p>}
       <div className="relative overflow-hidden rounded-2xl p-5 text-white bg-hero-gradient">
         <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl pointer-events-none" />
         <div className="relative flex items-start justify-between gap-3">
@@ -243,6 +283,20 @@ export default function HabitsClient() {
               ))}
             </div>
             {draft.schedule === 'days' && (
+              <div className="flex flex-wrap gap-1.5 mb-2.5">
+                {SCHEDULE_PRESETS.map((pr) => {
+                  const on = pr.days.length === draft.days.length && pr.days.every((d) => draft.days.includes(d));
+                  return (
+                    <button
+                      key={pr.label}
+                      onClick={() => setDraft((x) => x && ({ ...x, days: pr.days }))}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium ${on ? 'bg-brand-light border-brand text-brand-dark' : 'border-border text-neutral-600 hover:border-neutral-300'}`}
+                    >{pr.label}</button>
+                  );
+                })}
+              </div>
+            )}
+            {draft.schedule === 'days' && (
               <div className="grid grid-cols-7 gap-1.5 mb-3">
                 {WEEK_ORDER.map((d) => {
                   const on = draft.days.includes(d);
@@ -250,8 +304,8 @@ export default function HabitsClient() {
                     <button
                       key={d}
                       onClick={() => setDraft((x) => x && ({ ...x, days: on ? x.days.filter((y) => y !== d) : [...x.days, d] }))}
-                      className={`h-10 rounded-xl text-xs font-medium border ${on ? 'bg-brand text-white border-brand' : 'border-border text-neutral-600'}`}
-                    >{WEEKDAYS[d].slice(0, 2)}</button>
+                      className={`h-11 rounded-xl text-xs font-medium border ${on ? 'bg-brand text-white border-brand' : 'border-border text-neutral-600'}`}
+                    >{WEEKDAYS[d]}</button>
                   );
                 })}
               </div>
@@ -273,10 +327,15 @@ export default function HabitsClient() {
                 <button onClick={() => { const h = habits.find((x) => x.id === draft.id); if (h) remove(h); }} className="rounded-2xl border border-red-200 text-red-600 px-4 py-3 text-sm font-medium">Remove</button>
               )}
               <button onClick={() => setDraft(null)} className="flex-1 rounded-2xl border border-border text-neutral-600 py-3 text-sm font-medium">Cancel</button>
-              <button onClick={save} disabled={saving} className="flex-1 rounded-2xl bg-brand text-white py-3 text-sm font-semibold disabled:opacity-50">
+              <button onClick={() => save()} disabled={saving} className="flex-1 rounded-2xl bg-brand text-white py-3 text-sm font-semibold disabled:opacity-50">
                 {saving ? 'Saving…' : draft.id ? 'Save' : 'Add habit'}
               </button>
             </div>
+            {!draft.id && (
+              <button onClick={() => save(true)} disabled={saving} className="w-full mt-2 rounded-2xl border border-brand/40 text-brand-dark py-2.5 text-sm font-medium disabled:opacity-50">
+                Save &amp; add another
+              </button>
+            )}
           </div>
         </div>
       )}

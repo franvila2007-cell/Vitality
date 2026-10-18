@@ -28,7 +28,7 @@ export type CrmContactRow = {
 };
 export type CrmPaymentPlan = 'full' | 'monthly';
 export type CrmBrand = 'vitality' | 'ironbodyfit';
-export type CrmPackage = '3_months' | '6_months' | '12_months' | 'meal_plan';
+export type CrmPackage = '3_months' | '6_months' | '12_months' | 'meal_plan' | '8_week_challenge';
 
 export type ChallengeIntakeRow = {
   id: string; submission_id: string; cohort: string; full_name: string; email: string; phone: string; instagram: string | null;

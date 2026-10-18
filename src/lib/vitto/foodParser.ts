@@ -82,8 +82,13 @@ export function normalizeText(text: string): string {
   t = t.replace(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*(g|kg|ml|l|oz|lb)\b/g, (_m, a, b, u) => `${Math.round(parseFloat(a) * parseFloat(b) * 100) / 100}${u}`);
   // "2x chicken" / "x2 chicken" -> "2 chicken"
   t = t.replace(/(\d)\s*[x×]\s+(?=[a-z])/g, '$1 ').replace(/\b[x×](\d+)\b/g, '$1');
+  // "a slice of pizza margherita" (flavour after) -> "a pizza slice"
+  t = t.replace(/\b(?:slices?|pieces?|wedges?)\s+of\s+pizza\s+(?:margherita|pepperoni|hawaiian|marinara|veggie|vegetarian|cheese|ham|meat feast|bbq chicken|diavola|quattro formaggi|funghi)\b/g, ' pizza slice ');
   // "a slice of (any flavour) pizza" -> "a pizza slice" so it hits the per-slice entry, not the whole pizza
   t = t.replace(/\b(?:slices?|pieces?|wedges?)\s+of\s+(?:(?!and\b|with\b|then\b|on\b)[a-z]+\s+){0,3}?pizza\b/g, ' pizza slice ');
+  // "a punnet of strawberries" -> a typical 150g punnet; "a 6 inch subway" / "footlong subway" -> the sub, not "6 x ..."
+  t = t.replace(/\bhalf\s+a\s+punnet\s+of\b/g, '75g').replace(/\b(?:a|1|one)\s+punnet\s+of\b/g, '150g');
+  t = t.replace(/\b(?:a\s+)?(?:6|six)[\s-]*inch\s+subway\b/g, ' subway chicken slice ').replace(/\b(?:a\s+)?(?:12|twelve)[\s-]*inch\s+subway\b|\b(?:a\s+)?footlong\s+subway\b/g, ' subway footlong italian bmt ');
   // fat-content labels ("greek yoghurt 0%", "2% milk") describe the food — they're not a quantity
   t = t.replace(/\b\d+(?:\.\d+)?\s*%\s*(?:fat\b)?/g, ' ');
   // apostrophes inside brand names ("mcdonald's", "nando's") so they match the plain spelling

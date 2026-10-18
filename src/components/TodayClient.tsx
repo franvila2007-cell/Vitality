@@ -13,6 +13,7 @@ import VittoRecommends from '@/components/VittoRecommends';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import VittoComposer from '@/components/VittoComposer';
 import LoggedMealCard, { type LoggedItem } from '@/components/LoggedMealCard';
+import ManualFoodSheet, { type ManualEntry } from '@/components/ManualFoodSheet';
 import { suggestFoods, applySuggestion } from '@/lib/vitto/suggest';
 import type { MealOption } from '@/lib/vitto/mealRecommender';
 import type { Database } from '@/lib/supabase/database.types';
@@ -84,9 +85,8 @@ export default function TodayClient() {
   const [photoItems, setPhotoItems] = useState<PhotoItem[] | null>(null);
   const [photoLogging, setPhotoLogging] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
-  const [manualForm, setManualForm] = useState({ name: '', calories: '', proteinG: '', carbsG: '', fatG: '' });
-  const [manualError, setManualError] = useState<string | null>(null);
-  const [manualLogging, setManualLogging] = useState(false);
+  const [microPending, setMicroPending] = useState<Set<string>>(new Set());
+  const healedRef = useRef<Set<string>>(new Set());
 
   // Isolated from load() below so toggling a habit only refetches the ~90
   // days of dates the streak actually depends on, instead of re-running the
@@ -183,6 +183,19 @@ export default function TodayClient() {
   }, [supabase, today, refreshStreak]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Anything logged without micronutrients (older manual entries, a chat
+  // backfill that didn't land) gets them now — once per entry per visit.
+  useEffect(() => {
+    if (loading) return;
+    const stale = meals
+      .filter((m) => m.quality_score == null && !healedRef.current.has(m.id) && Date.now() - new Date(m.logged_at).getTime() > 45_000)
+      .slice(0, 10);
+    if (stale.length === 0) return;
+    stale.forEach((m) => healedRef.current.add(m.id));
+    void ensureInsights(stale.map((m) => m.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, meals.length]);
 
   // Food names for the as-you-type suggestions (fetched once; the browser caches it).
   useEffect(() => {
@@ -311,6 +324,7 @@ export default function TodayClient() {
     setVittoReacting(true);
     setTimeout(() => setVittoReacting(false), 900);
     refreshStreak(user.id, habits, targets);
+    ensureInsights([row.id]); // a suggested meal has no micronutrients yet
   }
 
   async function sendChat() {
@@ -413,27 +427,45 @@ export default function TodayClient() {
     }
   }
 
-  async function confirmManualLog() {
-    setManualError(null);
-    const calories = parseFloat(manualForm.calories);
-    const proteinG = parseFloat(manualForm.proteinG) || 0;
-    const carbsG = parseFloat(manualForm.carbsG) || 0;
-    const fatG = parseFloat(manualForm.fatG) || 0;
-    if (!Number.isFinite(calories) || calories < 0) { setManualError('Enter at least the calories.'); return; }
+  // Adds the quality score + micronutrient estimate to entries that lack them
+  // (manual adds, recommended meals…) and folds the result back into the list.
+  async function ensureInsights(ids: string[]): Promise<boolean> {
+    if (ids.length === 0) return true;
+    let ok = false;
+    setMicroPending((p) => new Set([...p, ...ids]));
+    try {
+      const res = await fetch('/api/vitto/insights', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: ids.slice(0, 12) }) });
+      if (res.ok) {
+        const { entries } = (await res.json()) as { entries: Meal[] };
+        if (entries.length > 0) setMeals((ms) => ms.map((m) => entries.find((e) => e.id === m.id) ?? m));
+        ok = true;
+      }
+    } catch { /* stays "pending" until the next load retries */ }
+    setMicroPending((p) => { const next = new Set(p); ids.forEach((i) => next.delete(i)); return next; });
+    return ok;
+  }
 
-    setManualLogging(true);
+  // "Add food manually" sheet → one entry, then micronutrients are added in the background.
+  async function addManual(entry: ManualEntry) {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setManualLogging(false); return; }
-    const { error } = await supabase.from('food_log_entries').insert({
-      user_id: user.id, date: today, name: manualForm.name.trim() || 'Manual entry',
-      calories, protein_g: proteinG, carbs_g: carbsG, fat_g: fatG,
-      source: 'manual', estimated: false,
-    });
-    setManualLogging(false);
-    if (error) { setManualError(error.message); return; }
+    if (!user) throw new Error('not signed in');
+    const { data: row, error } = await supabase.from('food_log_entries').insert({
+      user_id: user.id, date: today, name: entry.name, calories: entry.calories, protein_g: entry.protein_g, carbs_g: entry.carbs_g, fat_g: entry.fat_g,
+      source: 'manual', estimated: entry.estimated,
+    }).select('*').single();
+    if (error || !row) throw new Error('insert failed');
+    const after = [...meals, row];
+    setMeals(after);
     setManualOpen(false);
-    setManualForm({ name: '', calories: '', proteinG: '', carbsG: '', fatG: '' });
-    load();
+    const leftCal = Math.round(targets.calories - after.reduce((a, m) => a + m.calories, 0));
+    const msgId = 'b' + Date.now();
+    const base = `Added ${row.name} — about ${Math.round(row.calories)} kcal. ${leftCal >= 0 ? `${leftCal.toLocaleString('en-GB')} kcal left today.` : `That puts you about ${Math.abs(leftCal).toLocaleString('en-GB')} kcal over today's target.`}`;
+    setChat((c) => [...c, { id: msgId, role: 'bot', text: `${base} Adding the micronutrients now…`, logged: [row as unknown as LoggedItem] }]);
+    setVittoReacting(true);
+    setTimeout(() => setVittoReacting(false), 900);
+    refreshStreak(user.id, habits, targets);
+    // The note under the reply follows the micronutrient estimate: added, or will retry.
+    void ensureInsights([row.id]).then((ok) => setChat((c) => c.map((m) => (m.id !== msgId ? m : { ...m, text: `${base} ${ok ? 'Micronutrients added ✓' : "I couldn't add the micronutrients just now — I'll try again next time you open the app."}` }))));
   }
 
   async function deleteMeal(id: string) {
@@ -499,7 +531,7 @@ export default function TodayClient() {
     setLogging(false);
     if (!error) {
       setScannedProduct(null);
-      load();
+      await load();
     }
   }
 
@@ -592,12 +624,27 @@ export default function TodayClient() {
         </div>
       </div>
 
+      {/* Nothing planned yet: make the first step obvious */}
+      {habits.length === 0 && (
+        <PrefetchOnIntentLink href="/habits?new=1" className="flex items-center gap-3 rounded-2xl border border-dashed border-brand/40 bg-brand-light/50 px-4 py-3.5">
+          <span className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-lg flex-shrink-0">📅</span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-brand-dark">Plan your week</span>
+            <span className="block text-2xs text-neutral-500">Add your habits and training days — pick the days once, tick them off each day.</span>
+          </span>
+          <span className="text-sm font-semibold text-brand-dark flex-shrink-0">Add →</span>
+        </PrefetchOnIntentLink>
+      )}
+
       {/* Reminder: today's planned habits that aren't ticked yet */}
       {undoneToday.length > 0 && (
         <div className="bg-surface border border-brand/25 rounded-2xl p-4 shadow-[0_4px_16px_-10px_rgba(15,168,166,0.5)]">
           <div className="flex items-center justify-between mb-2.5">
             <p className="text-sm font-medium">📅 On your plan today</p>
-            <PrefetchOnIntentLink href="/habits" className="text-xs font-medium text-brand-dark hover:opacity-70">Calendar →</PrefetchOnIntentLink>
+            <div className="flex items-center gap-3">
+              <PrefetchOnIntentLink href="/habits?new=1" className="text-xs font-medium text-brand-dark hover:opacity-70">+ Add</PrefetchOnIntentLink>
+              <PrefetchOnIntentLink href="/habits" className="text-xs font-medium text-brand-dark hover:opacity-70">Calendar →</PrefetchOnIntentLink>
+            </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {undoneToday.map((h) => (
@@ -750,6 +797,9 @@ export default function TodayClient() {
           suggestions={suggestFoods(foodNames, chatInput, [...quickAdd.recipes, ...quickAdd.recent.map((r) => r.name)])}
           onPickSuggestion={(sg) => setChatInput((v) => applySuggestion(v, sg))}
         />
+        <button onClick={() => setManualOpen(true)} className="mt-2 w-full text-center text-xs font-medium text-neutral-500 hover:text-brand-dark py-1.5 transition-colors">
+          ✍️ Can&rsquo;t find it? Add it manually
+        </button>
         {scanLoading && <p className="text-xs text-neutral-400 mt-2">Looking up that barcode…</p>}
         {scanError && <p className="text-xs text-red-500 mt-2">{scanError}</p>}
         {voiceError && <p className="text-xs text-red-500 mt-2">{voiceError}</p>}
@@ -778,10 +828,10 @@ export default function TodayClient() {
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs font-medium text-neutral-500">Meal log · {meals.length} {meals.length === 1 ? 'entry' : 'entries'}</p>
             <button
-              onClick={() => { setManualError(null); setManualOpen(true); }}
-              className="text-xs font-medium text-brand-dark hover:opacity-70 transition-opacity"
+              onClick={() => setManualOpen(true)}
+              className="rounded-full bg-brand-light text-brand-dark text-xs font-semibold px-3.5 py-2 hover:bg-brand/20 active:scale-95 transition-[transform,background-color]"
             >
-              + Enter manually
+              + Add food
             </button>
           </div>
           {meals.length === 0 && <p className="text-sm text-neutral-400 text-center py-3">No meals logged yet.</p>}
@@ -790,7 +840,10 @@ export default function TodayClient() {
               <div key={m.id} className="flex items-center gap-2 bg-neutral-50 rounded-lg px-3 py-2">
                 <span className="flex-1 min-w-0 text-sm truncate">{m.name}</span>
                 <span className="flex-shrink-0 text-2xs text-neutral-400 whitespace-nowrap">{Math.round(m.calories)} kcal · {Math.round(m.protein_g)}p {Math.round(m.carbs_g)}c {Math.round(m.fat_g)}f</span>
-                <button onClick={() => deleteMeal(m.id)} className="flex-shrink-0 text-neutral-300 hover:text-red-500 text-sm transition-colors">✕</button>
+                {m.quality_score != null
+                  ? <span className="flex-shrink-0 text-3xs font-semibold text-status-good-text" title="Micronutrients added">µ✓</span>
+                  : microPending.has(m.id) ? <span className="flex-shrink-0 text-3xs text-neutral-400 animate-pulse" title="Adding micronutrients…">µ…</span> : null}
+                <button onClick={() => deleteMeal(m.id)} aria-label={`Remove ${m.name}`} className="flex-shrink-0 w-7 h-7 -mr-1 text-neutral-300 hover:text-red-500 text-sm transition-colors">✕</button>
               </div>
             ))}
           </div>
@@ -921,50 +974,14 @@ export default function TodayClient() {
       )}
 
       {manualOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4">
-          <div className="bg-surface rounded-2xl p-4 w-full max-w-sm">
-            <p className="text-sm font-medium mb-1">Enter it manually</p>
-            <p className="text-xs text-neutral-400 mb-3">For when you already know the numbers — packaging, another app, a menu.</p>
-            <div className="flex flex-col gap-2.5">
-              <input
-                value={manualForm.name}
-                onChange={(e) => setManualForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="What was it? (optional)"
-                className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand transition-colors"
-              />
-              <div className="grid grid-cols-4 gap-2">
-                <ManualField label="Kcal" value={manualForm.calories} onChange={(v) => setManualForm((f) => ({ ...f, calories: v }))} />
-                <ManualField label="Protein" value={manualForm.proteinG} onChange={(v) => setManualForm((f) => ({ ...f, proteinG: v }))} />
-                <ManualField label="Carbs" value={manualForm.carbsG} onChange={(v) => setManualForm((f) => ({ ...f, carbsG: v }))} />
-                <ManualField label="Fat" value={manualForm.fatG} onChange={(v) => setManualForm((f) => ({ ...f, fatG: v }))} />
-              </div>
-              {manualError && <p className="text-xs text-red-600">{manualError}</p>}
-              <div className="flex gap-2 mt-1">
-                <button onClick={() => setManualOpen(false)} className="flex-1 rounded-lg border border-border text-neutral-600 py-2 text-sm font-medium">Cancel</button>
-                <button onClick={confirmManualLog} disabled={manualLogging} className="flex-1 rounded-lg bg-brand text-white py-2 text-sm font-medium disabled:opacity-50">
-                  {manualLogging ? 'Logging…' : 'Log it'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ManualFoodSheet
+          foodNames={foodNames}
+          favourites={quickAdd.recent.map((r) => r.name)}
+          onClose={() => setManualOpen(false)}
+          onSave={addManual}
+        />
       )}
     </div>
-  );
-}
-
-function ManualField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-3xs uppercase text-neutral-400">{label}</span>
-      <input
-        type="number"
-        inputMode="decimal"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-lg border border-border bg-neutral-50 px-2 py-1.5 text-sm outline-none focus:border-brand transition-colors"
-      />
-    </label>
   );
 }
 

@@ -9,9 +9,10 @@ import { euro, shortDate } from '@/lib/crm/format';
 // IronBodyFit €10 meal plans switched on in the CRM are included automatically.
 // Cash collected = payments actually received in the period.
 
-type Cat = 'coaching' | 'vitality' | 'ibf';
+type Cat = 'coaching' | 'challenge' | 'vitality' | 'ibf';
 const CATS: { key: Cat; label: string; bar: string; text: string }[] = [
   { key: 'coaching', label: '1-1 Coaching', bar: 'bg-brand', text: 'text-brand-dark' },
+  { key: 'challenge', label: '8-Week Challenge', bar: 'bg-[#26A88A]', text: 'text-[#26A88A]' },
   { key: 'vitality', label: 'Vitality meal plans', bar: 'bg-[#2a8fbf]', text: 'text-[#2a8fbf]' },
   { key: 'ibf', label: 'IronBodyFit meal plans', bar: 'bg-ibf-red', text: 'text-ibf-red' },
 ];
@@ -55,7 +56,7 @@ export default async function CrmRevenuePage({ searchParams }: { searchParams: P
   const payments = paymentsRes.data || [];
 
   const catOf = (c: { package: CrmPackage | null; brand: string }): Cat =>
-    c.package === 'meal_plan' ? (c.brand === 'ironbodyfit' ? 'ibf' : 'vitality') : 'coaching';
+    c.package === 'meal_plan' ? (c.brand === 'ironbodyfit' ? 'ibf' : 'vitality') : c.package === '8_week_challenge' ? 'challenge' : 'coaching';
 
   // Every sale with a price and a start date.
   const sales = contacts
@@ -68,7 +69,8 @@ export default async function CrmRevenuePage({ searchParams }: { searchParams: P
   const byCat = (cat: Cat) => inRange.filter((s) => s.cat === cat);
   const total = sum(inRange);
   const cash = payments.filter((p) => p.paid_on && p.paid_on >= from && p.paid_on < to).reduce((a, p) => a + Number(p.amount), 0);
-  const coaching = byCat('coaching'), vitality = byCat('vitality'), ibf = byCat('ibf');
+  const coaching = byCat('coaching'), challenge = byCat('challenge'), vitality = byCat('vitality'), ibf = byCat('ibf');
+  const earlyBird = challenge.filter((s) => s.price === 197), fullPrice = challenge.filter((s) => s.price === 247), otherPrice = challenge.filter((s) => s.price !== 197 && s.price !== 247);
   const mealPlanTotal = sum(vitality) + sum(ibf);
 
   // IronBodyFit: how many of their meal-plan clients were charged the €10.
@@ -131,7 +133,7 @@ export default async function CrmRevenuePage({ searchParams }: { searchParams: P
       </div>
 
       {/* The two businesses */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card title="1-1 Coaching" value={euro(sum(coaching))} sub={`${coaching.length} package${coaching.length === 1 ? '' : 's'} sold`} accent="text-brand-dark">
           {(['3_months', '6_months', '12_months'] as CrmPackage[]).map((p) => {
             const list = coaching.filter((s) => s.pkg === p);
@@ -139,6 +141,13 @@ export default async function CrmRevenuePage({ searchParams }: { searchParams: P
           })}
           {coaching.length === 0 && <p className="text-sm text-neutral-400">No coaching packages sold in this period.</p>}
           {coaching.length > 0 && <Row label="Average package" value={sum(coaching) / coaching.length} muted />}
+        </Card>
+
+        <Card title="8-Week Challenge" value={euro(sum(challenge))} sub={`${challenge.length} spot${challenge.length === 1 ? '' : 's'} sold`} accent="text-[#26A88A]">
+          <Row label="Early bird · €197" count={earlyBird.length} value={sum(earlyBird)} dot="bg-[#26A88A]" />
+          <Row label="Full price · €247" count={fullPrice.length} value={sum(fullPrice)} dot="bg-[#26A88A]/50" />
+          {otherPrice.length > 0 && <Row label="Other price" count={otherPrice.length} value={sum(otherPrice)} />}
+          {challenge.length === 0 && <p className="text-sm text-neutral-400">No challenge spots sold in this period.</p>}
         </Card>
 
         <Card title="Meal plans" value={euro(mealPlanTotal)} sub={`${vitality.length + ibf.length} plan${vitality.length + ibf.length === 1 ? '' : 's'} sold`} accent="text-[#2a8fbf]">

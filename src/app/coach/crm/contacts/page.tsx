@@ -19,6 +19,7 @@ const TYPES = [
   { key: 'leads', label: 'Leads' },
   { key: 'clients', label: 'Clients' },
   { key: 'coaching', label: '1-1 Coaching' },
+  { key: 'challenge', label: '8-Week Challenge' },
   { key: 'meal_plans', label: 'Meal plans' },
   { key: 'past', label: 'Past / lost' },
 ];
@@ -53,7 +54,7 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
       case 'clients': return c.stage === 'won';
       case 'coaching': return c.stage === 'won' && t === 'coaching';
       case 'meal_plans': return c.stage === 'won' && (t === 'vitality_meal_plan' || t === 'ibf_meal_plan');
-      case 'vitality_meal_plan': case 'ibf_meal_plan': return c.stage === 'won' && t === type;
+      case 'challenge': case 'vitality_meal_plan': case 'ibf_meal_plan': return c.stage === 'won' && t === type;
       case 'past': return c.stage === 'past' || c.stage === 'lost';
       default: return true;
     }

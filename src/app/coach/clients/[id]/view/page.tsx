@@ -27,7 +27,7 @@ export default async function ClientAppPreviewPage({ params }: { params: Promise
   // put this page's 7-day window a day off from the coach list's weeklyGolds
   // count for the exact same client and week. Found via a real discrepancy
   // (list said 1 gold day, this page showed 0) while verifying Stage 1.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = coachToday();
   const weekStart = addDays(today, -6);
 
   const [dayMessageRes, profileRes, clientProfileRes, targetsRes, mealsRes, habitsRes, completionsRes, overrideRes, weekMealDatesRes, weekHabitDatesRes, weekMealsRes, weekCompletionsRes, weekOverridesRes] = await Promise.all([

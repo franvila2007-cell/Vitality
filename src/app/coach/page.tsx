@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { addDays } from '@/lib/date';
+import { addDays, coachToday } from '@/lib/date';
 import { getProjections, computeMonthColors, STATUS_META, type GoalType } from '@/lib/progress';
 import { computeDayRank, RANK_META } from '@/lib/ranking';
 import RestoreClientButton from '@/components/coach/RestoreClientButton';
@@ -23,7 +23,8 @@ export default async function CoachPage() {
     supabase.from('crm_contacts').select('id', { count: 'exact', head: true }).eq('stage', 'won').is('package', null),
   ]);
 
-  const serverToday = new Date().toISOString().slice(0, 10);
+  // Malta's calendar day — the coach's "today" (UTC read as the previous day for the first hours after midnight)
+  const serverToday = coachToday();
   const weekStart = addDays(serverToday, -6);
 
   const rows = await Promise.all(
@@ -114,7 +115,9 @@ export default async function CoachPage() {
         if (dayRank === 'gold') weeklyGolds++;
       }
 
-      return { client: c, profile: profRes.data, targets: targetsRes.data, totals, status, latestDate, rank, rankOverridden, weeklyGolds };
+      const habitsToday = habitDay(habits, weekDoneByDate, serverToday);
+
+      return { client: c, profile: profRes.data, targets: targetsRes.data, totals, status, latestDate, rank, rankOverridden, weeklyGolds, habitsToday };
     })
   );
 
@@ -145,7 +148,7 @@ export default async function CoachPage() {
         {rows.length === 0 && <p className="text-sm text-neutral-400">No clients yet — add your first one.</p>}
 
         <div className="flex flex-col gap-2">
-          {rows.map(({ client, profile, targets, totals, status, latestDate, rank, rankOverridden, weeklyGolds }) => (
+          {rows.map(({ client, profile, targets, totals, status, latestDate, rank, rankOverridden, weeklyGolds, habitsToday }) => (
             <PrefetchOnIntentLink
               key={client.id}
               href={`/coach/clients/${client.id}`}
@@ -177,6 +180,14 @@ export default async function CoachPage() {
                 <span className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${RANK_META.gold.className}`} title={`${weeklyGolds} gold ${weeklyGolds === 1 ? 'day' : 'days'} in the last 7 days`}>
                   🥇 {weeklyGolds}/7 this week
                 </span>
+                {habitsToday.total > 0 && (
+                  <span
+                    className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${habitsToday.done === habitsToday.total ? 'bg-status-good-bg text-status-good-text border-status-good/30' : 'border-border text-neutral-500'}`}
+                    title={`${habitsToday.done} of ${habitsToday.total} habits ticked today`}
+                  >
+                    ✅ {habitsToday.done}/{habitsToday.total} habits today
+                  </span>
+                )}
                 {rank && (
                   <span className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${RANK_META[rank].className}`} title={rankOverridden ? `${RANK_META[rank].label} (set by coach)` : RANK_META[rank].label}>
                     {RANK_META[rank].emoji} {RANK_META[rank].label}

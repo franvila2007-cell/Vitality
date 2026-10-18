@@ -118,7 +118,7 @@ export default async function CrmOverviewPage() {
       </Section>
 
       <Section title="Clients" action={<Link href="/coach/crm/contacts?type=clients" className="text-xs font-medium text-brand-dark hover:opacity-70">All clients →</Link>}>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           {CLIENT_TYPES.map((t) => (
             <Link key={t.key} href={`/coach/crm/contacts?type=${t.key}`} className="bg-surface border border-border rounded-xl p-3 hover:border-neutral-300">
               <span className={`inline-block rounded-full px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide ${t.chip}`}>{t.label}</span>

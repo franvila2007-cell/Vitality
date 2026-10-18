@@ -6,6 +6,7 @@ import RankOverride from '@/components/coach/RankOverride';
 import CoachNoteEditor from '@/components/coach/CoachNoteEditor';
 import DailyMessageEditor from '@/components/coach/DailyMessageEditor';
 import HabitHistory from '@/components/coach/HabitHistory';
+import { fetchAll } from '@/lib/supabase/paginate';
 import RemoveClientButton from '@/components/coach/RemoveClientButton';
 import ResendInviteButton from '@/components/coach/ResendInviteButton';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
@@ -35,7 +36,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     // Past days are scored against each habit's own schedule (starts_on /
     // archived_on / days), but against today's targets — this app doesn't
     // track historical versions of targets.
-    supabase.from('habit_completions').select('habit_id, date').eq('user_id', id).eq('completed', true).order('date', { ascending: false }).limit(2000),
+    // Past 1000 rows PostgREST silently truncates, so page through the history.
+    fetchAll<{ habit_id: string; date: string }>((from, to) => supabase.from('habit_completions').select('habit_id, date').eq('user_id', id).eq('completed', true).order('date', { ascending: false }).range(from, to)),
   ]);
 
   if (profileRes.error || !profileRes.data) notFound();
@@ -60,7 +62,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const habits = habitsRes.data || [];
   const rankTargets = targets ? { calories: targets.calories, protein_g: targets.protein_g, carbs_g: targets.carbs_g, fat_g: targets.fat_g } : null;
 
-  const doneByDate = completionsByDate(habitCompletionsRes.data || []);
+  const doneByDate = completionsByDate(habitCompletionsRes);
   const habitInputs = (date: string) => {
     const { total, done } = habitDay(habits, doneByDate, date);
     return { habitsTotal: total, habitsDone: done };

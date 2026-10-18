@@ -96,7 +96,10 @@ export default function HabitCalendar({ habits, done, today, minMonth, canToggle
               }`}
             >
               <span className={isPast && !allDone ? 'text-neutral-400' : ''}>{Number(date.slice(8))}</span>
-              {due.length > 0 && (
+              {due.length > 4 && (
+                <span className={`text-3xs font-medium tabular-nums leading-none ${allDone ? 'text-brand-dark' : isPast ? 'text-red-400' : 'text-neutral-400'}`}>{doneCount}/{due.length}</span>
+              )}
+              {due.length > 0 && due.length <= 4 && (
                 <span className="flex gap-0.5">
                   {due.slice(0, 4).map((h) => {
                     const hit = ticked.has(h.id);
