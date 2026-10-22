@@ -81,6 +81,8 @@ export type FitResult = {
 
 /** Recipe options may be this far from their meal's calorie target (±) so swaps barely move the day. */
 export const KCAL_TOLERANCE = 0.075;
+/** Protein per option may be this far from the meal's protein share (±). */
+export const PROTEIN_TOLERANCE = 0.1;
 
 const ROUND_G = 5;
 const roundG = (g: number) => Math.round(g / ROUND_G) * ROUND_G;
@@ -105,21 +107,34 @@ export function fitPortions(proposed: RecipeItem[], target: FitTarget): FitResul
   const P = sum(prot);
   const C = sum(carb);
 
-  // Solve  a·P + b·C + F = target  for the scale factors a (protein group)
-  // and b (carb group), on protein grams and kcal.
+  // Scale factors a (protein group) and b (carb group). Start by scaling the
+  // whole recipe evenly to the meal's calories, which keeps the dish as it
+  // was proposed. Only if that leaves protein more than PROTEIN_TOLERANCE out
+  // move towards the exact solution of  a·P + b·C + F = target  (protein and
+  // kcal), and only as far as needed.
   let a = 1;
   let b = 1;
   if (prot.length && carb.length) {
+    const k = Math.max(0.1, (target.kcal - F.kcal) / (P.kcal + C.kcal));
+    a = k;
+    b = k;
+    const proteinAt = (x: number, y: number) => F.protein + x * P.protein + y * C.protein;
+    const off = (proteinAt(k, k) - target.protein) / target.protein;
     const det = P.protein * C.kcal - C.protein * P.kcal;
-    if (Math.abs(det) > 1e-9) {
-      a = ((target.protein - F.protein) * C.kcal - C.protein * (target.kcal - F.kcal)) / det;
-      b = (P.protein * (target.kcal - F.kcal) - P.kcal * (target.protein - F.protein)) / det;
-    }
-    if (!(a > 0) || !(b > 0) || !Number.isFinite(a) || !Number.isFinite(b)) {
-      // Can't hit both exactly: hit protein with the protein group, then calories with carbs.
-      a = P.protein > 0 ? Math.max(0.1, (target.protein - F.protein - C.protein) / P.protein) : 1;
-      b = C.kcal > 0 ? Math.max(0.1, (target.kcal - F.kcal - a * P.kcal) / C.kcal) : 1;
-      notes.push('protein and calories could not both be matched exactly');
+    if (Math.abs(off) > PROTEIN_TOLERANCE && Math.abs(det) > 1e-9) {
+      const ax = ((target.protein - F.protein) * C.kcal - C.protein * (target.kcal - F.kcal)) / det;
+      const bx = (P.protein * (target.kcal - F.kcal) - P.kcal * (target.protein - F.protein)) / det;
+      if (ax > 0 && bx > 0 && Number.isFinite(ax) && Number.isFinite(bx)) {
+        // Protein is linear along the path from (k, k) to (ax, bx): stop where it enters the tolerance.
+        const goal = target.protein * (1 + Math.sign(off) * PROTEIN_TOLERANCE * 0.9);
+        const p0 = proteinAt(k, k);
+        const p1 = proteinAt(ax, bx);
+        const s = Math.min(1, Math.max(0, (goal - p0) / (p1 - p0)));
+        a = k + (ax - k) * s;
+        b = k + (bx - k) * s;
+      } else {
+        notes.push('protein and calories could not both be matched');
+      }
     }
   } else if (prot.length) {
     a = P.kcal > 0 ? Math.max(0.1, (target.kcal - F.kcal - C.kcal) / P.kcal) : 1;

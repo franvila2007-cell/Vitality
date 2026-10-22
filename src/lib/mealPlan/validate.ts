@@ -74,6 +74,7 @@ export function validatePlan(plan: PlanForValidation): Issue[] {
     const meal = targets.meals.find((m) => m.slot === r.slot);
     if (!r.mainProteinId) blocker(`"${r.name}" has no main protein.`);
     if (meal && !r.fit.ok) review(`"${r.name}" is ${Math.round(r.fit.nutrition.exact.kcal)} kcal against the ${meal.kcal} kcal ${meal.label.toLowerCase()} target.`);
+    if (meal && Math.abs(r.fit.proteinOffPct) > 0.2) review(`"${r.name}" has ${Math.round(r.fit.nutrition.exact.protein)} g protein against the ${meal.protein} g ${meal.label.toLowerCase()} target.`);
     if (!r.method.trim() || r.method.length > 450) review(`"${r.name}" needs a short method.`);
     if (COOK_WITH_OLIVE_OIL_RE.test(r.method)) blocker(`"${r.name}" cooks with olive oil — olive oil is for raw use only.`);
     if (TIME_RE.test(`${r.name} ${r.method}`)) blocker(`"${r.name}" mentions a clock time.`);

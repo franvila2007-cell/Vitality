@@ -167,7 +167,7 @@ export const INGREDIENTS: Ingredient[] = [
       "red_meat",
       "meat"
     ],
-    "minG": 120,
+    "minG": 80,
     "maxG": 350,
     "aliases": [
       "beef",
@@ -220,7 +220,7 @@ export const INGREDIENTS: Ingredient[] = [
       "red_meat",
       "meat"
     ],
-    "minG": 120,
+    "minG": 80,
     "maxG": 350,
     "aliases": [
       "beef",
