@@ -2,6 +2,7 @@
 //   intake  → read the form, work out the food rules, calculate targets
 //   recipes → Claude writes the recipes; portions fitted from USDA data
 //   repair  → replace any recipe that couldn't reach its calories
+//   photos  → find, check and store a stock photo for every recipe
 //   checks  → validate everything and write the Gamma instructions
 // Each step is a short server call whose output is saved on the meal_plans
 // row, so a timeout or crash resumes from the last finished step. Server-only.
@@ -13,10 +14,11 @@ import { proposeRecipes, repairRecipes, type Recipe } from './recipes';
 import { validatePlan, type Issue } from './validate';
 import { buildGammaPrompt, checkGammaPrompt } from './gammaContent';
 import type { ClaudeUsage } from './claude';
+import { findPhoto, type ChosenPhoto } from './photos';
 
 type Admin = ReturnType<typeof createAdminClient>;
 
-export type Stage = 'intake' | 'recipes' | 'repair' | 'checks' | 'done';
+export type Stage = 'intake' | 'recipes' | 'repair' | 'photos' | 'checks' | 'done';
 
 type StoredIntake = Omit<Intake, 'allowed' | 'usage'>;
 
@@ -24,8 +26,15 @@ export type PlanState = {
   intake?: StoredIntake;
   targets?: Targets;
   recipes?: Recipe[];
+  /** Per recipe name: the chosen photo, or null when none matched */
+  photos?: Record<string, ChosenPhoto | null>;
   usage?: ClaudeUsage[];
 };
+
+/** Database access for the stages that need it (photos). Absent in the dry-run script. */
+export type StageContext = { admin?: Admin; planId?: string; deadline?: number };
+
+const PHOTO_CONCURRENCY = 3;
 
 export type StageResult = {
   state: PlanState;
@@ -40,7 +49,7 @@ const LEASE_MS = 5 * 60 * 1000;
 const hydrate = (s: StoredIntake): Intake => ({ ...s, allowed: allowedIngredients(s.rules), usage: null });
 
 /** Runs one stage on in-memory state. No database access — the dry-run script uses this directly. */
-export async function runStage(stage: Stage, state: PlanState, answers: Answers): Promise<StageResult> {
+export async function runStage(stage: Stage, state: PlanState, answers: Answers, ctx: StageContext = {}): Promise<StageResult> {
   const usage = [...(state.usage ?? [])];
   switch (stage) {
     case 'intake': {
@@ -57,14 +66,27 @@ export async function runStage(stage: Stage, state: PlanState, answers: Answers)
     }
     case 'repair': {
       const { recipes, usage: u } = await repairRecipes(hydrate(state.intake!), state.targets!.meals, state.recipes!);
-      return { state: { ...state, recipes, usage: u ? [...usage, u] : usage }, next: 'checks' };
+      return { state: { ...state, recipes, usage: u ? [...usage, u] : usage }, next: 'photos' };
+    }
+    case 'photos': {
+      const photos = { ...(state.photos ?? {}) };
+      if (!ctx.admin || !ctx.planId) return { state: { ...state, photos }, next: 'checks' };
+      // A few recipes at a time; stop early near the deadline and carry on in the next call.
+      const todo = state.recipes!.filter((r) => !(r.name in photos));
+      for (let i = 0; i < todo.length; i += PHOTO_CONCURRENCY) {
+        if (ctx.deadline && Date.now() > ctx.deadline - 90_000) break;
+        const batch = todo.slice(i, i + PHOTO_CONCURRENCY);
+        const found = await Promise.all(batch.map((r) => findPhoto(ctx.admin!, ctx.planId!, r, state.intake!.rules, usage)));
+        batch.forEach((r, n) => { photos[r.name] = found[n]; });
+      }
+      const done = state.recipes!.every((r) => r.name in photos);
+      return { state: { ...state, photos, usage }, next: done ? 'checks' : 'photos' };
     }
     case 'checks': {
       const intake = state.intake!;
-      // Stock photos come in the next phase; until then every recipe is left without one.
-      const photos = new Map<string, string | null>();
+      const photos = new Map<string, string | null>(state.recipes!.map((r) => [r.name, state.photos?.[r.name]?.url ?? null]));
       const input = { fullName: intake.fullName, firstName: intake.firstName, targets: state.targets!, rules: intake.rules, recipes: state.recipes! };
-      const issues = validatePlan(input);
+      const issues = validatePlan({ ...input, photos: state.photos ? photos : undefined });
       const gamma = buildGammaPrompt({ ...input, photos });
       for (const m of checkGammaPrompt(gamma.prompt, { ...input, photos })) issues.push({ level: 'blocker', message: m });
       return { state, next: 'done', outcome: { issues, gamma } };
@@ -87,7 +109,7 @@ export async function startPlan(admin: Admin, requestId: string): Promise<string
  * a lease makes sure only one call runs a stage at a time, and a failed
  * stage is retried on the next call, up to MAX_ATTEMPTS.
  */
-export async function advancePlan(admin: Admin, planId: string): Promise<{ status: string; stage: string }> {
+export async function advancePlan(admin: Admin, planId: string, opts: { deadline?: number } = {}): Promise<{ status: string; stage: string }> {
   const now = new Date();
   const { data: claimed } = await admin.from('meal_plans')
     .update({ locked_until: new Date(now.getTime() + LEASE_MS).toISOString() })
@@ -103,7 +125,7 @@ export async function advancePlan(admin: Admin, planId: string): Promise<{ statu
   if (reqErr) throw reqErr;
 
   try {
-    const result = await runStage(claimed.stage as Stage, claimed.state as PlanState, request.answers as Answers);
+    const result = await runStage(claimed.stage as Stage, claimed.state as PlanState, request.answers as Answers, { admin, planId, deadline: opts.deadline });
     const finished = result.outcome;
     const status = !finished ? 'building' : finished.issues.some((i) => i.level === 'blocker') ? 'needs_review' : 'ready';
     await admin.from('meal_plans').update({
@@ -128,4 +150,18 @@ export async function advancePlan(admin: Admin, planId: string): Promise<{ statu
     }).eq('id', planId);
     return { status: attempts >= MAX_ATTEMPTS ? 'failed' : 'building', stage: claimed.stage };
   }
+}
+
+/**
+ * Runs a build's stages back to back until it finishes or the time budget
+ * runs low (a stage can take a couple of minutes). Returns true when the
+ * build is no longer building.
+ */
+export async function drivePlan(admin: Admin, planId: string, deadline: number): Promise<boolean> {
+  for (let i = 0; i < 12; i++) {
+    if (Date.now() > deadline - 150_000) return false;
+    const { status } = await advancePlan(admin, planId, { deadline });
+    if (status !== 'building') return true;
+  }
+  return false;
 }

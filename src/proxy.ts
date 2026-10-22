@@ -38,7 +38,9 @@ export async function proxy(request: NextRequest) {
     path.startsWith('/ironbodyfit-meal-plans') || path.startsWith('/api/meal-plan') ||
     path.startsWith('/vitality-meal-plan') || path.startsWith('/v-plan') || path.startsWith('/api/v-plan') ||
     path.startsWith('/join') || path.startsWith('/api/join') ||
-    path.startsWith('/challenge') || path.startsWith('/api/challenge')
+    path.startsWith('/challenge') || path.startsWith('/api/challenge') ||
+    // Background worker for automated meal plans — takes no input, returns only counts.
+    path.startsWith('/api/meal-plans/worker')
   ) return response;
 
   const { data: { user } } = await supabase.auth.getUser();

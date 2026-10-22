@@ -72,6 +72,10 @@ export default async function MealPlanTestPage({ params }: { params: Promise<{ r
                 const d = r.fit.nutrition.display;
                 return (
                   <div key={r.name} className="rounded-xl border border-border bg-surface p-4">
+                    {state.photos?.[r.name] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={state.photos[r.name]!.url} alt={r.name} className="mb-2 h-40 w-full rounded-lg object-cover" />
+                    ) : state.photos ? <p className="mb-2 text-2xs text-status-warn-text">No matching stock photo found</p> : null}
                     <div className="font-medium">{r.name} {!r.fit.ok && <span className="text-status-warn-text">⚠</span>}</div>
                     <p className="text-sm text-neutral-600">{recipeIngredientsLine(r)}. {r.method}</p>
                     <p className="text-sm font-semibold mt-1">{d.kcal} kcal · P: {d.protein}g · C: {d.carbs}g · F: {d.fat}g</p>

@@ -23,7 +23,8 @@ export type ClaudeUsage = { model: string; inputTokens: number; outputTokens: nu
  */
 export async function askClaude<T extends z.ZodType>(opts: {
   system: string;
-  prompt: string;
+  /** Plain text, or content blocks (e.g. images followed by text) */
+  prompt: string | Anthropic.Beta.BetaContentBlockParam[];
   schema: T;
   effort?: 'low' | 'medium' | 'high';
   maxTokens?: number;

@@ -231,9 +231,9 @@ export type Database = {
         { id?: string; submission_id?: string; full_name?: string; email?: string; phone?: string; answers?: Json; status?: MealPlanStatus; source?: MealPlanSource; created_at?: string }
       >;
       meal_plans: Table<
-        { id: string; request_id: string; version: number; status: GeneratedPlanStatus; stage: string; state: Json; issues: Json; gamma_title: string | null; gamma_prompt: string | null; gamma_id: string | null; gamma_url: string | null; attempts: number; last_error: string | null; locked_until: string | null; created_at: string; updated_at: string },
-        { request_id: string; id?: string; version?: number; status?: GeneratedPlanStatus; stage?: string; state?: Json; issues?: Json; gamma_title?: string | null; gamma_prompt?: string | null; gamma_id?: string | null; gamma_url?: string | null; attempts?: number; last_error?: string | null; locked_until?: string | null; created_at?: string; updated_at?: string },
-        { id?: string; request_id?: string; version?: number; status?: GeneratedPlanStatus; stage?: string; state?: Json; issues?: Json; gamma_title?: string | null; gamma_prompt?: string | null; gamma_id?: string | null; gamma_url?: string | null; attempts?: number; last_error?: string | null; locked_until?: string | null; created_at?: string; updated_at?: string }
+        { id: string; request_id: string; version: number; status: GeneratedPlanStatus; stage: string; state: Json; issues: Json; gamma_title: string | null; gamma_prompt: string | null; gamma_id: string | null; gamma_url: string | null; attempts: number; last_error: string | null; locked_until: string | null; notified_at: string | null; created_at: string; updated_at: string },
+        { request_id: string; id?: string; version?: number; status?: GeneratedPlanStatus; stage?: string; state?: Json; issues?: Json; gamma_title?: string | null; gamma_prompt?: string | null; gamma_id?: string | null; gamma_url?: string | null; attempts?: number; last_error?: string | null; locked_until?: string | null; notified_at?: string | null; created_at?: string; updated_at?: string },
+        { id?: string; request_id?: string; version?: number; status?: GeneratedPlanStatus; stage?: string; state?: Json; issues?: Json; gamma_title?: string | null; gamma_prompt?: string | null; gamma_id?: string | null; gamma_url?: string | null; attempts?: number; last_error?: string | null; locked_until?: string | null; notified_at?: string | null; created_at?: string; updated_at?: string }
       >;
     };
   };

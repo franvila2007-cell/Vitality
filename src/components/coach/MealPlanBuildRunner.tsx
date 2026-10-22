@@ -7,6 +7,7 @@ const STAGE_LABEL: Record<string, string> = {
   intake: 'Reading their answers and working out calories…',
   recipes: 'Writing recipes (this is the longest step, 1–3 minutes)…',
   repair: 'Checking every recipe hits its calories…',
+  photos: 'Finding and checking a stock photo for every recipe…',
   checks: 'Running the final checks…',
 };
 
