@@ -61,18 +61,36 @@ const SYSTEM = `You check stock photos for recipes in a client's meal plan. Pick
 
 Reject a photo if it shows any food the client can't eat (it would mislead them), if it is mainly raw ingredients rather than the cooked dish, if it shows a different dish (e.g. a burger in a bun for a bunless patty, pasta for rice), or if it has text, logos or watermarks. If no photo qualifies, answer -1. A missing photo is much better than a misleading one.`;
 
-async function pickPhoto(r: Recipe, candidates: Candidate[], rules: FoodRules): Promise<{ index: number; usage: ClaudeUsage }> {
+type ImageType = 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+
+/** Downloads a small preview to show Claude (stock sites block Claude fetching URLs itself). */
+async function previewData(c: Candidate): Promise<{ media_type: ImageType; data: string } | null> {
+  try {
+    const res = await fetch(c.preview, { signal: AbortSignal.timeout(10_000) });
+    const type = (res.headers.get('content-type') ?? '').split(';')[0] as ImageType;
+    if (!res.ok || !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(type)) return null;
+    return { media_type: type, data: Buffer.from(await res.arrayBuffer()).toString('base64') };
+  } catch {
+    return null;
+  }
+}
+
+async function pickPhoto(r: Recipe, all: Candidate[], rules: FoodRules): Promise<{ index: number; usage: ClaudeUsage | null; candidates: Candidate[] }> {
   const avoid = [...rules.excludedTags, ...rules.excludedTerms].join(', ') || 'nothing';
+  const loaded = await Promise.all(all.map(previewData));
+  const candidates = all.filter((_, i) => loaded[i]);
+  const images = loaded.filter((x): x is NonNullable<typeof x> => !!x);
+  if (!candidates.length) return { index: -1, usage: null, candidates };
   const content = [
-    ...candidates.flatMap((c, i) => [
+    ...images.flatMap((img, i) => [
       { type: 'text' as const, text: `Photo ${i}:` },
-      { type: 'image' as const, source: { type: 'url' as const, url: c.preview } },
+      { type: 'image' as const, source: { type: 'base64' as const, ...img } },
     ]),
     { type: 'text' as const, text: `Recipe: ${r.name}\nIngredients and method: ${recipeIngredientsLine(r)}. ${r.method}\nThe client can't eat: ${avoid}\n\nWhich photo (0–${candidates.length - 1}) shows this dish? Answer -1 if none do.` },
   ];
   const { data, usage } = await askClaude({ system: SYSTEM, prompt: content, schema: PickSchema, effort: 'low', maxTokens: 4000 });
   const index = Number.isInteger(data.best_index) && data.best_index >= 0 && data.best_index < candidates.length ? data.best_index : -1;
-  return { index, usage };
+  return { index, usage, candidates };
 }
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
@@ -97,9 +115,9 @@ export async function findPhoto(admin: Admin, planId: string, r: Recipe, rules: 
     candidates.forEach((c) => seen.add(`${c.source}${c.id}`));
     if (!candidates.length) continue;
     const pick = await pickPhoto(r, candidates, rules);
-    usage.push(pick.usage);
+    if (pick.usage) usage.push(pick.usage);
     if (pick.index < 0) continue;
-    const c = candidates[pick.index];
+    const c = pick.candidates[pick.index];
     return { url: await storePhoto(admin, planId, r, c), source: c.source, sourceId: c.id, pageUrl: c.pageUrl, photographer: c.photographer };
   }
   return null;
