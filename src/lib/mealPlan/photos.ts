@@ -12,6 +12,7 @@ import { askClaude, type ClaudeUsage } from './claude';
 import type { FoodRules } from './intake';
 import { recipeIngredientsLine } from './gammaContent';
 import type { Recipe } from './recipes';
+import { INGREDIENT_BY_ID } from './nutrition';
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -28,7 +29,7 @@ export type ChosenPhoto = {
 
 type Candidate = { source: ChosenPhoto['source']; id: string; preview: string; full: string; pageUrl: string; photographer: string | null; description: string };
 
-const CANDIDATES_PER_SEARCH = 6;
+const CANDIDATES_PER_SEARCH = 10;
 
 async function searchPexels(query: string): Promise<Candidate[]> {
   const key = process.env.PEXELS_API_KEY;
@@ -49,10 +50,16 @@ async function searchPixabay(query: string): Promise<Candidate[]> {
   return (body.hits ?? []).map((h) => ({ source: 'pixabay', id: String(h.id), preview: h.webformatURL, full: h.largeImageURL, pageUrl: h.pageURL, photographer: h.user ?? null, description: h.tags }));
 }
 
-/** Search terms from most to least specific: the model's description, then just the dish name. */
+/**
+ * Search terms from most to least specific: the model's description, the
+ * dish name, then just the main protein and carbohydrate ("salmon rice"),
+ * which stock libraries match far more often.
+ */
 function queriesFor(r: Recipe): string[] {
   const name = r.name.replace(/\b(with|and|on|in)\b/gi, ' ').replace(/[^a-z\s]/gi, ' ').replace(/\s+/g, ' ').trim();
-  return Array.from(new Set([r.photoQuery, name].map((q) => q.trim()).filter(Boolean)));
+  const word = (id: string | null) => (id ? (INGREDIENT_BY_ID.get(id)?.aliases[0] ?? '') : '');
+  const basic = `${word(r.mainProteinId)} ${word(r.mainCarbId)}`.trim();
+  return Array.from(new Set([r.photoQuery, name, basic].map((q) => q.trim()).filter(Boolean)));
 }
 
 const PickSchema = z.object({ best_index: z.number(), reason: z.string() });
