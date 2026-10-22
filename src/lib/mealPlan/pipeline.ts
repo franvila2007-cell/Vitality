@@ -76,7 +76,12 @@ export async function runStage(stage: Stage, state: PlanState, answers: Answers,
       for (let i = 0; i < todo.length; i += PHOTO_CONCURRENCY) {
         if (ctx.deadline && Date.now() > ctx.deadline - 90_000) break;
         const batch = todo.slice(i, i + PHOTO_CONCURRENCY);
-        const found = await Promise.all(batch.map((r) => findPhoto(ctx.admin!, ctx.planId!, r, state.intake!.rules, usage)));
+        // A photo that can't be found or checked is left out (and flagged by the
+        // checks) rather than holding up the whole plan.
+        const found = await Promise.all(batch.map((r) => findPhoto(ctx.admin!, ctx.planId!, r, state.intake!.rules, usage).catch((err) => {
+          console.error('meal plan photo failed', { planId: ctx.planId, recipe: r.name, message: err instanceof Error ? err.message : String(err) });
+          return null;
+        })));
         batch.forEach((r, n) => { photos[r.name] = found[n]; });
       }
       const done = state.recipes!.every((r) => r.name in photos);
