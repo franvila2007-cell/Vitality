@@ -61,7 +61,8 @@ export const MEAL_PLAN_SECTIONS: Section[] = [
     id: 'habits',
     title: 'Eating habits & lifestyle',
     questions: [
-      { id: 'meals_per_day', type: 'choice', label: 'How many meals do you PREFER per day?', required: true, options: ['1', '2', '3'] },
+      { id: 'exercise_sessions', type: 'choice', label: 'How many times a week do you exercise?', hint: 'Count IronBodyFit sessions, gym, sport, classes or runs.', required: true, options: ['0', '1', '2', '3', '4', '5', '6', '7'] },
+      { id: 'meals_per_day', type: 'choice', label: 'How many meals do you PREFER per day?', required: true, options: ['2', '3'] },
       { id: 'meal_style', type: 'choice', label: 'Do you prefer:', required: true, options: ['Simple meals I can repeat', 'Lots of variety', 'A mix of both'] },
       { id: 'snacks', type: 'choice', label: 'Do you snack often?', required: true, options: ['Rarely', 'Sometimes', 'Often'] },
       { id: 'hungriest', type: 'choice', label: 'When are you most hungry during the day?', options: ['Morning', 'Midday', 'Afternoon', 'Evening', 'Late night'] },

@@ -166,7 +166,7 @@ export default function MealPlanForm({ variant }: { variant: MealPlanVariant }) 
                   className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--brand)]"
                 />
                 <span className="text-sm leading-relaxed text-neutral-700">
-                  I confirm that the information I&apos;ve provided is accurate to the best of my knowledge.
+                  I confirm that the information I&apos;ve provided is accurate to the best of my knowledge, and I agree that Vitality uses my answers, including my health information, to create my meal plan.
                 </span>
               </label>
             )}
