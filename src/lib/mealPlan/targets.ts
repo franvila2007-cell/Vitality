@@ -35,7 +35,8 @@ export type TargetsInput = {
 
 export type FlagCode =
   | 'activity_unknown' | 'underweight' | 'under_18' | 'medical_condition' | 'medication'
-  | 'low_carbs' | 'very_low_calories' | 'macro_mismatch';
+  | 'low_carbs' | 'very_low_calories' | 'macro_mismatch'
+  | 'meal_count' | 'check_exclusions' | 'recipe' | 'photo';
 
 export type Flag = { code: FlagCode; message: string; /** blocks the deficit (target = maintenance) */ noDeficit?: boolean };
 

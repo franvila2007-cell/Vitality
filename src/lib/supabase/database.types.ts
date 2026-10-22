@@ -38,6 +38,7 @@ export type ChallengeIntakeRow = {
 
 export type MealPlanStatus = 'new' | 'in_progress' | 'sent';
 export type MealPlanSource = 'ironbodyfit' | 'vitality';
+export type GeneratedPlanStatus = 'building' | 'ready' | 'needs_review' | 'failed' | 'generating' | 'generated';
 
 // The 16 micronutrient columns on food_log_entries, all nullable numeric
 // (Nullable is the "unset" type — null for Row, and also allowed on
@@ -228,6 +229,11 @@ export type Database = {
         { id: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; status: MealPlanStatus; source: MealPlanSource; created_at: string },
         { id?: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; status?: MealPlanStatus; source?: MealPlanSource; created_at?: string },
         { id?: string; submission_id?: string; full_name?: string; email?: string; phone?: string; answers?: Json; status?: MealPlanStatus; source?: MealPlanSource; created_at?: string }
+      >;
+      meal_plans: Table<
+        { id: string; request_id: string; version: number; status: GeneratedPlanStatus; stage: string; state: Json; issues: Json; gamma_title: string | null; gamma_prompt: string | null; gamma_id: string | null; gamma_url: string | null; attempts: number; last_error: string | null; locked_until: string | null; created_at: string; updated_at: string },
+        { request_id: string; id?: string; version?: number; status?: GeneratedPlanStatus; stage?: string; state?: Json; issues?: Json; gamma_title?: string | null; gamma_prompt?: string | null; gamma_id?: string | null; gamma_url?: string | null; attempts?: number; last_error?: string | null; locked_until?: string | null; created_at?: string; updated_at?: string },
+        { id?: string; request_id?: string; version?: number; status?: GeneratedPlanStatus; stage?: string; state?: Json; issues?: Json; gamma_title?: string | null; gamma_prompt?: string | null; gamma_id?: string | null; gamma_url?: string | null; attempts?: number; last_error?: string | null; locked_until?: string | null; created_at?: string; updated_at?: string }
       >;
     };
   };
