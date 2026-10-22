@@ -16,7 +16,7 @@ export async function kickWorker(appUrl: string): Promise<void> {
   try {
     await fetch(`${appUrl}/api/meal-plans/worker`, { method: 'POST', signal: AbortSignal.timeout(3000) });
   } catch {
-    // The request only needs to be sent; the hourly task is the safety net.
+    // The request only needs to be sent; the 5-minute database job is the safety net.
   }
 }
 

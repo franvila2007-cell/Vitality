@@ -45,7 +45,7 @@ export async function POST(req: Request) {
   }));
   // Build their meal plan in the background (src/lib/mealPlan). Only for a
   // newly saved request — a retried submission inserts nothing and so
-  // starts nothing. Errors are logged; the hourly task retries stuck builds.
+  // starts nothing. Errors are logged; the 5-minute worker job retries stuck builds.
   const requestId = inserted?.[0]?.id;
   if (requestId) {
     after(() => startAndRun(admin, requestId, new URL(req.url).origin, started).catch((err) => {
