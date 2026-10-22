@@ -29,24 +29,36 @@ export async function askClaude<T extends z.ZodType>(opts: {
   effort?: 'low' | 'medium' | 'high';
   maxTokens?: number;
 }): Promise<{ data: z.infer<T>; usage: ClaudeUsage }> {
-  const response = await anthropic().beta.messages.parse(
+  const format = betaZodOutputFormat(opts.schema);
+  // Streamed: the SDK refuses non-streaming requests whose max_tokens could
+  // take longer than its 10-minute limit, which recipe writing can.
+  const stream = anthropic().beta.messages.stream(
     {
       model: MEAL_PLAN_MODEL,
       max_tokens: opts.maxTokens ?? 16000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       thinking: { type: 'adaptive' },
-      output_config: { effort: opts.effort ?? 'medium', format: betaZodOutputFormat(opts.schema) },
+      output_config: { effort: opts.effort ?? 'medium', format: { type: 'json_schema', schema: format.schema } },
       system: opts.system,
       messages: [{ role: 'user', content: opts.prompt }],
     },
-    { maxRetries: 3, timeout: 9 * 60 * 1000 },
+    { maxRetries: 3 },
   );
+  const response = await stream.finalMessage();
   if (response.stop_reason === 'refusal') throw new Error('Claude declined the request');
   if (response.stop_reason === 'max_tokens') throw new Error('Claude ran out of output tokens');
-  if (!response.parsed_output) throw new Error('Claude returned output that did not match the schema');
+  const text = response.content.filter((b) => b.type === 'text').map((b) => b.text).join('');
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error('Claude returned output that was not JSON');
+  }
+  const parsed = opts.schema.safeParse(json);
+  if (!parsed.success) throw new Error('Claude returned output that did not match the schema');
   return {
-    data: response.parsed_output as z.infer<T>,
+    data: parsed.data as z.infer<T>,
     usage: { model: response.model, inputTokens: response.usage.input_tokens, outputTokens: response.usage.output_tokens },
   };
 }
