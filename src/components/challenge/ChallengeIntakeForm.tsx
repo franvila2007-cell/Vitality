@@ -52,7 +52,8 @@ export default function ChallengeIntakeForm({ whatsappUrl }: { whatsappUrl: stri
         ) : step === 0 ? (
           <Card key="welcome">
             <p className="text-[13px] font-semibold uppercase tracking-[0.14em] text-[#26A88A]">8-Week Challenge</p>
-            <h1 className="mt-3 text-[32px] font-bold leading-[1.1] tracking-tight sm:text-[38px]">You didn&apos;t wait for 2027.</h1>
+            <p className="mt-3 text-[20px] font-bold text-[#26A88A]">Welcome, you&apos;re in!</p>
+            <h1 className="mt-2 text-[32px] font-bold leading-[1.1] tracking-tight sm:text-[38px]">You didn&apos;t wait for 2027.</h1>
             <p className="mt-4 text-[17px] leading-relaxed text-[#333F6E]/80">
               Well done. Most people are still waiting for January. You&apos;ve already started. This takes about 5 minutes and helps us build your 8 weeks around you.
             </p>
