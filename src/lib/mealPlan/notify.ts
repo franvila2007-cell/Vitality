@@ -13,14 +13,14 @@ type Admin = ReturnType<typeof createAdminClient>;
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-export async function sendCoachEmail(subject: string, html: string, text: string): Promise<void> {
+export async function sendCoachEmail(subject: string, html: string, text: string, opts: { to?: string; from?: string } = {}): Promise<void> {
   const key = process.env.RESEND_API_KEY;
-  const to = process.env.NOTIFY_EMAIL;
+  const to = opts.to ?? process.env.NOTIFY_EMAIL;
   if (!key || !to) throw new Error('RESEND_API_KEY or NOTIFY_EMAIL is not set');
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: 'Vitality Meal Plans <onboarding@resend.dev>', to: [to], subject, html, text }),
+    body: JSON.stringify({ from: opts.from ?? 'Vitality Meal Plans <onboarding@resend.dev>', to: [to], subject, html, text }),
     signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`Resend rejected the email (${res.status}): ${(await res.text()).slice(0, 200)}`);

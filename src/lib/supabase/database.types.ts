@@ -36,6 +36,17 @@ export type ChallengeIntakeRow = {
   answers: Json; crm_contact_id: string | null; created_at: string;
 };
 
+export type ChallengeCheckinRow = {
+  id: string; submission_id: string; created_at: string; intake_id: string | null; crm_contact_id: string | null;
+  email: string; phone: string | null; full_name: string | null; goal: string | null; week_number: number;
+  weight_kg: number | null; waist_cm: number | null; feeling: number | null; answers: Json;
+  biggest_win: string; hardest: string | null; need_from_us: string | null; photo_paths: string[]; needs_review: boolean;
+};
+export type ChallengeMemberGoalRow = {
+  email: string; goal: string; start_weight_kg: number | null; start_date: string; full_name: string | null;
+  phone: string | null; intake_id: string | null; updated_at: string;
+};
+
 export type MealPlanStatus = 'new' | 'in_progress' | 'sent';
 export type MealPlanSource = 'ironbodyfit' | 'vitality';
 export type GeneratedPlanStatus = 'building' | 'ready' | 'needs_review' | 'failed' | 'generating' | 'generated';
@@ -224,6 +235,17 @@ export type Database = {
         ChallengeIntakeRow,
         Omit<ChallengeIntakeRow, 'id' | 'cohort' | 'health_flag' | 'agreed_at' | 'crm_contact_id' | 'created_at' | 'instagram'> & Partial<ChallengeIntakeRow>,
         Partial<ChallengeIntakeRow>
+      >;
+      // Temporary: 8-Week Challenge weekly check-ins (0023_challenge_checkins.sql).
+      challenge_checkins: Table<
+        ChallengeCheckinRow,
+        Omit<ChallengeCheckinRow, 'id' | 'created_at' | 'needs_review' | 'photo_paths' | 'answers'> & Partial<ChallengeCheckinRow>,
+        Partial<ChallengeCheckinRow>
+      >;
+      challenge_member_goals: Table<
+        ChallengeMemberGoalRow,
+        Pick<ChallengeMemberGoalRow, 'email' | 'goal'> & Partial<ChallengeMemberGoalRow>,
+        Partial<ChallengeMemberGoalRow>
       >;
       meal_plan_requests: Table<
         { id: string; submission_id: string; full_name: string; email: string; phone: string; answers: Json; status: MealPlanStatus; source: MealPlanSource; created_at: string },

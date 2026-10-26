@@ -53,6 +53,7 @@ export const FORM_INBOX: Record<string, { label: string; href: string }> = {
   v_plan: { label: 'V Plans', href: '/coach/v-plans' },
   join: { label: 'Join form', href: '/coach/crm/contacts' },
   challenge: { label: '8-Week Challenge', href: '/coach/challenge' },
+  challenge_checkin: { label: '8-Week Challenge', href: '/coach/challenge' },
 };
 
 export function waLink(phone: string) {
