@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { isVisible, validateSection, type Answers } from '@/lib/assessment/questions';
 import { checkinSections, CHECKIN_GOALS, PHOTO_BUCKET, PHOTO_SLOTS, type CheckinGoal, type PhotoSlot } from '@/lib/challenge/checkin';
 import { createClient } from '@/lib/supabase/client';
+import type { Progress } from '@/lib/challenge/progress';
 import { Card, Field, PrimaryButton, groupHalves, inputBase } from './ui';
 
 // 8-Week Challenge weekly check-in (/challenge/check-in): one shared link.
@@ -72,6 +73,7 @@ export default function CheckinForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [result, setResult] = useState<Progress | null>(null);
   const honeypot = useRef<HTMLInputElement>(null);
 
   const sections = goal ? checkinSections(goal) : [];
@@ -189,7 +191,7 @@ export default function CheckinForm() {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) { remove(DRAFT_KEY); setPhase('done'); return; }
+      if (res.ok) { remove(DRAFT_KEY); setResult(data.progress ?? null); setPhase('done'); return; }
       if (res.status === 422 && data.errors) { setErrors(data.errors); setStep(data.section ?? 0); return; }
       setMessage(data.error || 'Something went wrong. Please try again.');
     } catch {
@@ -351,6 +353,20 @@ export default function CheckinForm() {
           <Card key="done">
             <h1 className="text-[30px] font-bold leading-[1.15] tracking-tight">Check-in received ✅</h1>
             <p className="mt-4 text-[17px] leading-relaxed text-[#333F6E]/80">Great work this week. Your coach will reply within 24 hours.</p>
+            {result && (
+              <div className="mt-7 rounded-2xl bg-[#D6F5EE] p-5">
+                <ul className="flex flex-col gap-2.5">
+                  {result.lines.map((line) => (
+                    <li key={line} className="text-[16px] font-semibold leading-snug">{line}</li>
+                  ))}
+                </ul>
+                <div className="mt-4 flex gap-1.5" aria-hidden>
+                  {Array.from({ length: 8 }, (_, i) => (
+                    <span key={i} className={`h-2 flex-1 rounded-full ${i < result.weeksDone ? 'bg-[#26A88A]' : 'bg-white'}`} />
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         )}
       </main>

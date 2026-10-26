@@ -5,6 +5,7 @@ import { recordFunnelEvent } from '@/lib/crm/ingest';
 import { sendCoachEmail } from '@/lib/mealPlan/notify';
 import { checkinSections, CHECKIN_GOALS, COLUMN_ANSWERS, EMAIL_RE, maltaToday, PHOTO_SLOTS, type CheckinGoal } from '@/lib/challenge/checkin';
 import { findMember } from '@/lib/challenge/member';
+import { progressFor } from '@/lib/challenge/progress';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const COACH_EMAIL = 'francescovila@vitalitymalta.com';
@@ -47,14 +48,16 @@ export async function POST(req: Request) {
   const photoRe = new RegExp(`^${submissionId}/(${PHOTO_SLOTS.join('|')})\\.(jpg|png|webp|heic|heif)$`);
   const photoPaths = Array.isArray(body.photoPaths) ? body.photoPaths.filter((p): p is string => typeof p === 'string' && photoRe.test(p)).slice(0, 3) : [];
 
+  const givenStart = Number(str(body.startWeight, 10).replace(',', '.'));
+  const startWeight = member?.startWeight ?? (givenStart >= 35 && givenStart <= 300 ? Math.round(givenStart * 10) / 10 : null);
+
   // Remember the goal for members with no intake (or matched by phone), so
   // the form never asks again. An existing row is left as it is.
   if (!member?.hasSavedGoal && (!member?.intakeId || member.email !== email)) {
-    const startWeight = Number(str(body.startWeight, 10).replace(',', '.'));
     await admin.from('challenge_member_goals').upsert({
       email,
       goal,
-      start_weight_kg: member?.startWeight ?? (startWeight >= 35 && startWeight <= 300 ? Math.round(startWeight * 10) / 10 : null),
+      start_weight_kg: startWeight,
       start_date: member?.startDate ?? maltaToday(),
       full_name: member?.fullName ?? (str(body.fullName, 120) || null),
       phone: member?.phone ?? (phone || null),
@@ -91,6 +94,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "We couldn't save your check-in. Please try again in a moment, your answers are still here." }, { status: 500 });
   }
 
+  // Progress for the success screen: this week against their start.
+  const cols = 'submission_id, week_number, waist_cm, created_at';
+  const [byEmail, byIntake] = await Promise.all([
+    admin.from('challenge_checkins').select(cols).eq('email', email),
+    row.intake_id ? admin.from('challenge_checkins').select(cols).eq('intake_id', row.intake_id) : Promise.resolve({ data: [] }),
+  ]);
+  const earlier = [...new Map([...(byEmail.data ?? []), ...(byIntake.data ?? [])].map((h) => [h.submission_id, h])).values()]
+    .filter((h) => h.submission_id !== submissionId)
+    .sort((a, b) => a.week_number - b.week_number || a.created_at.localeCompare(b.created_at));
+  const firstWaist = earlier.find((h) => h.waist_cm != null)?.waist_cm;
+  const progress = progressFor({
+    goal, startWeight, week,
+    weight: row.weight_kg, waist: row.waist_cm,
+    firstWaist: firstWaist != null ? Number(firstWaist) : null,
+    weeksDone: new Set([...earlier.map((h) => h.week_number), week]).size,
+  });
+
   after(async () => {
     const contactId = await recordFunnelEvent(admin, {
       fullName: fullName ?? email, email: member?.email ?? email, phone: row.phone,
@@ -117,7 +137,7 @@ export async function POST(req: Request) {
       console.error('challenge check-in email failed', err instanceof Error ? err.message : err);
     }
   });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, progress });
 }
 
 function summaryEmail(
