@@ -2,6 +2,8 @@
 import { bmrMifflin, activityFor, calculateTargets, splitMeals, type TargetsInput } from '../src/lib/mealPlan/targets';
 import { recipeNutrition, fitPortions, INGREDIENT_BY_ID, KCAL_TOLERANCE } from '../src/lib/mealPlan/nutrition';
 import { INGREDIENTS } from '../src/lib/mealPlan/ingredients.data';
+import { buildGammaPrompt, checkGammaPrompt, COVER_HEADING } from '../src/lib/mealPlan/gammaContent';
+import type { Recipe } from '../src/lib/mealPlan/recipes';
 
 let fail = 0;
 function check(name: string, ok: boolean, extra = '') { if (!ok) fail++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name} ${extra}`); }
@@ -119,6 +121,24 @@ check('protein-only recipe fits calories', eggs.ok, `${Math.round(eggs.nutrition
 const tooBig = fitPortions([{ ingredientId: 'cod', grams: 150, role: 'protein' }, { ingredientId: 'spinach', grams: 50, role: 'fixed' }], { kcal: 1500, protein: 60 });
 check('impossible target flagged not faked', !tooBig.ok && tooBig.items[0].grams <= 400 && tooBig.notes.length > 0, tooBig.notes.join('; '));
 check('tolerance is ±7.5%', KCAL_TOLERANCE === 0.075);
+
+// ── Gamma instructions: no empty lists for an eggs-only (no meat or fish) client ──
+{
+  const t = calculateTargets({ ...base, mealsPerDay: 2 });
+  const rules = { excludedTags: ['meat' as const, 'seafood' as const, 'dairy' as const], excludedIngredientIds: [], excludedTerms: [], avoidDishStyles: [], preferredIngredientIds: [], exclusionNote: 'All your meals are meat-free, as requested.', unclear: [] };
+  const mk = (slot: 'lunch' | 'dinner', name: string): Recipe => {
+    const fit = fitPortions([{ ingredientId: 'eggs', grams: 200, role: 'protein' }, { ingredientId: 'potatoes', grams: 300, role: 'carb' }], t.meals.find((m) => m.slot === slot)!);
+    return { slot, name, method: 'Cook.', photoQuery: '', mainProteinId: 'eggs', mainCarbId: 'potatoes', fit };
+  };
+  const recipes = [1, 2, 3, 4].flatMap((n) => [mk('lunch', `Egg lunch ${n}`), mk('dinner', `Egg dinner ${n}`)]);
+  const input = { fullName: 'Test Client', firstName: 'Test', targets: t, rules, recipes, photos: new Map<string, string | null>() };
+  const { prompt } = buildGammaPrompt(input);
+  check('eggs-only: protein box lists eggs', /Box "Protein": "Eggs/.test(prompt), prompt.match(/Box "Protein": "[^"]*"/)?.[0]);
+  check('eggs-only: no meat in protein box', !/Box "Protein": "[^"]*(steak|mince|Chicken|Fish)/.test(prompt));
+  check('eggs-only: food priorities not empty', !/Choose\s+with/.test(prompt));
+  check('cover heading locked', prompt.includes(COVER_HEADING));
+  check('eggs-only prompt passes pre-flight', checkGammaPrompt(prompt, input).length === 0, checkGammaPrompt(prompt, input).join('; '));
+}
 
 console.log(fail ? `\n${fail} FAILED` : '\nall passed');
 process.exit(fail ? 1 : 0);

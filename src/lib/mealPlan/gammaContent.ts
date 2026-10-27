@@ -98,8 +98,14 @@ export function buildGammaPrompt(p: GammaPlanInput): { title: string; prompt: st
     ? `Your maintenance level is ${t.maintenanceKcal} calories. A daily target of ${t.targetKcal} calories creates a 300 calorie deficit for fat loss while supporting muscle with high protein. These macro targets total approximately ${t.targetKcal} calories.`
     : `Your maintenance level is ${t.maintenanceKcal} calories. A daily target of ${t.targetKcal} calories supports muscle with high protein. These macro targets total approximately ${t.targetKcal} calories.`;
 
-  const foodPriorities = `Choose ${joinList(keepFoods([['chicken', ['chicken_breast', 'chicken_thigh']], ['beef', ['beef_mince_5', 'sirloin_steak']], ['fish', ['salmon', 'cod']], ['eggs', ['eggs']]], allowed))} with ${joinList(keepFoods([['potatoes', ['potatoes']], ['sweet potatoes', ['sweet_potato']], ['fruit', []], ['vegetables such as peppers, courgette, tomatoes and carrots', []]], allowed))}. Use ${joinList(keepFoods([['butter', ['butter']], ['olive oil', ['olive_oil']], ['avocado', ['avocado']], ['nuts', ['walnuts', 'almonds']]], allowed))} for added fats.`;
-  const proteinBox = keepFoods([['Quick-cooking steak', ['sirloin_steak']], ['Lean beef mince', ['beef_mince_5']], ['Chicken', ['chicken_breast']], ['Fish fillets', ['cod', 'salmon']], ['canned tuna', ['tuna_canned']]], allowed).join(' · ');
+  // Template protein lists, falling back to egg, dairy and plant proteins for
+  // clients who don't eat meat or fish — a list must never come out empty, or
+  // Gamma fills the gap back in with the template's (meat) wording.
+  const priorityProteins = keepFoods([['chicken', ['chicken_breast', 'chicken_thigh']], ['beef', ['beef_mince_5', 'sirloin_steak']], ['fish', ['salmon', 'cod']], ['eggs', ['eggs']]], allowed);
+  const otherProteins = keepFoods([['eggs', ['eggs']], ['egg whites', ['egg_whites']], ['Greek yoghurt', ['greek_yoghurt_0', 'greek_yoghurt_2']], ['cottage cheese', ['cottage_cheese']], ['lentils', ['red_lentils']], ['beans', ['black_beans', 'kidney_beans']], ['chickpeas', ['chickpeas']]], allowed);
+  const foodPriorities = `Choose ${joinList(priorityProteins.length > 1 ? priorityProteins : Array.from(new Set([...priorityProteins, ...otherProteins])))} with ${joinList(keepFoods([['potatoes', ['potatoes']], ['sweet potatoes', ['sweet_potato']], ['fruit', []], ['vegetables such as peppers, courgette, tomatoes and carrots', []]], allowed))}. Use ${joinList(keepFoods([['butter', ['butter']], ['olive oil', ['olive_oil']], ['avocado', ['avocado']], ['nuts', ['walnuts', 'almonds']]], allowed))} for added fats.`;
+  const templateProteins = keepFoods([['Quick-cooking steak', ['sirloin_steak']], ['Lean beef mince', ['beef_mince_5']], ['Chicken', ['chicken_breast']], ['Fish fillets', ['cod', 'salmon']], ['canned tuna', ['tuna_canned']]], allowed);
+  const proteinBox = (templateProteins.length >= 2 ? templateProteins : [...templateProteins, ...otherProteins.map(cap)]).join(' · ');
   const fatsBox = ['Peppers, courgette, tomatoes, carrots', ...keepFoods([['Avocado', ['avocado']], ['Butter and olive oil', ['butter']], ['Walnuts or pumpkin seeds', ['walnuts', 'pumpkin_seeds']]], allowed)].join(' · ');
 
   const mealsCardTitle = `${cap(nWord)} Satisfying Meals`;
@@ -188,5 +194,6 @@ export function checkGammaPrompt(prompt: string, p: GammaPlanInput): string[] {
     if (!prompt.includes(`${r.fit.nutrition.display.kcal} kcal`)) problems.push(`Gamma prompt is missing the calories for "${r.name}".`);
   }
   if (/\b(13:00|18:00)\b/.test(prompt)) problems.push('Gamma prompt contains a template meal time.');
+  if (/: ""|Choose\s+with\b|such as \./.test(prompt)) problems.push('Gamma prompt has an empty list — Gamma would fill it with template wording.');
   return problems;
 }
