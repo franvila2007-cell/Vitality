@@ -15,6 +15,8 @@ import { validatePlan, type Issue } from './validate';
 import { buildGammaPrompt, checkGammaPrompt } from './gammaContent';
 import type { ClaudeUsage } from './claude';
 import { findPhoto, type ChosenPhoto } from './photos';
+import { buildLibraryHtml } from './libraryDoc';
+import { ibfLocation } from './questions';
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -40,7 +42,7 @@ export type StageResult = {
   state: PlanState;
   next: Stage;
   /** set when the build has finished */
-  outcome?: { issues: Issue[]; gamma: { title: string; prompt: string } };
+  outcome?: { issues: Issue[]; gamma: { title: string; prompt: string }; libraryHtml: string };
 };
 
 const MAX_ATTEMPTS = 3;
@@ -94,7 +96,11 @@ export async function runStage(stage: Stage, state: PlanState, answers: Answers,
       const issues = validatePlan({ ...input, photos: state.photos ? photos : undefined });
       const gamma = buildGammaPrompt({ ...input, photos });
       for (const m of checkGammaPrompt(gamma.prompt, { ...input, photos })) issues.push({ level: 'blocker', message: m });
-      return { state, next: 'done', outcome: { issues, gamma } };
+      const libraryHtml = buildLibraryHtml({
+        fullName: intake.fullName, location: ibfLocation(answers), createdAt: new Date(),
+        targets: state.targets!, exclusionNote: intake.rules.exclusionNote, recipes: state.recipes!, photos: state.photos, issues,
+      });
+      return { state, next: 'done', outcome: { issues, gamma, libraryHtml } };
     }
     default:
       throw new Error(`Nothing to run at stage "${stage}"`);
@@ -140,7 +146,7 @@ export async function advancePlan(admin: Admin, planId: string, opts: { deadline
       attempts: 0,
       last_error: null,
       locked_until: null,
-      ...(finished ? { issues: finished.issues as never, gamma_title: finished.gamma.title, gamma_prompt: finished.gamma.prompt } : {}),
+      ...(finished ? { issues: finished.issues as never, gamma_title: finished.gamma.title, gamma_prompt: finished.gamma.prompt, library_html: finished.libraryHtml } : {}),
     }).eq('id', planId);
     return { status, stage: result.next };
   } catch (err) {

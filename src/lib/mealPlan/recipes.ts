@@ -26,12 +26,12 @@ const SYSTEM = `You write recipes for Vitality × IronBody Fit personalised meal
 Rules for every recipe:
 - Use ONLY ingredient ids from the client's allowed list. Anything not on the list is off-limits, including in sauces, garnishes and "optional" extras.
 - Cook with butter or ghee (or, if those aren't on the list, coconut oil, avocado oil or beef tallow). Olive oil is used raw only — drizzled or as a dressing, never for frying, roasting or baking. The method must reflect this.
-- Keep oats to a minimum: at most one recipe in the whole plan may use them.
+- Carbohydrates: build meals mainly on potatoes, rice, sweet potatoes and couscous, plus fruit. Avoid wheat, flour and grain products — bread, wraps, tortillas, noodles, crackers, crispbreads, bulgur — wherever possible. Oats, pasta and sourdough are fine occasionally: at most two recipes in the whole plan may use any of oats, pasta, sourdough or other bread, and at most one of those may use oats. If the client's food rules leave no other option, use them anyway.
 - Practical home cooking within the client's cooking time. Short, clear method: 1–3 sentences, like "Roast the potatoes in ghee at 200°C until golden; grill the chicken and serve with the courgette."
 - Natural, appealing dish names, e.g. "Honey Chicken with Potatoes", "Garlic Prawns and Rice". Never name a cuisine or style the client wants to avoid.
 - Within one meal, the four options must be genuinely different dishes: a different main protein or a different carbohydrate and cooking style — not the same dish with one swap.
 - Build around the foods the client already enjoys and eats often.
-- Breakfasts should be simple and quick (eggs, yoghurt or similar if allowed, fruit, a carbohydrate). Lunches and dinners are hearty plates.
+- Breakfasts should be simple and quick (eggs, yoghurt or similar if allowed, fruit, potatoes or sweet potatoes, or occasionally oats or sourdough). Lunches and dinners are hearty plates.
 - Give each ingredient a role: "protein" for the main protein source(s), "carb" for the main carbohydrate source(s), "fixed" for everything else (veg, fruit, fats, flavourings). Quantities of protein and carb items are fine-tuned automatically afterwards to hit the meal's calories, so give realistic starting grams close to the meal's target. Include the cooking fat and any honey, sauce or oil as ingredients — everything is counted.
 - Every recipe needs a main protein. Include enough energy-dense food (rice, pasta, potatoes, fats) for big meals to reach their calories.
 - photo_query: a short description of the finished plate for a stock-photo search, e.g. "grilled chicken breast with roast potatoes and courgette".

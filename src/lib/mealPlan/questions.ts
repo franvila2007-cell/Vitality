@@ -1,4 +1,13 @@
-import type { Section } from '@/lib/assessment/questions';
+import type { Answers, Section } from '@/lib/assessment/questions';
+
+export const IBF_SLIEMA = 'IronBodyFit Sliema';
+export const IBF_MRIEHEL = 'IronBodyFit Mriehel';
+
+/** "Sliema" / "Mriehel" from a request's answers; null for requests sent before the question existed. */
+export function ibfLocation(answers: Answers | null | undefined): 'Sliema' | 'Mriehel' | null {
+  const v = answers?.ibf_location;
+  return v === IBF_SLIEMA ? 'Sliema' : v === IBF_MRIEHEL ? 'Mriehel' : null;
+}
 
 // Single source of truth for the IronBodyFit meal-plan request form: the
 // public form at /ironbodyfit-meal-plans renders from this, /api/meal-plan validates
@@ -11,6 +20,7 @@ export const MEAL_PLAN_SECTIONS: Section[] = [
     questions: [
       { id: 'full_name', type: 'text', label: 'Name and surname', required: true, autoComplete: 'name' },
       { id: 'phone', type: 'tel', label: 'Phone number', required: true, autoComplete: 'tel', placeholder: '+356' },
+      { id: 'ibf_location', type: 'choice', label: 'Which IronBodyFit do you train at?', required: true, options: [IBF_SLIEMA, IBF_MRIEHEL] },
       { id: 'age', type: 'number', label: 'Age', required: true, unit: 'years', min: 14, max: 100, half: true },
       { id: 'sex', type: 'choice', label: 'Sex', required: true, options: ['Female', 'Male'], half: true },
       { id: 'height', type: 'number', label: 'Height', required: true, unit: 'cm', min: 100, max: 250, half: true },

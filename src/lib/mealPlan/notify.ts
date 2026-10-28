@@ -8,6 +8,8 @@
 import type { createAdminClient } from '@/lib/supabase/admin';
 import type { PlanState } from './pipeline';
 import type { Issue } from './validate';
+import { ibfLocation } from './questions';
+import type { Answers } from '@/lib/assessment/questions';
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -64,8 +66,11 @@ export async function notifyPlans(admin: Admin, appUrl: string): Promise<number>
     .order('updated_at').limit(10);
   let sent = 0;
   for (const row of rows ?? []) {
-    const { data: request } = await admin.from('meal_plan_requests').select('full_name').eq('id', row.request_id).single();
-    const { subject, html, text } = emailFor(row, request?.full_name ?? 'A client', appUrl);
+    const { data: request } = await admin.from('meal_plan_requests').select('full_name, answers').eq('id', row.request_id).single();
+    // "Maria Borg (Sliema)" — which IronBodyFit they train at, when the form asked.
+    const location = ibfLocation(request?.answers as Answers | undefined);
+    const name = `${request?.full_name ?? 'A client'}${location ? ` (${location})` : ''}`;
+    const { subject, html, text } = emailFor(row, name, appUrl);
     try {
       // Claim first so two workers never send the same email twice.
       const { data: claimed } = await admin.from('meal_plans').update({ notified_at: new Date().toISOString() }).eq('id', row.id).is('notified_at', null).select('id').maybeSingle();

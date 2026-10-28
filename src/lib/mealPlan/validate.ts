@@ -19,6 +19,9 @@ export type PlanForValidation = {
   photos?: Map<string, string | null>;
 };
 
+/** Wheat, flour and grain products to keep occasional (couscous and rice are preferred carbs, so not listed). */
+const GRAIN_IDS = new Set(['oats', 'pasta', 'wholewheat_pasta', 'sourdough', 'wholemeal_bread', 'pitta', 'corn_tortilla', 'rye_crispbread', 'rice_cakes', 'rice_noodles', 'bulgur']);
+
 const TIME_RE = /\b([01]?\d|2[0-3])[:.][0-5]\d\b|\b\d{1,2}\s?(am|pm)\b/i;
 const COOK_WITH_OLIVE_OIL_RE = /(fry|fried|roast|bake|sear|saut[eé]|grill|cook|brown|pan)[^.;]{0,40}\bolive oil\b|\bolive oil\b[^.;]{0,25}(fry|roast|bake|sear|saut[eé]|grill|cook|brown)/i;
 
@@ -86,6 +89,10 @@ export function validatePlan(plan: PlanForValidation): Issue[] {
 
   const oatRecipes = recipes.filter((r) => r.fit.items.some((i) => i.ingredientId === 'oats'));
   if (oatRecipes.length > 1) review(`${oatRecipes.length} recipes use oats — keep it to one at most.`);
+  // Carbs should mainly be potatoes, rice, sweet potatoes and couscous; bread,
+  // pasta, oats, noodles and the like only now and then.
+  const grainRecipes = recipes.filter((r) => r.fit.items.some((i) => GRAIN_IDS.has(i.ingredientId)));
+  if (grainRecipes.length > 2) review(`${grainRecipes.length} recipes use bread, pasta, oats, noodles or wraps (${grainRecipes.map((r) => r.name).join(', ')}) — aim for two at most, swapping in potatoes, rice, sweet potato or couscous.`);
 
   // ── Distinct options ───────────────────────────────────────────────────
   for (const slot of slots) {
