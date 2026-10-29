@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { MEAL_PLAN_SECTIONS } from '@/lib/mealPlan/questions';
 import { parseFormSubmission } from '@/lib/assessment/submit';
 import { recordFunnelEvent } from '@/lib/crm/ingest';
+import { chargeIbfMealPlan } from '@/lib/crm/ibfCharge';
 import { startAndRun } from '@/lib/mealPlan/worker';
 
 export const runtime = 'nodejs';
@@ -37,12 +38,16 @@ export async function POST(req: Request) {
     console.error('meal plan request insert failed', error);
     return NextResponse.json({ error: "We couldn't send your answers. Please try again in a moment." }, { status: 500 });
   }
-  // Log it on the CRM contact after the response — never slows or fails the form.
-  after(() => recordFunnelEvent(admin, {
-    fullName: clean.full_name as string, email: (clean.email as string | undefined) ?? '', phone: (clean.phone as string | undefined) ?? null,
-    brand: 'ironbodyfit',
-    source: 'ironbodyfit', form: 'ironbodyfit', mealPlanClient: true, summary: `Requested an IronBodyFit meal plan${clean.goal ? ` · goal: ${clean.goal}` : ''}`, submissionId,
-  }));
+  // Log it on the CRM contact after the response — never slows or fails the
+  // form — and count the €10 meal plan in revenue and cash collected.
+  after(async () => {
+    const contactId = await recordFunnelEvent(admin, {
+      fullName: clean.full_name as string, email: (clean.email as string | undefined) ?? '', phone: (clean.phone as string | undefined) ?? null,
+      brand: 'ironbodyfit',
+      source: 'ironbodyfit', form: 'ironbodyfit', mealPlanClient: true, summary: `Requested an IronBodyFit meal plan${clean.goal ? ` · goal: ${clean.goal}` : ''}`, submissionId,
+    });
+    if (contactId) await chargeIbfMealPlan(admin, contactId);
+  });
   // Build their meal plan in the background (src/lib/mealPlan). Only for a
   // newly saved request — a retried submission inserts nothing and so
   // starts nothing. Errors are logged; the 5-minute worker job retries stuck builds.
