@@ -58,31 +58,51 @@ function emailFor(row: { status: string; gamma_url: string | null; issues: unkno
   };
 }
 
-/** Emails every plan that has reached an end state and hasn't been emailed yet. */
+/**
+ * Emails every plan that has reached an end state and hasn't been emailed
+ * yet — all of them in ONE email. Several separate emails sent within the
+ * same second from Resend's shared address were sometimes silently dropped
+ * by Gmail, so a batch is always a single message.
+ */
 export async function notifyPlans(admin: Admin, appUrl: string): Promise<number> {
   const { data: rows } = await admin.from('meal_plans')
     .select('id, request_id, status, gamma_url, issues, state, last_error')
     .is('notified_at', null).in('status', ['generated', 'needs_review', 'failed'])
     .order('updated_at').limit(10);
-  let sent = 0;
-  for (const row of rows ?? []) {
-    const { data: request } = await admin.from('meal_plan_requests').select('full_name, answers').eq('id', row.request_id).single();
+  if (!rows?.length) return 0;
+
+  // Claim first so two workers never send the same plan twice.
+  const { data: claimedRows } = await admin.from('meal_plans').update({ notified_at: new Date().toISOString() })
+    .in('id', rows.map((r) => r.id)).is('notified_at', null).select('id');
+  const claimedIds = new Set((claimedRows ?? []).map((r) => r.id));
+  const claimed = rows.filter((r) => claimedIds.has(r.id));
+  if (!claimed.length) return 0;
+
+  const { data: requests } = await admin.from('meal_plan_requests').select('id, full_name, answers').in('id', claimed.map((r) => r.request_id));
+  const parts = claimed.map((row) => {
+    const request = requests?.find((q) => q.id === row.request_id);
     // "Maria Borg (Sliema)" — which IronBodyFit they train at, when the form asked.
     const location = ibfLocation(request?.answers as Answers | undefined);
     const name = `${request?.full_name ?? 'A client'}${location ? ` (${location})` : ''}`;
-    const { subject, html, text } = emailFor(row, name, appUrl);
-    try {
-      // Claim first so two workers never send the same email twice.
-      const { data: claimed } = await admin.from('meal_plans').update({ notified_at: new Date().toISOString() }).eq('id', row.id).is('notified_at', null).select('id').maybeSingle();
-      if (!claimed) continue;
-      await sendCoachEmail(subject, html, text);
-      sent++;
-    } catch (err) {
-      console.error('meal plan email failed', { planId: row.id, message: err instanceof Error ? err.message : String(err) });
-      await admin.from('meal_plans').update({ notified_at: null }).eq('id', row.id);
-    }
+    return { name, ready: row.status === 'generated' && !!row.gamma_url, ...emailFor(row, name, appUrl) };
+  });
+
+  const ready = parts.filter((p) => p.ready);
+  const attention = parts.filter((p) => !p.ready);
+  const subject = parts.length === 1 ? parts[0].subject
+    : [ready.length ? `New IronBody Fit meal plans: ${ready.map((p) => p.name).join(', ')}` : '', attention.length ? `${attention.length} need your attention` : ''].filter(Boolean).join(' · ');
+  const hr = '<hr style="border:none;border-top:1px solid #ddd;margin:24px 0">';
+  const html = parts.map((p) => p.html).join(hr);
+  const text = parts.map((p) => p.text).join('\n\n────────────\n\n');
+
+  try {
+    await sendCoachEmail(subject, html, text);
+    return claimed.length;
+  } catch (err) {
+    console.error('meal plan email failed', { planIds: [...claimedIds], message: err instanceof Error ? err.message : String(err) });
+    await admin.from('meal_plans').update({ notified_at: null }).in('id', [...claimedIds]);
+    return 0;
   }
-  return sent;
 }
 
 const GAMMA_WAIT_HOURS = 2;

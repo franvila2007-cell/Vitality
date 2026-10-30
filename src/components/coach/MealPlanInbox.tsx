@@ -73,9 +73,12 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
     person.forms.unshift(r);
     people.set(key, person);
   }
-  const list = [...people.values()].sort((a, b) => b.forms[0].created_at.localeCompare(a.forms[0].created_at));
+  // In the order people were added — newest at the top, so the numbers count down.
+  const list = [...people.values()].sort((a, b) => b.number - a.number);
+  // Done = a Gamma plan exists for any of their forms, or the coach marked it sent.
+  const isDone = (forms: Row[]) => forms.some((f) => f.status === 'sent' || planByRequest.get(f.id)?.gamma_url);
   const newCount = list.filter((p) => p.forms[0].status === 'new').length;
-  const plansMade = list.filter((p) => p.forms.some((f) => planByRequest.get(f.id)?.gamma_url)).length;
+  const plansMade = list.filter((p) => isDone(p.forms)).length;
   const at = (loc: 'Sliema' | 'Mriehel') => list.filter((p) => ibfLocation(p.forms[0].answers as Answers) === loc).length;
   const sliema = at('Sliema');
   const mriehel = at('Mriehel');
@@ -105,6 +108,9 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
           const planForm = forms.find((f) => planByRequest.has(f.id));
           const plan = planForm ? planByRequest.get(planForm.id) : undefined;
           const planBadge = plan ? AUTO_PLAN_BADGE[plan.status] : null;
+          const done = isDone(forms);
+          // The day they were first added (their first form).
+          const added = forms[forms.length - 1].created_at;
           const location = ibfLocation(a);
           return (
             <details key={r.id} className="group bg-surface border border-border rounded-xl overflow-hidden">
@@ -112,15 +118,21 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
                 <span className="w-7 shrink-0 text-2xs tabular-nums text-neutral-400">#{number}</span>
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium truncate">{r.full_name}</div>
+                  <div className="text-2xs text-neutral-500">
+                    Added {fmtDate(added)}
+                    {' · '}
+                    {done
+                      ? <span className="font-medium text-status-good-text">✓ Meal plan done</span>
+                      : <span className="font-medium text-status-warn-text">Meal plan not done yet</span>}
+                  </div>
                   <div className="text-2xs text-neutral-400 truncate">
                     {[a.goal, a.age && `${a.age} yrs`, a.weight && `${a.weight} kg`, a.meals_per_day && `${a.meals_per_day} meals/day`, forms.length > 1 && `${forms.length} forms sent`].filter(Boolean).join(' · ')}
                   </div>
                 </div>
                 {location && <span className={`text-3xs font-medium uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0 ${LOCATION_BADGE[location]}`}>{location}</span>}
                 {clientId && <span className="text-3xs font-medium uppercase tracking-wide rounded-full bg-brand-light text-brand-dark px-2 py-0.5 shrink-0">Client</span>}
-                {planBadge && <span className={`text-3xs font-medium uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0 ${planBadge.className}`}>{planBadge.label}</span>}
+                {planBadge && !done && <span className={`text-3xs font-medium uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0 ${planBadge.className}`}>{planBadge.label}</span>}
                 <span className={`text-3xs font-medium uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0 ${meta.className}`}>{meta.label}</span>
-                <div className="text-2xs text-neutral-400 shrink-0 hidden sm:block">{fmtDate(r.created_at)}</div>
                 <span className="text-neutral-300 transition-transform group-open:rotate-90">›</span>
               </summary>
               <div className="border-t border-border px-4 py-4 flex flex-col gap-5">
@@ -130,7 +142,6 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
                   {clientId && <Link href={`/coach/clients/${clientId}`} className="font-medium text-brand-dark hover:underline">Open their client page →</Link>}
                   {plan?.gamma_url && <a href={plan.gamma_url} target="_blank" rel="noreferrer" className="font-medium text-brand-dark hover:underline">Open their meal plan in Gamma →</a>}
                   {planForm && <Link href={`/coach/meal-plans/test/${planForm.id}`} className="text-neutral-500 hover:underline">Plan details</Link>}
-                  <span className="text-neutral-400 sm:hidden">{fmtDate(r.created_at)}</span>
                 </div>
                 {forms.length > 1 && (
                   <div className="text-2xs text-neutral-500">
