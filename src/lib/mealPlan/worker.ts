@@ -4,7 +4,7 @@
 // work to a fresh call. Server-only.
 import type { createAdminClient } from '@/lib/supabase/admin';
 import { drivePlan, startPlan } from './pipeline';
-import { notifyPlans } from './notify';
+import { alertWaitingForGamma, notifyPlans } from './notify';
 
 type Admin = ReturnType<typeof createAdminClient>;
 
@@ -45,6 +45,7 @@ export async function runWorker(admin: Admin, appUrl: string, startedAt: number)
     if (!done) unfinished = true;
   }
   const emailed = await notifyPlans(admin, appUrl);
+  await alertWaitingForGamma(admin);
   const { count } = await admin.from('meal_plans').select('id', { count: 'exact', head: true }).eq('status', 'building');
   if (unfinished || (count ?? 0) > advanced) await kickWorker(appUrl);
   return { advanced, emailed, remaining: count ?? 0 };

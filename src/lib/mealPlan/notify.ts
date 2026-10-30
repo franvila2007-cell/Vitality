@@ -84,3 +84,38 @@ export async function notifyPlans(admin: Admin, appUrl: string): Promise<number>
   }
   return sent;
 }
+
+const GAMMA_WAIT_HOURS = 2;
+
+/**
+ * One warning email when plans have been ready for more than a couple of
+ * hours but still have no Gamma — usually the Gamma connection to Claude has
+ * expired and the hourly task can't log in. Each plan is warned about once.
+ */
+export async function alertWaitingForGamma(admin: Admin): Promise<number> {
+  const before = new Date(Date.now() - GAMMA_WAIT_HOURS * 3600_000).toISOString();
+  const { data: rows } = await admin.from('meal_plans')
+    .select('id, request_id, last_error')
+    .in('status', ['ready', 'generating']).is('gamma_url', null).is('gamma_wait_alerted_at', null)
+    .lt('created_at', before).limit(20);
+  if (!rows?.length) return 0;
+  const { data: claimed } = await admin.from('meal_plans').update({ gamma_wait_alerted_at: new Date().toISOString() })
+    .in('id', rows.map((r) => r.id)).is('gamma_wait_alerted_at', null).select('id, request_id, last_error');
+  if (!claimed?.length) return 0;
+  const { data: requests } = await admin.from('meal_plan_requests').select('id, full_name').in('id', claimed.map((r) => r.request_id));
+  const names = claimed.map((r) => requests?.find((q) => q.id === r.request_id)?.full_name ?? 'A client');
+  const reason = claimed.find((r) => r.last_error)?.last_error;
+  const fix = 'Reconnect Gamma at https://claude.ai/customize/connectors — the plans are built and will go to Gamma at the next hourly run.';
+  try {
+    await sendCoachEmail(
+      `${claimed.length} meal ${claimed.length === 1 ? 'plan is' : 'plans are'} waiting for Gamma`,
+      `<p>These plans have been ready for over ${GAMMA_WAIT_HOURS} hours but haven't been made in Gamma yet:</p><ul>${names.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>${reason ? `<p>Last problem: ${esc(reason)}</p>` : ''}<p>${esc(fix)}</p>`,
+      `These plans have been ready for over ${GAMMA_WAIT_HOURS} hours but haven't been made in Gamma yet:\n${names.map((n) => `- ${n}`).join('\n')}\n${reason ? `\nLast problem: ${reason}\n` : ''}\n${fix}`,
+    );
+    return claimed.length;
+  } catch (err) {
+    console.error('Gamma wait alert failed', { message: err instanceof Error ? err.message : String(err) });
+    await admin.from('meal_plans').update({ gamma_wait_alerted_at: null }).in('id', claimed.map((r) => r.id));
+    return 0;
+  }
+}
