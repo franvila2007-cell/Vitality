@@ -4,6 +4,7 @@ import { getInboxCounts } from '@/lib/coach/formInboxes';
 import { InboxTabs } from '@/components/coach/FormInboxes';
 import { CHALLENGE_COHORT } from '@/lib/challenge/questions';
 import HealthBadge from '@/components/challenge/HealthBadge';
+import ChallengeTabs from '@/components/challenge/ChallengeTabs';
 
 // Temporary (8-Week Challenge, Oct 2026): everyone who filled in the intake
 // at /challenge/intake after paying. Coach-only via coach/layout.tsx and RLS.
@@ -20,6 +21,7 @@ export default async function ChallengePage() {
   return (
     <div className="max-w-4xl mx-auto px-4 py-6 page-fade-in">
       <InboxTabs active="challenge" counts={counts} />
+      <ChallengeTabs active="intakes" />
       <h1 className="text-h1 font-semibold">8-Week Challenge ({rows?.length ?? 0})</h1>
       <p className="text-sm text-neutral-500 mt-1 mb-4">
         October 2026 · Week 1 starts Mon 26 Oct{flagged > 0 && <> · <span className="font-medium text-ibf-red">{flagged} health flag{flagged === 1 ? '' : 's'}</span></>}
