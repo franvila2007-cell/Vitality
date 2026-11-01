@@ -1,9 +1,12 @@
-import type { Viewport } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 
 const inter = Inter({ subsets: ['latin'], display: 'swap' });
 
 export const viewport: Viewport = { themeColor: '#D6F5EE' };
+
+// Link previews need absolute image URLs.
+export const metadata: Metadata = { metadataBase: new URL('https://vitality-one-zeta.vercel.app') };
 
 // Temporary 8-Week Challenge pages: Vitality's Inter type on the mint page.
 export default function ChallengeLayout({ children }: { children: React.ReactNode }) {
