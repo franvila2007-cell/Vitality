@@ -14,6 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  // Link previews (WhatsApp, Instagram) need absolute image URLs.
+  metadataBase: new URL("https://vitality-one-zeta.vercel.app"),
   title: "Vitality",
   description: "Your daily coaching dashboard — macros, weight progress, habits, and Vitto.",
   icons: {

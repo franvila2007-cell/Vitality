@@ -22,3 +22,18 @@ export async function challengeOgImage(title: string, subtitle: string) {
     OG_SIZE,
   );
 }
+
+// The app-wide default link preview: just the Vitality logo on white. Used
+// by every page that doesn't have its own (assessment, join, meal plans...).
+export async function logoOgImage() {
+  const logo = await readFile(join(process.cwd(), 'public/vitality-logo.png'), 'base64');
+  return new ImageResponse(
+    (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#FFFFFF' }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={`data:image/png;base64,${logo}`} width={389} height={309} alt="" />
+      </div>
+    ),
+    OG_SIZE,
+  );
+}

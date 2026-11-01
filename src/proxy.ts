@@ -40,7 +40,9 @@ export async function proxy(request: NextRequest) {
     path.startsWith('/join') || path.startsWith('/api/join') ||
     path.startsWith('/challenge') || path.startsWith('/api/challenge') ||
     // Background worker for automated meal plans — takes no input, returns only counts.
-    path.startsWith('/api/meal-plans/worker')
+    path.startsWith('/api/meal-plans/worker') ||
+    // Link-preview image: WhatsApp / Instagram fetch it signed out.
+    path === '/opengraph-image'
   ) return response;
 
   const { data: { user } } = await supabase.auth.getUser();
