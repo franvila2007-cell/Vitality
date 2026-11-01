@@ -5,7 +5,6 @@ export const metadata: Metadata = {
   title: 'Vitality 8-Week Challenge',
   description: "You didn't wait for 2027. Tell us about you so we can build your 8 weeks around you.",
   robots: { index: false },
-  openGraph: { title: 'Vitality 8-Week Challenge', description: "You didn't wait for 2027. Tell us about you so we can build your 8 weeks around you.", siteName: 'Vitality' },
 };
 
 // Public intake for the 8-Week Challenge — the Stripe Payment Link's
