@@ -1,0 +1,24 @@
+// Regression checks for the coach calendar's time maths + .ics feed.  npx tsx scripts/calendar-test.ts
+import { buildIcs, maltaParts, maltaToUtc, weekRangeUtc, weekStartOf, weekdayOf, googleCalendarUrl } from '../src/lib/calls';
+let fail = 0;
+const eq = (name: string, got: unknown, want: unknown) => { const ok = JSON.stringify(got) === JSON.stringify(want); if (!ok) fail++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `  got ${JSON.stringify(got)} want ${JSON.stringify(want)}`}`); };
+eq('winter 10:00 Malta = 09:00Z', maltaToUtc('2026-11-04', '10:00').toISOString(), '2026-11-04T09:00:00.000Z');
+eq('summer 10:00 Malta = 08:00Z', maltaToUtc('2026-07-15', '10:00').toISOString(), '2026-07-15T08:00:00.000Z');
+eq('DST start day 2026-03-29 10:00 = 08:00Z', maltaToUtc('2026-03-29', '10:00').toISOString(), '2026-03-29T08:00:00.000Z');
+eq('DST end day 2026-10-25 10:00 = 09:00Z', maltaToUtc('2026-10-25', '10:00').toISOString(), '2026-10-25T09:00:00.000Z');
+eq('round trip', maltaParts(maltaToUtc('2026-11-04', '18:30')), { date: '2026-11-04', time: '18:30', minutes: 1110 });
+eq('late evening stays on its Malta day', maltaParts('2026-11-04T22:30:00Z').date, '2026-11-04');
+eq('after midnight Malta is next day', maltaParts('2026-11-04T23:30:00Z').date, '2026-11-05');
+eq('weekday Wed', weekdayOf('2026-11-04'), 3);
+eq('week start Mon', weekStartOf('2026-11-04'), '2026-11-02');
+eq('week start from Sunday', weekStartOf('2026-11-08'), '2026-11-02');
+eq('week range', weekRangeUtc('2026-11-02'), { from: '2026-11-01T23:00:00.000Z', to: '2026-11-08T23:00:00.000Z' });
+const call = { id: 'abc', client_id: 'x', contact_id: null, kind: 'check_in' as const, starts_at: '2026-11-04T09:00:00.000Z', duration_min: 60, status: 'scheduled' as const, note: 'Hi, there; ok', created_at: '', updated_at: '2026-11-03T10:00:00.000Z' };
+const ics = buildIcs([{ call, name: 'Francesco Vila' }], new Date('2026-11-03T12:00:00Z'));
+eq('ics has event', ics.includes('SUMMARY:Check-in · Francesco Vila'), true);
+eq('ics times', ics.includes('DTSTART:20261104T090000Z') && ics.includes('DTEND:20261104T100000Z'), true);
+eq('ics escapes', ics.includes('Hi\\, there\\; ok'), true);
+eq('ics CRLF', ics.split('\r\n').length > 10 && !/[^\r]\n/.test(ics), true);
+eq('ics lines <= 75 octets', ics.split('\r\n').every((l) => new TextEncoder().encode(l).length <= 75), true);
+eq('google url', googleCalendarUrl(call, 'Fran').includes('dates=20261104T090000Z%2F20261104T100000Z'), true);
+console.log(fail ? `\n${fail} FAILED` : '\nall passed'); process.exit(fail ? 1 : 0);

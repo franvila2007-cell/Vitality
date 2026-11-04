@@ -15,6 +15,14 @@ type HabitScheduleFields = {
   starts_on: string; archived_on: string | null; added_by: 'coach' | 'client';
 };
 
+export type CoachCallKind = 'check_in' | 'info';
+export type CoachCallStatus = 'scheduled' | 'done' | 'cancelled' | 'no_show';
+export type CoachCallRow = {
+  id: string; client_id: string | null; contact_id: string | null; kind: CoachCallKind; starts_at: string; duration_min: number;
+  status: CoachCallStatus; note: string; created_at: string; updated_at: string;
+};
+export type CoachAvailabilityRow = { id: string; weekday: number; start_time: string; end_time: string };
+
 export type CrmStage = 'lead' | 'contacted' | 'consult' | 'proposal' | 'won' | 'lost' | 'past';
 export type CrmActivityKind = 'note' | 'call' | 'message' | 'meeting' | 'email' | 'stage' | 'form' | 'system';
 export type CrmContactRow = {
@@ -229,6 +237,22 @@ export type Database = {
         { id: string; contact_id: string; title: string; due_on: string; done_at: string | null; created_at: string },
         { id?: string; contact_id: string; title: string; due_on: string; done_at?: string | null; created_at?: string },
         { id?: string; contact_id?: string; title?: string; due_on?: string; done_at?: string | null; created_at?: string }
+      >;
+      // Coach calendar (0026_coach_calendar.sql).
+      coach_calls: Table<
+        CoachCallRow,
+        Omit<CoachCallRow, 'id' | 'created_at' | 'updated_at' | 'client_id' | 'contact_id' | 'duration_min' | 'status' | 'note'> & Partial<CoachCallRow>,
+        Partial<CoachCallRow>
+      >;
+      coach_availability: Table<
+        CoachAvailabilityRow,
+        { id?: string; weekday: number; start_time: string; end_time: string },
+        Partial<CoachAvailabilityRow>
+      >;
+      coach_calendar_feed: Table<
+        { id: number; token: string },
+        { id?: number; token?: string },
+        { id?: number; token?: string }
       >;
       // Temporary: 8-Week Challenge intake (0018_challenge_intakes.sql).
       challenge_intakes: Table<
