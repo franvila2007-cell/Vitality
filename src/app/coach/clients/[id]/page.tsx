@@ -54,7 +54,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     .from('coach_daily_messages').select('date, body').eq('user_id', id)
     .order('date', { ascending: false }).limit(40);
   const [{ data: crmContact }, pkgCtx] = await Promise.all([
-    supabase.from('crm_contacts').select('id, brand, package, package_price, package_start, payment_plan, payment_method').eq('client_id', id).maybeSingle(),
+    supabase.from('crm_contacts').select('id, brand, package, package_price, package_list_price, package_start, payment_plan, payment_method').eq('client_id', id).maybeSingle(),
     packageContext(supabase, id),
   ]);
   const clientProfile = clientProfileRes.data;
@@ -154,7 +154,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             <CrmPackageEditor
               contactId={crmContact.id}
               brand={crmContact.brand}
-              initial={{ package: crmContact.package, price: crmContact.package_price != null ? Number(crmContact.package_price) : null, start: crmContact.package_start, plan: crmContact.payment_plan, method: crmContact.payment_method }}
+              initial={{ package: crmContact.package, price: crmContact.package_price != null ? Number(crmContact.package_price) : null, listPrice: crmContact.package_list_price != null ? Number(crmContact.package_list_price) : null, start: crmContact.package_start, plan: crmContact.payment_plan, method: crmContact.payment_method }}
               defaultStart={pkgCtx.defaultStart}
               suggestedPrices={pkgCtx.suggestedPrices}
             />

@@ -7,13 +7,15 @@ import { localDateStr } from '@/lib/date';
 import type { CrmBrand, CrmPackage, CrmPaymentPlan } from '@/lib/supabase/database.types';
 import { BRAND_META, IBF_MEAL_PLAN_PRICE, PACKAGES, PACKAGE_META, PAYMENT_METHODS, packageEnd } from '@/lib/crm/constants';
 import { buildSchedule } from '@/lib/crm/payments';
-import { euro, shortDate } from '@/lib/crm/format';
+import { euroExact as euro, shortDate } from '@/lib/crm/format';
 
-type Initial = { package: CrmPackage | null; price: number | null; start: string | null; plan: CrmPaymentPlan | null; method: string | null };
+type Initial = { package: CrmPackage | null; price: number | null; /** price before a discount, if one was applied */ listPrice: number | null; start: string | null; plan: CrmPaymentPlan | null; method: string | null };
 
 // What a client bought and how they pay: 1-1 coaching (3-month offer, 6
 // months, 1 year) or a meal plan; paid in full or monthly; and the method.
-// Saving marks them a Client and (re)builds their payment schedule — paid
+// An optional discount (% or € off, with a reason) comes off the price; what's
+// stored as the package price is always what they actually pay, with the
+// pre-discount price kept alongside. Saving marks them a Client and (re)builds their payment schedule — paid
 // payments are always kept, only the unpaid ones are recalculated.
 export default function CrmPackageEditor({ contactId, brand, initial, defaultStart, suggestedPrices }: {
   contactId: string;
@@ -30,10 +32,16 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
   const priceFor = (p: CrmPackage) => (p === 'meal_plan' && brand === 'ironbodyfit' ? IBF_MEAL_PLAN_PRICE : p === '8_week_challenge' ? PACKAGE_META[p].defaultPrice : suggestedPrices[p] ?? PACKAGE_META[p].defaultPrice);
   const [editing, setEditing] = useState(!initial.package);
   const [pkg, setPkg] = useState<CrmPackage>(initial.package ?? '6_months');
+  // `price` is the price before any discount.
   const [price, setPrice] = useState(() => {
-    const v = initial.price ?? priceFor(initial.package ?? '6_months');
+    const v = initial.listPrice ?? initial.price ?? priceFor(initial.package ?? '6_months');
     return v != null ? String(v) : '';
   });
+  const hadDiscount = initial.listPrice != null && initial.price != null && initial.listPrice > initial.price;
+  const [discOpen, setDiscOpen] = useState(hadDiscount);
+  const [discMode, setDiscMode] = useState<'pct' | 'eur'>('eur');
+  const [discValue, setDiscValue] = useState(hadDiscount ? String(Math.round((initial.listPrice! - initial.price!) * 100) / 100) : '');
+  const [discReason, setDiscReason] = useState('');
   const [plan, setPlan] = useState<CrmPaymentPlan>(initial.plan ?? 'full');
   const [method, setMethod] = useState(initial.method ?? 'Card');
   const [start, setStart] = useState(initial.start ?? defaultStart);
@@ -47,6 +55,13 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
   const payInFullOnly = meta.kind !== 'coaching';
   const effectivePlan: CrmPaymentPlan = payInFullOnly ? 'full' : plan;
 
+  const list = Number(price);
+  const dv = Number(discValue);
+  const rawDiscount = discOpen && Number.isFinite(dv) && dv > 0 && Number.isFinite(list) ? (discMode === 'pct' ? (list * Math.min(dv, 100)) / 100 : dv) : 0;
+  const discount = Math.round(Math.min(Math.max(rawDiscount, 0), Number.isFinite(list) ? list : 0) * 100) / 100;
+  // What the client actually pays.
+  const finalPrice = Math.round((list - discount) * 100) / 100;
+
   function choose(p: CrmPackage) {
     const prevSuggested = priceFor(pkg);
     setPkg(p);
@@ -58,15 +73,18 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
   }
 
   async function save() {
-    const n = Number(price);
-    if (!price.trim() || !Number.isFinite(n) || n < 0) { setError('Enter the total price, in €.'); return; }
+    if (!price.trim() || !Number.isFinite(list) || list < 0) { setError('Enter the total price, in €.'); return; }
+    if (discOpen && discValue.trim() && (!Number.isFinite(dv) || dv < 0)) { setError('Enter the discount as a number.'); return; }
+    if (discOpen && discMode === 'pct' && dv > 100) { setError("A discount can't be more than 100%."); return; }
+    if (discOpen && discMode === 'eur' && dv > list) { setError("The discount can't be more than the price."); return; }
+    const n = finalPrice;
     if (!start) { setError('Pick a start date.'); return; }
     setBusy(true);
     setError(null);
     const today = localDateStr();
 
     const { error: upErr } = await supabase.from('crm_contacts').update({
-      package: pkg, package_price: n, package_start: start,
+      package: pkg, package_price: n, package_list_price: discount > 0 ? list : null, package_start: start,
       payment_plan: effectivePlan, payment_method: method,
       stage: 'won', lost_reason: null,
     }).eq('id', contactId);
@@ -85,11 +103,13 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
     }));
     if (rows.length) await supabase.from('crm_payments').insert(rows);
 
+    const reason = discReason.trim();
+    const discNote = discount > 0 ? ` · ${euro(list)} − ${discMode === 'pct' ? `${dv}%` : euro(discount)} discount${reason ? ` (${reason})` : ''}` : '';
     const how = effectivePlan === 'monthly' && meta.months ? `${meta.months} × ${euro(n / meta.months)} monthly` : 'paid in full';
     await supabase.from('crm_activities').insert({
       contact_id: contactId, kind: 'system',
-      body: `${initial.package ? 'Package updated' : 'Joined'}: ${packageName(pkg, brand)} · ${euro(n)} (${how}, ${method.toLowerCase()}) · starts ${shortDate(start)}`,
-      meta: { package: pkg, price: n, start, plan: effectivePlan, method },
+      body: `${initial.package ? 'Package updated' : 'Joined'}: ${packageName(pkg, brand)} · ${euro(n)}${discNote} (${how}, ${method.toLowerCase()}) · starts ${shortDate(start)}`,
+      meta: { package: pkg, price: n, list_price: list, discount, discount_reason: reason || null, start, plan: effectivePlan, method },
     });
     setBusy(false);
     setEditing(false);
@@ -109,6 +129,9 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
         <div className="min-w-0 flex-1 text-sm">
           <p>
             <b>{initial.price != null ? euro(initial.price) : '–'}</b>
+            {initial.listPrice != null && initial.price != null && initial.listPrice > initial.price && (
+              <span className="ml-1 text-neutral-300 line-through">{euro(initial.listPrice)}</span>
+            )}
             <span className="text-neutral-400"> · {monthly ? `${m.months} × ${euro(initial.price! / m.months!)}/mo` : 'paid in full'}{initial.method ? ` · ${initial.method}` : ''}</span>
           </p>
           <p className="text-2xs text-neutral-400">{end ? `${shortDate(initial.start)} → ${shortDate(end)} ${end.slice(0, 4)}` : `Bought ${shortDate(initial.start)}`}</p>
@@ -118,7 +141,7 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
     );
   }
 
-  const n = Number(price);
+  const n = finalPrice;
   const end = start ? packageEnd(start, pkg) : null;
   return (
     <div className="flex flex-col gap-3">
@@ -163,6 +186,46 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
               {o.label} · {euro(o.price)}
             </button>
           ))}
+        </div>
+      )}
+
+      {!discOpen ? (
+        <button type="button" onClick={() => setDiscOpen(true)} className="self-start -mt-1 text-xs font-medium text-brand-dark hover:opacity-70">＋ Apply a discount</button>
+      ) : (
+        <div className="rounded-xl border border-border p-3 flex flex-col gap-2.5">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold">Discount</p>
+            <button type="button" onClick={() => { setDiscOpen(false); setDiscValue(''); setDiscReason(''); }} className="text-2xs text-neutral-400 hover:text-neutral-700">Remove</button>
+          </div>
+          <div className="grid grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1">
+            {([['pct', '% off'], ['eur', '€ off']] as const).map(([k, label]) => (
+              <button key={k} type="button" onClick={() => { setDiscMode(k); setDiscValue(''); }}
+                className={`rounded-md py-1.5 text-xs font-semibold ${discMode === k ? 'bg-surface text-neutral-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]' : 'text-neutral-500'}`}>{label}</button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {(discMode === 'pct' ? [10, 15, 20, 25, 50] : [10, 20, 25, 50]).map((v) => (
+              <button key={v} type="button" onClick={() => setDiscValue(String(v))}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${Number(discValue) === v ? 'border-brand bg-brand text-white' : 'border-border text-neutral-600 hover:border-neutral-300'}`}>
+                {discMode === 'pct' ? `${v}%` : `€${v}`}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-[100px_1fr] gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-2xs text-neutral-500">{discMode === 'pct' ? 'Percent off' : 'Euros off'}</span>
+              <input inputMode="decimal" value={discValue} onChange={(e) => setDiscValue(e.target.value.replace(',', '.'))} placeholder={discMode === 'pct' ? 'e.g. 15' : 'e.g. 30'} className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-2xs text-neutral-500">Reason (optional)</span>
+              <input value={discReason} onChange={(e) => setDiscReason(e.target.value)} maxLength={80} placeholder="e.g. friend referral, code SUMMER" className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand" />
+            </label>
+          </div>
+          <p className="text-xs text-neutral-600">
+            {discount > 0
+              ? <><span className="text-neutral-400 line-through">{euro(list)}</span> − {euro(discount)} → client pays <b>{euro(finalPrice)}</b></>
+              : 'Enter an amount to see the new price'}
+          </p>
         </div>
       )}
 

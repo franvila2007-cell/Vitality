@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import type { CoachAvailabilityRow, CoachCallKind, CoachCallRow } from '@/lib/supabase/database.types';
 import { CALL_MINUTES, KIND_META, callEnd, dayLabel, googleCalendarUrl, maltaParts, maltaToUtc, timeRangeLabel, weekRangeUtc, weekStartOf, weekdayOf } from '@/lib/calls';
 
-export type Person = { key: string; id: string; type: 'client' | 'contact'; name: string; active: boolean };
+export type Person = { key: string; id: string; type: 'client' | 'contact'; name: string; active: boolean; /** shown beside the name, e.g. 8-Week Challenge */ tag?: string };
 export const personKeyOf = (c: Pick<CoachCallRow, 'client_id' | 'contact_id'>) => (c.client_id ? `c:${c.client_id}` : `k:${c.contact_id}`);
 
 const field = 'rounded-xl border border-border bg-neutral-50 px-3 py-2.5 text-base outline-none focus:border-brand focus:bg-white transition-colors w-full';
@@ -130,7 +130,7 @@ export function CallSheet({ people, weekCalls, availability, initial, onClose, o
       <select value={personKey} onChange={(e) => pickPerson(e.target.value)} className={field}>
         <option value="">Choose a client…</option>
         {clients.length > 0 && <optgroup label="Clients">{clients.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}</optgroup>}
-        {contacts.length > 0 && <optgroup label="8-Week Challenge & other members">{contacts.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}</optgroup>}
+        {contacts.length > 0 && <optgroup label="8-Week Challenge & other CRM contacts">{contacts.map((p) => <option key={p.key} value={p.key}>{p.name}{p.tag ? ` · ${p.tag}` : ''}</option>)}</optgroup>}
       </select>
 
       <div className="grid grid-cols-2 gap-2 mt-4">

@@ -21,6 +21,12 @@ export function euro(n: number): string {
   return `€${Math.round(n).toLocaleString('en-GB')}`;
 }
 
+/** Like euro() but keeps the cents when there are any — for prices after a discount (€197.60, not €198). */
+export function euroExact(n: number): string {
+  const r = Math.round(n * 100) / 100;
+  return `€${r.toLocaleString('en-GB', { minimumFractionDigits: Number.isInteger(r) ? 0 : 2, maximumFractionDigits: 2 })}`;
+}
+
 export function shortDate(date: string): string {
   return new Date(date.length === 10 ? date + 'T00:00:00' : date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }

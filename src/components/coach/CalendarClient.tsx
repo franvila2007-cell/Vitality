@@ -21,6 +21,7 @@ export default function CalendarClient() {
   const [availability, setAvailability] = useState<CoachAvailabilityRow[]>([]);
   const [token, setToken] = useState('');
   const [loading, setLoading] = useState(true);
+  const [peopleLoaded, setPeopleLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [draft, setDraft] = useState<CallDraft | null>(null);
@@ -35,8 +36,10 @@ export default function CalendarClient() {
       try {
         const [prof, contacts, avail, feed] = await Promise.all([
           supabase.from('profiles').select('id, full_name, email, archived_at').eq('role', 'client').order('full_name'),
-          // Only people who get weekly calls: 1-1 coaching and 8-Week Challenge members without an app login (not meal-plan buyers).
-          supabase.from('crm_contacts').select('id, full_name').eq('stage', 'won').in('package', ['3_months', '6_months', '12_months', '8_week_challenge']).is('client_id', null).order('full_name'),
+          // Only people who get weekly calls and have no app login: 8-Week Challenge sign-ups (tagged by the intake form,
+          // usually still "lead" until they pay) and 1-1 coaching clients. Not meal-plan buyers, not lost/past contacts.
+          supabase.from('crm_contacts').select('id, full_name, package, stage').is('client_id', null).not('stage', 'in', '(lost,past)')
+            .or('tags.cs.{8-week-challenge},package.in.(3_months,6_months,12_months,8_week_challenge)').order('full_name'),
           supabase.from('coach_availability').select('*').order('weekday').order('start_time'),
           supabase.from('coach_calendar_feed').select('token').eq('id', 1).maybeSingle(),
         ]);
@@ -45,10 +48,11 @@ export default function CalendarClient() {
         if (firstError) throw firstError;
         setPeople([
           ...(prof.data || []).map((p): Person => ({ key: `c:${p.id}`, id: p.id, type: 'client', name: p.full_name || p.email, active: !p.archived_at })),
-          ...(contacts.data || []).map((c): Person => ({ key: `k:${c.id}`, id: c.id, type: 'contact', name: c.full_name, active: true })),
+          ...(contacts.data || []).map((c): Person => ({ key: `k:${c.id}`, id: c.id, type: 'contact', name: c.full_name, active: true, tag: c.package && c.package !== '8_week_challenge' ? '1-1' : c.stage === 'won' ? 'Challenge' : 'Challenge · not paid yet' })),
         ]);
         setAvailability(avail.data || []);
         setToken(feed.data?.token ?? '');
+        setPeopleLoaded(true);
       } catch {
         if (!cancelled) setError("Couldn't load your clients and hours — check your connection and refresh.");
       }
@@ -144,7 +148,7 @@ export default function CalendarClient() {
       <section className="rounded-2xl border border-border bg-surface p-4 mb-4" aria-label="Calls this week">
         <div className="flex items-baseline justify-between mb-3">
           <p className="text-sm font-semibold">This week&rsquo;s calls</p>
-          <p className="text-2xs text-neutral-400">{needed > 0 ? `${booked} of ${needed} booked` : 'No clients yet'}</p>
+          <p className="text-2xs text-neutral-400">{!peopleLoaded ? 'Loading…' : needed > 0 ? `${booked} of ${needed} booked` : 'No clients yet'}</p>
         </div>
         {needed > 0 && (
           <div className="h-1.5 rounded-full bg-neutral-100 mb-3 overflow-hidden"><div className="h-full bg-brand transition-all" style={{ width: `${Math.round((booked / needed) * 100)}%` }} /></div>
@@ -152,7 +156,7 @@ export default function CalendarClient() {
         <ul className="flex flex-col divide-y divide-border">
           {rows.map((p) => (
             <li key={p.key} className="flex items-center gap-2 py-2 first:pt-0 last:pb-0">
-              <span className="flex-1 min-w-0 text-sm truncate">{p.name}</span>
+              <span className="flex-1 min-w-0 text-sm truncate">{p.name}{p.tag && <span className="ml-1.5 text-3xs text-neutral-400">{p.tag}</span>}</span>
               {(['check_in', 'info'] as const).map((k) => {
                 const c = countable.find((x) => personKeyOf(x) === p.key && x.kind === k);
                 if (c) {
@@ -173,7 +177,7 @@ export default function CalendarClient() {
               })}
             </li>
           ))}
-          {rows.length === 0 && !loading && <li className="text-sm text-neutral-400 py-1">Add clients first — they&rsquo;ll show up here.</li>}
+          {rows.length === 0 && peopleLoaded && <li className="text-sm text-neutral-400 py-1">Add clients first — they&rsquo;ll show up here.</li>}
         </ul>
       </section>
 

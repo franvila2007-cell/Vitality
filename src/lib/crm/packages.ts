@@ -11,13 +11,13 @@ export async function packageContext(supabase: ServerClient, clientId: string | 
   defaultStart: string;
 }> {
   const [recentRes, profileRes] = await Promise.all([
-    supabase.from('crm_contacts').select('package, package_price').not('package', 'is', null).not('package_price', 'is', null)
+    supabase.from('crm_contacts').select('package, package_price, package_list_price').not('package', 'is', null).not('package_price', 'is', null)
       .order('package_start', { ascending: false }).limit(50),
     clientId ? supabase.from('profiles').select('created_at').eq('id', clientId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
   const suggestedPrices: Partial<Record<CrmPackage, number>> = {};
   for (const r of recentRes.data || []) {
-    if (r.package && r.package_price != null && suggestedPrices[r.package] == null) suggestedPrices[r.package] = Number(r.package_price);
+    if (r.package && r.package_price != null && suggestedPrices[r.package] == null) suggestedPrices[r.package] = Number(r.package_list_price ?? r.package_price); // the usual price, not a one-off discounted one
   }
   const created = (profileRes.data as { created_at?: string } | null)?.created_at;
   return { suggestedPrices, defaultStart: (created ?? new Date().toISOString()).slice(0, 10) };

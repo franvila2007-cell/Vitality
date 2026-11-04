@@ -10,7 +10,7 @@ import { packageContext } from '@/lib/crm/packages';
 import CrmPackageEditor from '@/components/crm/CrmPackageEditor';
 import CrmIbfPaid from '@/components/crm/CrmIbfPaid';
 import Image from 'next/image';
-import { ago, daysSince, euro, shortDate } from '@/lib/crm/format';
+import { ago, daysSince, euroExact, shortDate } from '@/lib/crm/format';
 import CrmStagePicker from '@/components/crm/CrmStagePicker';
 import CrmTaskList from '@/components/crm/CrmTaskList';
 import CrmActivityComposer from '@/components/crm/CrmActivityComposer';
@@ -87,7 +87,7 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
             </div>
             <p className="text-2xs text-neutral-400 mt-0.5">
               {SOURCE_META[c.source]?.emoji} {sourceLabel(c.source)} · added {shortDate(c.created_at)} · {STAGE_META[c.stage].label} for {daysSince(c.stage_changed_at, nowMs)}d
-              {c.package_price != null ? <> · <b className="text-neutral-600">{euro(Number(c.package_price))}</b></> : null}
+              {c.package_price != null ? <> · <b className="text-neutral-600">{euroExact(Number(c.package_price))}</b>{c.package_list_price != null && Number(c.package_list_price) > Number(c.package_price) ? <span className="text-neutral-300 line-through ml-1">{euroExact(Number(c.package_list_price))}</span> : null}</> : null}
             </p>
             {c.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
@@ -136,7 +136,7 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
         <CrmPackageEditor
           contactId={c.id}
           brand={c.brand}
-          initial={{ package: c.package, price: c.package_price != null ? Number(c.package_price) : null, start: c.package_start, plan: c.payment_plan, method: c.payment_method }}
+          initial={{ package: c.package, price: c.package_price != null ? Number(c.package_price) : null, listPrice: c.package_list_price != null ? Number(c.package_list_price) : null, start: c.package_start, plan: c.payment_plan, method: c.payment_method }}
           defaultStart={pkgCtx.defaultStart}
           suggestedPrices={pkgCtx.suggestedPrices}
         />
