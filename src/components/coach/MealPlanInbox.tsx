@@ -75,10 +75,13 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
   }
   // In the order people were added — newest at the top, so the numbers count down.
   const list = [...people.values()].sort((a, b) => b.number - a.number);
-  // Done = a Gamma plan exists for any of their forms, or the coach marked it sent.
-  const isDone = (forms: Row[]) => forms.some((f) => f.status === 'sent' || planByRequest.get(f.id)?.gamma_url);
-  const newCount = list.filter((p) => p.forms[0].status === 'new').length;
-  const plansMade = list.filter((p) => isDone(p.forms)).length;
+  // Sent = the coach marked it "Plan sent"; made = a Gamma plan exists but it
+  // hasn't gone out yet.
+  const isSent = (forms: Row[]) => forms.some((f) => f.status === 'sent');
+  const isMade = (forms: Row[]) => forms.some((f) => planByRequest.get(f.id)?.gamma_url);
+  const sentCount = list.filter((p) => isSent(p.forms)).length;
+  const toSend = list.filter((p) => !isSent(p.forms) && isMade(p.forms)).length;
+  const notMade = list.filter((p) => !isSent(p.forms) && !isMade(p.forms)).length;
   const at = (loc: 'Sliema' | 'Mriehel') => list.filter((p) => ibfLocation(p.forms[0].answers as Answers) === loc).length;
   const sliema = at('Sliema');
   const mriehel = at('Mriehel');
@@ -89,9 +92,10 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
       <h1 className="text-h1 font-semibold">{title} ({list.length} {list.length === 1 ? 'person' : 'people'})</h1>
       <p className="text-2xs text-neutral-400 mb-4">
         {[
-          `${plansMade} meal ${plansMade === 1 ? 'plan' : 'plans'} made`,
+          `${sentCount} sent`,
+          `${toSend} ready to send`,
+          notMade > 0 ? `${notMade} not made yet` : null,
           sliema || mriehel ? `Sliema ${sliema} · Mriehel ${mriehel}` : null,
-          newCount > 0 ? `${newCount} new — waiting for a plan` : 'All caught up',
         ].filter(Boolean).join(' · ')}
       </p>
 
@@ -108,7 +112,8 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
           const planForm = forms.find((f) => planByRequest.has(f.id));
           const plan = planForm ? planByRequest.get(planForm.id) : undefined;
           const planBadge = plan ? AUTO_PLAN_BADGE[plan.status] : null;
-          const done = isDone(forms);
+          const sent = isSent(forms);
+          const made = isMade(forms);
           // The day they were first added (their first form).
           const added = forms[forms.length - 1].created_at;
           const location = ibfLocation(a);
@@ -121,9 +126,11 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
                   <div className="text-2xs text-neutral-500">
                     Added {fmtDate(added)}
                     {' · '}
-                    {done
-                      ? <span className="font-medium text-status-good-text">✓ Meal plan done</span>
-                      : <span className="font-medium text-status-warn-text">Meal plan not done yet</span>}
+                    {sent
+                      ? <span className="font-medium text-status-good-text">✓ Plan sent</span>
+                      : made
+                        ? <span className="font-medium text-status-warn-text">Plan ready — not sent yet</span>
+                        : <span className="font-medium text-status-bad-text">Plan not made yet</span>}
                   </div>
                   <div className="text-2xs text-neutral-400 truncate">
                     {[a.goal, a.age && `${a.age} yrs`, a.weight && `${a.weight} kg`, a.meals_per_day && `${a.meals_per_day} meals/day`, forms.length > 1 && `${forms.length} forms sent`].filter(Boolean).join(' · ')}
@@ -131,7 +138,7 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
                 </div>
                 {location && <span className={`text-3xs font-medium uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0 ${LOCATION_BADGE[location]}`}>{location}</span>}
                 {clientId && <span className="text-3xs font-medium uppercase tracking-wide rounded-full bg-brand-light text-brand-dark px-2 py-0.5 shrink-0">Client</span>}
-                {planBadge && !done && <span className={`text-3xs font-medium uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0 ${planBadge.className}`}>{planBadge.label}</span>}
+                {planBadge && !made && !sent && <span className={`text-3xs font-medium uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0 ${planBadge.className}`}>{planBadge.label}</span>}
                 <span className={`text-3xs font-medium uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0 ${meta.className}`}>{meta.label}</span>
                 <span className="text-neutral-300 transition-transform group-open:rotate-90">›</span>
               </summary>
