@@ -25,12 +25,13 @@ export default async function CoachLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen">
       <div className="sticky top-0 z-10 bg-surface border-b border-border">
-        <div className="max-w-4xl mx-auto px-4 h-16 flex items-center justify-between">
-          <Link href="/coach" className="flex items-center gap-2 transition-opacity hover:opacity-70">
+        {/* Phones: logo + Sign out on the first row, the tabs full-width on a second row. Desktop: all on one row. */}
+        <div className="max-w-4xl mx-auto px-4 py-2 sm:py-0 sm:h-16 flex flex-wrap sm:flex-nowrap items-center justify-between gap-y-2">
+          <Link href="/coach" className="flex flex-shrink-0 items-center gap-2 transition-opacity hover:opacity-70">
             <Image src="/vitality-logo.png" alt="Vitality" width={32} height={25} priority />
             <span className="hidden sm:inline text-xs font-medium text-neutral-400 border border-border rounded-full px-2 py-0.5">Coach</span>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="contents sm:flex sm:items-center sm:gap-3">
             <CoachNav followUpsDue={followUpsDue ?? 0} />
             <SignOutButton />
           </div>
@@ -44,7 +45,7 @@ export default async function CoachLayout({ children }: { children: React.ReactN
 function SignOutButton() {
   return (
     <form action="/api/auth/signout" method="post">
-      <button className="text-xs text-neutral-400 hover:text-neutral-600">Sign out</button>
+      <button className="whitespace-nowrap text-xs text-neutral-400 hover:text-neutral-600">Sign out</button>
     </form>
   );
 }
