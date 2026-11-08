@@ -24,7 +24,7 @@ export type CoachCallRow = {
 };
 export type CoachSettingsRow = {
   id: number; google_ical_urls: string[]; booking_open_weekday: number; booking_open_time: string; booking_enabled: boolean; updated_at: string;
-  call_details: string; reminder_emails_enabled: boolean; reminder_last_run_at: string | null; reminder_last_error: string | null;
+  call_details: string; reminder_emails_enabled: boolean; reminder_last_run_at: string | null; reminder_last_error: string | null; booking_notify_enabled: boolean;
 };
 export type CoachAvailabilityRow = { id: string; weekday: number; start_time: string; end_time: string };
 

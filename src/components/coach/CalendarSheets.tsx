@@ -325,6 +325,9 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   const [weekday, setWeekday] = useState(5);
   const [openTime, setOpenTime] = useState('12:00');
   const [emailReminders, setEmailReminders] = useState(true);
+  const [notifyMe, setNotifyMe] = useState(true);
+  const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [testing, setTesting] = useState(false);
   const [callDetails, setCallDetails] = useState('');
   const [reminderRun, setReminderRun] = useState<{ at: string | null; error: string | null }>({ at: null, error: null });
   const [saving, setSaving] = useState(false);
@@ -339,12 +342,12 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error: err } = await supabase.from('coach_settings').select('booking_enabled, booking_open_weekday, booking_open_time, call_details, reminder_emails_enabled, reminder_last_run_at, reminder_last_error').eq('id', 1).maybeSingle();
+      const { data, error: err } = await supabase.from('coach_settings').select('booking_enabled, booking_open_weekday, booking_open_time, call_details, reminder_emails_enabled, reminder_last_run_at, reminder_last_error, booking_notify_enabled').eq('id', 1).maybeSingle();
       if (cancelled) return;
       if (err || !data) setError("Couldn't load your booking settings — close this and try again.");
       else {
         setEnabled(data.booking_enabled); setWeekday(data.booking_open_weekday); setOpenTime(data.booking_open_time.slice(0, 5));
-        setEmailReminders(data.reminder_emails_enabled); setCallDetails(data.call_details);
+        setEmailReminders(data.reminder_emails_enabled); setCallDetails(data.call_details); setNotifyMe(data.booking_notify_enabled);
         setReminderRun({ at: data.reminder_last_run_at, error: data.reminder_last_error });
       }
       setLoaded(true);
@@ -360,10 +363,22 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   async function save() {
     if (saving) return;
     setSaving(true); setError(null); setSavedMsg(null);
-    const { error: err } = await supabase.from('coach_settings').update({ booking_enabled: enabled, booking_open_weekday: weekday, booking_open_time: openTime, reminder_emails_enabled: emailReminders, call_details: callDetails.trim().slice(0, 600), updated_at: new Date().toISOString() }).eq('id', 1);
+    const { error: err } = await supabase.from('coach_settings').update({ booking_enabled: enabled, booking_open_weekday: weekday, booking_open_time: openTime, reminder_emails_enabled: emailReminders, booking_notify_enabled: notifyMe, call_details: callDetails.trim().slice(0, 600), updated_at: new Date().toISOString() }).eq('id', 1);
     setSaving(false);
     if (err) setError("Couldn't save — try again.");
     else setSavedMsg('Saved ✓');
+  }
+
+  async function sendTest() {
+    setTesting(true); setTestMsg(null);
+    try {
+      const res = await fetch('/api/coach/booking-notify-test', { method: 'POST' });
+      const body = await res.json();
+      setTestMsg(res.ok ? { ok: true, text: `Sent to ${body.to} — check your inbox (and spam).` } : { ok: false, text: body.error || "Couldn't send the test." });
+    } catch {
+      setTestMsg({ ok: false, text: "Couldn't send the test — check your connection." });
+    }
+    setTesting(false);
   }
 
   async function connect() {
@@ -412,6 +427,16 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
             <input type="time" value={openTime} onChange={(e) => setOpenTime(e.target.value)} className={field} aria-label="Time" />
           </div>
           <p className="text-2xs text-neutral-400 mt-1.5">Malta time. Until then clients can only book the rest of this week. Calls start on the hour inside your “My hours”, and never less than 12 hours ahead.</p>
+
+          <div className="mt-5 border-t border-border pt-4">
+            <p className="text-sm font-semibold">Booking alerts for you</p>
+            <label className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-3">
+              <span className="text-sm font-medium">Email me when a client books, moves or cancels a call</span>
+              <input type="checkbox" checked={notifyMe} onChange={(e) => setNotifyMe(e.target.checked)} className="h-5 w-5 flex-shrink-0 accent-[var(--brand)]" />
+            </label>
+            <button type="button" onClick={sendTest} disabled={testing} className="mt-2 text-xs font-medium text-brand-dark underline py-1 disabled:opacity-50">{testing ? 'Sending…' : 'Send me a test email'}</button>
+            {testMsg && <p className={`mt-1 text-xs ${testMsg.ok ? 'text-status-good-text' : 'text-status-bad-text'}`} role={testMsg.ok ? 'status' : 'alert'}>{testMsg.text}</p>}
+          </div>
 
           <div className="mt-5 border-t border-border pt-4">
             <p className="text-sm font-semibold">Reminder emails</p>
