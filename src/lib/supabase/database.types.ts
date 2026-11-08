@@ -19,7 +19,10 @@ export type CoachCallKind = 'check_in' | 'info';
 export type CoachCallStatus = 'scheduled' | 'done' | 'cancelled' | 'no_show';
 export type CoachCallRow = {
   id: string; client_id: string | null; contact_id: string | null; kind: CoachCallKind; starts_at: string; duration_min: number;
-  status: CoachCallStatus; note: string; created_at: string; updated_at: string;
+  status: CoachCallStatus; note: string; created_at: string; updated_at: string; booked_by: 'coach' | 'client';
+};
+export type CoachSettingsRow = {
+  id: number; google_ical_urls: string[]; booking_open_weekday: number; booking_open_time: string; booking_enabled: boolean; updated_at: string;
 };
 export type CoachAvailabilityRow = { id: string; weekday: number; start_time: string; end_time: string };
 
@@ -76,7 +79,10 @@ type MicronutrientFields<Nullable> = {
 export type Database = {
   public: {
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      // 0028_client_booking.sql — service-role only; throws 'slot_taken', 'already_booked', 'outside_hours', …
+      client_book_call: { Args: { p_client: string; p_kind: string; p_starts_at: string; p_replace?: string | null }; Returns: string };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
     Tables: {
@@ -243,13 +249,18 @@ export type Database = {
       // Coach calendar (0026_coach_calendar.sql).
       coach_calls: Table<
         CoachCallRow,
-        Omit<CoachCallRow, 'id' | 'created_at' | 'updated_at' | 'client_id' | 'contact_id' | 'duration_min' | 'status' | 'note'> & Partial<CoachCallRow>,
+        Omit<CoachCallRow, 'id' | 'created_at' | 'updated_at' | 'client_id' | 'contact_id' | 'duration_min' | 'status' | 'note' | 'booked_by'> & Partial<CoachCallRow>,
         Partial<CoachCallRow>
       >;
       coach_availability: Table<
         CoachAvailabilityRow,
         { id?: string; weekday: number; start_time: string; end_time: string },
         Partial<CoachAvailabilityRow>
+      >;
+      coach_settings: Table<
+        CoachSettingsRow,
+        Partial<CoachSettingsRow>,
+        Partial<CoachSettingsRow>
       >;
       coach_calendar_feed: Table<
         { id: number; token: string },

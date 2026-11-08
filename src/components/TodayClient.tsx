@@ -13,6 +13,7 @@ import VittoRecommends from '@/components/VittoRecommends';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import VittoComposer from '@/components/VittoComposer';
 import LoggedMealCard, { type LoggedItem } from '@/components/LoggedMealCard';
+import CallsCard from '@/components/CallsCard';
 import ManualFoodSheet, { type ManualEntry } from '@/components/ManualFoodSheet';
 import { suggestFoods, applySuggestion } from '@/lib/vitto/suggest';
 import type { MealOption } from '@/lib/vitto/mealRecommender';
@@ -623,6 +624,9 @@ export default function TodayClient() {
           </div>
         </div>
       </div>
+
+      {/* Next call reminder / book-your-calls nudge */}
+      <CallsCard />
 
       {/* Nothing planned yet: make the first step obvious */}
       {habits.length === 0 && (

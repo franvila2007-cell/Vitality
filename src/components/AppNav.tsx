@@ -8,6 +8,7 @@ import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
 
 const TABS = [
   { href: '/', label: 'Today' },
+  { href: '/calls', label: 'Calls' },
   { href: '/habits', label: 'Habits' },
   { href: '/nutrition', label: 'Nutrition' },
   { href: '/progress', label: 'Progress' },

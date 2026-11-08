@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client';
 import { addDays, coachToday } from '@/lib/date';
 import type { CoachAvailabilityRow, CoachCallRow } from '@/lib/supabase/database.types';
 import { CALL_MINUTES, KIND_META, dayLabel, maltaParts, weekRangeUtc, weekStartOf, weekdayOf } from '@/lib/calls';
-import { AvailabilitySheet, CallSheet, SyncSheet, personKeyOf, type CallDraft, type Person } from './CalendarSheets';
+import { AvailabilitySheet, BookingSheet, CallSheet, SyncSheet, personKeyOf, type CallDraft, type Person } from './CalendarSheets';
 
 const ROW = 56; // px per hour in the grid
 const toMin = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
@@ -27,6 +27,7 @@ export default function CalendarClient() {
   const [draft, setDraft] = useState<CallDraft | null>(null);
   const [showAvail, setShowAvail] = useState(false);
   const [showSync, setShowSync] = useState(false);
+  const [showBooking, setShowBooking] = useState(false);
   const [nowMin, setNowMin] = useState<number | null>(null);
 
   // People, availability and the feed token: once, and again after availability changes.
@@ -129,6 +130,7 @@ export default function CalendarClient() {
           <p className="text-2xs text-neutral-400">Check-in and info calls · one hour each · Malta time</p>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => setShowBooking(true)} className="rounded-full border border-border px-3 py-2 text-xs font-medium text-neutral-600 hover:border-neutral-300">Client booking</button>
           <button onClick={() => setShowSync(true)} className="rounded-full border border-border px-3 py-2 text-xs font-medium text-neutral-600 hover:border-neutral-300">Google Calendar</button>
           <button onClick={() => setShowAvail(true)} className="rounded-full border border-border px-3 py-2 text-xs font-medium text-neutral-600 hover:border-neutral-300">My hours</button>
           <button onClick={() => openNew()} className="rounded-full bg-brand text-white px-4 py-2 text-xs font-semibold">＋ Book call</button>
@@ -252,6 +254,7 @@ export default function CalendarClient() {
           initial={draft} onClose={() => setDraft(null)} onSaved={saved} />
       )}
       {showAvail && <AvailabilitySheet availability={availability} onClose={() => setShowAvail(false)} onSaved={saved} />}
+      {showBooking && <BookingSheet onClose={() => setShowBooking(false)} />}
       {showSync && token && <SyncSheet token={token} onClose={() => setShowSync(false)} onRotated={(t) => setToken(t)} />}
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { CoachAvailabilityRow, CoachCallKind, CoachCallRow } from '@/lib/supabase/database.types';
 import { CALL_MINUTES, KIND_META, callEnd, dayLabel, googleCalendarUrl, maltaParts, maltaToUtc, timeRangeLabel, weekRangeUtc, weekStartOf, weekdayOf } from '@/lib/calls';
@@ -125,7 +125,7 @@ export function CallSheet({ people, weekCalls, availability, initial, onClose, o
   const gcalCall = editing && person ? googleCalendarUrl({ ...editing, kind, starts_at: maltaToUtc(date, time).toISOString(), note }, person.name) : null;
 
   return (
-    <Sheet title={editing ? 'Edit call' : 'Book a call'} subtitle="Every call is one hour, Malta time." onClose={onClose}>
+    <Sheet title={editing ? 'Edit call' : 'Book a call'} subtitle={editing?.booked_by === 'client' ? 'Booked by the client themselves in the app. Every call is one hour, Malta time.' : 'Every call is one hour, Malta time.'} onClose={onClose}>
       <label className="block text-xs font-medium text-neutral-500 mb-1.5">Who is it with?</label>
       <select value={personKey} onChange={(e) => pickPerson(e.target.value)} className={field}>
         <option value="">Choose a client…</option>
@@ -309,6 +309,128 @@ export function SyncSheet({ token, onClose, onRotated }: { token: string; onClos
         Anyone with this link can see your call times and client names — keep it private.
       </div>
       <button onClick={rotate} className="mt-3 text-xs text-neutral-400 underline py-1">Make a new link (stops the old one)</button>
+    </Sheet>
+  );
+}
+
+// ── Client booking: on/off, when next week opens, and the Google link ────────
+
+type GoogleStatus = { connected: boolean; links: number; events: number; allDay: number; errors: string[] };
+const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+export function BookingSheet({ onClose }: { onClose: () => void }) {
+  const [supabase] = useState(() => createClient());
+  const [loaded, setLoaded] = useState(false);
+  const [enabled, setEnabled] = useState(true);
+  const [weekday, setWeekday] = useState(5);
+  const [openTime, setOpenTime] = useState('12:00');
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [google, setGoogle] = useState<GoogleStatus | null>(null);
+  const [links, setLinks] = useState('');
+  const [connecting, setConnecting] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+
+  // Settings and the Google status load once when the sheet opens.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error: err } = await supabase.from('coach_settings').select('booking_enabled, booking_open_weekday, booking_open_time').eq('id', 1).maybeSingle();
+      if (cancelled) return;
+      if (err || !data) setError("Couldn't load your booking settings — close this and try again.");
+      else { setEnabled(data.booking_enabled); setWeekday(data.booking_open_weekday); setOpenTime(data.booking_open_time.slice(0, 5)); }
+      setLoaded(true);
+      try {
+        const res = await fetch('/api/coach/booking-google', { cache: 'no-store' });
+        const body = await res.json();
+        if (!cancelled && res.ok) setGoogle(body as GoogleStatus);
+      } catch { /* status stays unknown */ }
+    })();
+    return () => { cancelled = true; };
+  }, [supabase]);
+
+  async function save() {
+    if (saving) return;
+    setSaving(true); setError(null); setSavedMsg(null);
+    const { error: err } = await supabase.from('coach_settings').update({ booking_enabled: enabled, booking_open_weekday: weekday, booking_open_time: openTime, updated_at: new Date().toISOString() }).eq('id', 1);
+    setSaving(false);
+    if (err) setError("Couldn't save — try again.");
+    else setSavedMsg('Saved ✓');
+  }
+
+  async function connect() {
+    const urls = links.split(/\s+/).map((u) => u.trim()).filter(Boolean);
+    if (urls.length === 0) { setGoogleError('Paste the link first.'); return; }
+    setConnecting(true); setGoogleError(null);
+    try {
+      const res = await fetch('/api/coach/booking-google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls }) });
+      const body = await res.json();
+      if (!res.ok) setGoogleError(body.error || "Couldn't connect — try again.");
+      else { setGoogle(body as GoogleStatus); setLinks(''); }
+    } catch {
+      setGoogleError("Couldn't connect — check your connection and try again.");
+    }
+    setConnecting(false);
+  }
+
+  async function disconnect() {
+    if (!window.confirm('Disconnect Google Calendar? Clients will then see all your free hours, even when you have other plans in Google.')) return;
+    setConnecting(true); setGoogleError(null);
+    try {
+      const res = await fetch('/api/coach/booking-google', { method: 'DELETE' });
+      const body = await res.json();
+      if (!res.ok) setGoogleError(body.error || "Couldn't disconnect — try again.");
+      else setGoogle(body as GoogleStatus);
+    } catch {
+      setGoogleError("Couldn't disconnect — try again.");
+    }
+    setConnecting(false);
+  }
+
+  return (
+    <Sheet title="Client booking" subtitle="Clients pick their two weekly calls (check-in and info call) from your free hours." onClose={onClose}>
+      {!loaded ? <div className="h-24 rounded-xl bg-neutral-100 animate-pulse" /> : (
+        <>
+          <label className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-3">
+            <span className="text-sm font-medium">Clients can book their own calls</span>
+            <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="h-5 w-5 accent-[var(--brand)]" />
+          </label>
+
+          <p className="text-xs font-medium text-neutral-500 mt-4 mb-1.5">Next week opens for booking on</p>
+          <div className="grid grid-cols-[1fr_110px] gap-2">
+            <select value={weekday} onChange={(e) => setWeekday(Number(e.target.value))} className={field} aria-label="Day">
+              {WEEKDAY_NAMES.map((n, i) => <option key={n} value={i + 1}>{n}</option>)}
+            </select>
+            <input type="time" value={openTime} onChange={(e) => setOpenTime(e.target.value)} className={field} aria-label="Time" />
+          </div>
+          <p className="text-2xs text-neutral-400 mt-1.5">Malta time. Until then clients can only book the rest of this week. Calls start on the hour inside your “My hours”, and never less than 12 hours ahead.</p>
+          {error && <p className="text-sm text-status-bad-text mt-2" role="alert">{error}</p>}
+          <button onClick={save} disabled={saving} className="mt-3 w-full rounded-xl bg-brand text-white py-2.5 text-sm font-semibold disabled:opacity-50">{saving ? 'Saving…' : savedMsg ?? 'Save'}</button>
+
+          <div className="mt-6 border-t border-border pt-4">
+            <p className="text-sm font-semibold">Block your Google Calendar events</p>
+            {google === null && <p className="text-xs text-neutral-400 mt-1">Checking…</p>}
+            {google?.connected && (
+              <div className="mt-2 rounded-xl bg-status-good-bg px-3 py-2.5 text-sm text-status-good-text">
+                ✓ Connected · {google.links} calendar{google.links === 1 ? '' : 's'} · {google.events} event{google.events === 1 ? '' : 's'} in the next 2 weeks{google.allDay > 0 ? ` (${google.allDay} all-day)` : ''}
+              </div>
+            )}
+            {google && !google.connected && google.links === 0 && (
+              <p className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">Not connected yet — clients see all your free hours, even when you have other plans in Google.</p>
+            )}
+            {google && !google.connected && google.links > 0 && (
+              <p className="mt-2 rounded-xl bg-status-bad-bg px-3 py-2.5 text-xs text-status-bad-text" role="alert">Google couldn’t be read right now ({google.errors.join('; ')}). Clients can’t book until it’s back — paste a fresh link below if it keeps failing.</p>
+            )}
+            <p className="text-xs text-neutral-500 mt-3 leading-relaxed">Any event in Google (calls or not) blocks that time, so clients can only book when you’re free. To connect: on a computer open Google Calendar → <b>Settings</b> → click your calendar under “Settings for my calendars” → <b>Integrate calendar</b> → copy the <b>Secret address in iCal format</b>, and paste it below. If you keep plans in more than one calendar, paste one link per line.</p>
+            <textarea value={links} onChange={(e) => setLinks(e.target.value)} rows={3} placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" className={`${field} mt-2 resize-none text-xs`} aria-label="Google Calendar secret address" />
+            {googleError && <p className="text-sm text-status-bad-text mt-2" role="alert">{googleError}</p>}
+            <button onClick={connect} disabled={connecting || !links.trim()} className="mt-2 w-full rounded-xl border border-brand/40 bg-brand-light text-brand-dark py-2.5 text-sm font-semibold disabled:opacity-40">{connecting ? 'Checking…' : google?.links ? 'Replace link' : 'Connect'}</button>
+            <p className="text-2xs text-neutral-400 mt-2">That link lets anyone read your whole calendar, so treat it like a password. Vitality keeps it private and never shows it to clients. Google can take a little while to pass on new events.</p>
+            {google && google.links > 0 && <button onClick={disconnect} disabled={connecting} className="mt-2 text-xs text-neutral-400 underline py-1">Disconnect Google Calendar</button>}
+          </div>
+        </>
+      )}
     </Sheet>
   );
 }
