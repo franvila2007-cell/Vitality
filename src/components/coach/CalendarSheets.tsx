@@ -324,6 +324,9 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   const [enabled, setEnabled] = useState(true);
   const [weekday, setWeekday] = useState(5);
   const [openTime, setOpenTime] = useState('12:00');
+  const [emailReminders, setEmailReminders] = useState(true);
+  const [callDetails, setCallDetails] = useState('');
+  const [reminderRun, setReminderRun] = useState<{ at: string | null; error: string | null }>({ at: null, error: null });
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -336,10 +339,14 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error: err } = await supabase.from('coach_settings').select('booking_enabled, booking_open_weekday, booking_open_time').eq('id', 1).maybeSingle();
+      const { data, error: err } = await supabase.from('coach_settings').select('booking_enabled, booking_open_weekday, booking_open_time, call_details, reminder_emails_enabled, reminder_last_run_at, reminder_last_error').eq('id', 1).maybeSingle();
       if (cancelled) return;
       if (err || !data) setError("Couldn't load your booking settings — close this and try again.");
-      else { setEnabled(data.booking_enabled); setWeekday(data.booking_open_weekday); setOpenTime(data.booking_open_time.slice(0, 5)); }
+      else {
+        setEnabled(data.booking_enabled); setWeekday(data.booking_open_weekday); setOpenTime(data.booking_open_time.slice(0, 5));
+        setEmailReminders(data.reminder_emails_enabled); setCallDetails(data.call_details);
+        setReminderRun({ at: data.reminder_last_run_at, error: data.reminder_last_error });
+      }
       setLoaded(true);
       try {
         const res = await fetch('/api/coach/booking-google', { cache: 'no-store' });
@@ -353,7 +360,7 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   async function save() {
     if (saving) return;
     setSaving(true); setError(null); setSavedMsg(null);
-    const { error: err } = await supabase.from('coach_settings').update({ booking_enabled: enabled, booking_open_weekday: weekday, booking_open_time: openTime, updated_at: new Date().toISOString() }).eq('id', 1);
+    const { error: err } = await supabase.from('coach_settings').update({ booking_enabled: enabled, booking_open_weekday: weekday, booking_open_time: openTime, reminder_emails_enabled: emailReminders, call_details: callDetails.trim().slice(0, 600), updated_at: new Date().toISOString() }).eq('id', 1);
     setSaving(false);
     if (err) setError("Couldn't save — try again.");
     else setSavedMsg('Saved ✓');
@@ -405,7 +412,19 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
             <input type="time" value={openTime} onChange={(e) => setOpenTime(e.target.value)} className={field} aria-label="Time" />
           </div>
           <p className="text-2xs text-neutral-400 mt-1.5">Malta time. Until then clients can only book the rest of this week. Calls start on the hour inside your “My hours”, and never less than 12 hours ahead.</p>
-          {error && <p className="text-sm text-status-bad-text mt-2" role="alert">{error}</p>}
+
+          <div className="mt-5 border-t border-border pt-4">
+            <p className="text-sm font-semibold">Reminder emails</p>
+            <label className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-3">
+              <span className="text-sm font-medium">Email clients a reminder <span className="font-normal text-neutral-400">(a day before and an hour before)</span></span>
+              <input type="checkbox" checked={emailReminders} onChange={(e) => setEmailReminders(e.target.checked)} className="h-5 w-5 flex-shrink-0 accent-[var(--brand)]" />
+            </label>
+            <label className="mt-3 block text-xs font-medium text-neutral-500">How the call happens <span className="font-normal">(shown in the email — optional)</span></label>
+            <textarea value={callDetails} onChange={(e) => setCallDetails(e.target.value)} rows={2} maxLength={600} placeholder="e.g. I’ll call you on WhatsApp, or paste your Zoom / Meet link" className={`${field} mt-1.5 resize-none`} />
+            <ReminderStatus enabled={emailReminders} run={reminderRun} />
+          </div>
+
+          {error && <p className="text-sm text-status-bad-text mt-3" role="alert">{error}</p>}
           <button onClick={save} disabled={saving} className="mt-3 w-full rounded-xl bg-brand text-white py-2.5 text-sm font-semibold disabled:opacity-50">{saving ? 'Saving…' : savedMsg ?? 'Save'}</button>
 
           <div className="mt-6 border-t border-border pt-4">
@@ -433,4 +452,23 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
       )}
     </Sheet>
   );
+}
+
+function ReminderStatus({ enabled, run }: { enabled: boolean; run: { at: string | null; error: string | null } }) {
+  if (!enabled) return <p className="mt-2 text-2xs text-neutral-400">Reminder emails are off.</p>;
+  if (run.error === 'sender_not_configured') {
+    return (
+      <p className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">
+        Emails aren’t switched on yet — Vitality needs a sender address on your own domain (verified in Resend) before it can email clients. Until then clients still get the reminder inside the app.
+      </p>
+    );
+  }
+  if (run.error) return <p className="mt-2 rounded-xl bg-status-bad-bg px-3 py-2.5 text-xs text-status-bad-text" role="alert">The last reminder email failed: {run.error}</p>;
+  if (!run.at) return <p className="mt-2 text-2xs text-neutral-400">Reminders are checked every 15 minutes.</p>;
+  return <p className="mt-2 text-2xs text-status-good-text">✓ Reminder emails are working · last checked {ago(run.at)}</p>;
+}
+
+function ago(iso: string): string {
+  const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  return min < 1 ? 'just now' : min < 60 ? `${min} min ago` : `${Math.round(min / 60)} h ago`;
 }

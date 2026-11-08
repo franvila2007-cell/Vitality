@@ -20,9 +20,11 @@ export type CoachCallStatus = 'scheduled' | 'done' | 'cancelled' | 'no_show';
 export type CoachCallRow = {
   id: string; client_id: string | null; contact_id: string | null; kind: CoachCallKind; starts_at: string; duration_min: number;
   status: CoachCallStatus; note: string; created_at: string; updated_at: string; booked_by: 'coach' | 'client';
+  reminded_day_at: string | null; reminded_hour_at: string | null;
 };
 export type CoachSettingsRow = {
   id: number; google_ical_urls: string[]; booking_open_weekday: number; booking_open_time: string; booking_enabled: boolean; updated_at: string;
+  call_details: string; reminder_emails_enabled: boolean; reminder_last_run_at: string | null; reminder_last_error: string | null;
 };
 export type CoachAvailabilityRow = { id: string; weekday: number; start_time: string; end_time: string };
 
@@ -81,6 +83,8 @@ export type Database = {
     Views: Record<string, never>;
     Functions: {
       // 0028_client_booking.sql — service-role only; throws 'slot_taken', 'already_booked', 'outside_hours', …
+      // 0029_call_reminders.sql — service-role only; marks due reminders as sent and returns them
+      claim_due_reminders: { Args: { p_now?: string; p_max?: number }; Returns: { r_id: string; r_client: string; r_kind: string; r_starts_at: string; r_minutes: number; r_which: string }[] };
       client_book_call: { Args: { p_client: string; p_kind: string; p_starts_at: string; p_replace?: string | null }; Returns: string };
     };
     Enums: Record<string, never>;
@@ -249,7 +253,7 @@ export type Database = {
       // Coach calendar (0026_coach_calendar.sql).
       coach_calls: Table<
         CoachCallRow,
-        Omit<CoachCallRow, 'id' | 'created_at' | 'updated_at' | 'client_id' | 'contact_id' | 'duration_min' | 'status' | 'note' | 'booked_by'> & Partial<CoachCallRow>,
+        Omit<CoachCallRow, 'id' | 'created_at' | 'updated_at' | 'client_id' | 'contact_id' | 'duration_min' | 'status' | 'note' | 'booked_by' | 'reminded_day_at' | 'reminded_hour_at'> & Partial<CoachCallRow>,
         Partial<CoachCallRow>
       >;
       coach_availability: Table<

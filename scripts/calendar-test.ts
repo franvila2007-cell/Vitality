@@ -13,7 +13,7 @@ eq('weekday Wed', weekdayOf('2026-11-04'), 3);
 eq('week start Mon', weekStartOf('2026-11-04'), '2026-11-02');
 eq('week start from Sunday', weekStartOf('2026-11-08'), '2026-11-02');
 eq('week range', weekRangeUtc('2026-11-02'), { from: '2026-11-01T23:00:00.000Z', to: '2026-11-08T23:00:00.000Z' });
-const call = { id: 'abc', client_id: 'x', contact_id: null, kind: 'check_in' as const, starts_at: '2026-11-04T09:00:00.000Z', duration_min: 60, status: 'scheduled' as const, note: 'Hi, there; ok', created_at: '', updated_at: '2026-11-03T10:00:00.000Z', booked_by: 'coach' as const };
+const call = { id: 'abc', client_id: 'x', contact_id: null, kind: 'check_in' as const, starts_at: '2026-11-04T09:00:00.000Z', duration_min: 60, status: 'scheduled' as const, note: 'Hi, there; ok', created_at: '', updated_at: '2026-11-03T10:00:00.000Z', booked_by: 'coach' as const, reminded_day_at: null, reminded_hour_at: null };
 const ics = buildIcs([{ call, name: 'Francesco Vila' }], new Date('2026-11-03T12:00:00Z'));
 eq('ics has event', ics.includes('SUMMARY:Check-in · Francesco Vila'), true);
 eq('ics times', ics.includes('DTSTART:20261104T090000Z') && ics.includes('DTEND:20261104T100000Z'), true);

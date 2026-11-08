@@ -79,14 +79,19 @@ export function timeRangeLabel(c: Pick<CoachCallRow, 'starts_at' | 'duration_min
 const gcalStamp = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 
 /** One-click "add this call to my Google Calendar" link (prefilled event). */
-export function googleCalendarUrl(c: Pick<CoachCallRow, 'starts_at' | 'duration_min' | 'kind' | 'note'>, name: string): string {
+export function googleEventUrl(e: { title: string; startsAt: string; minutes: number; details?: string }): string {
+  const start = new Date(e.startsAt);
   const q = new URLSearchParams({
     action: 'TEMPLATE',
-    text: callTitle(c.kind, name),
-    dates: `${gcalStamp(new Date(c.starts_at))}/${gcalStamp(callEnd(c))}`,
-    details: [KIND_META[c.kind].long, c.note].filter(Boolean).join('\n'),
+    text: e.title,
+    dates: `${gcalStamp(start)}/${gcalStamp(new Date(start.getTime() + e.minutes * 60000))}`,
+    details: e.details ?? '',
   });
   return `https://calendar.google.com/calendar/render?${q.toString()}`;
+}
+
+export function googleCalendarUrl(c: Pick<CoachCallRow, 'starts_at' | 'duration_min' | 'kind' | 'note'>, name: string): string {
+  return googleEventUrl({ title: callTitle(c.kind, name), startsAt: c.starts_at, minutes: c.duration_min, details: [KIND_META[c.kind].long, c.note].filter(Boolean).join('\n') });
 }
 
 export function callTitle(kind: CoachCallKind, name: string): string {

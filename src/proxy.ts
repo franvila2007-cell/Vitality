@@ -41,6 +41,8 @@ export async function proxy(request: NextRequest) {
     path.startsWith('/challenge') || path.startsWith('/api/challenge') ||
     // Background worker for automated meal plans — takes no input, returns only counts.
     path.startsWith('/api/meal-plans/worker') ||
+    // Call-reminder worker: called by the database every 15 min; takes no input, returns counts only.
+    path === '/api/booking/reminders' ||
     // Coach calendar feed (Google Calendar "From URL"): authenticated by the secret token in the path.
     path.startsWith('/api/calendar/') ||
     // Link-preview image: WhatsApp / Instagram fetch it signed out.
