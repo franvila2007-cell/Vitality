@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { computeBooking, json, loadContext, requireClient } from '@/lib/bookingServer';
 import { maltaParts, weekStartOf } from '@/lib/calls';
 import { notifyCoach } from '@/lib/bookingNotify';
+import { googleCalendar, serviceAccountFromEnv } from '@/lib/googleCalendar';
+import { syncGoogleNow } from '@/lib/googleSync';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,7 +47,7 @@ export async function POST(req: Request) {
     const admin = createAdminClient();
     // For a move, remember where the call was so the email can say so.
     const previous = replaceId ? (await admin.from('coach_calls').select('starts_at').eq('id', replaceId).eq('client_id', who.userId).maybeSingle()).data?.starts_at : undefined;
-    const { data: callId, error } = await admin.rpc('client_book_call', { p_client: who.userId, p_kind: kind, p_starts_at: new Date(starts_at).toISOString(), p_replace: replaceId ?? null });
+    const { error } = await admin.rpc('client_book_call', { p_client: who.userId, p_kind: kind, p_starts_at: new Date(starts_at).toISOString(), p_replace: replaceId ?? null });
     if (error) {
       const known = Object.entries(RPC_MESSAGES).find(([code]) => error.message.includes(code));
       if (known) return json({ error: known[1][1] }, known[1][0]);
@@ -54,8 +56,9 @@ export async function POST(req: Request) {
     after(async () => {
       const { data: p } = await admin.from('profiles').select('full_name, email').eq('id', who.userId).maybeSingle();
       await notifyCoach(admin, {
-        event: replaceId ? 'moved' : 'booked', callId: callId ?? replaceId, clientName: p?.full_name || p?.email || '', kind, startsAt: new Date(starts_at).toISOString(), previousStartsAt: previous,
+        event: replaceId ? 'moved' : 'booked', clientName: p?.full_name || p?.email || '', kind, startsAt: new Date(starts_at).toISOString(), previousStartsAt: previous,
       }, { replyTo: p?.email });
+      await syncGoogleNow(admin, () => { const sa = serviceAccountFromEnv(); return sa ? googleCalendar(sa) : null; });
     });
     return json({ ok: true });
   } catch {

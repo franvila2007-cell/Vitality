@@ -20,11 +20,12 @@ export type CoachCallStatus = 'scheduled' | 'done' | 'cancelled' | 'no_show';
 export type CoachCallRow = {
   id: string; client_id: string | null; contact_id: string | null; kind: CoachCallKind; starts_at: string; duration_min: number;
   status: CoachCallStatus; note: string; created_at: string; updated_at: string; booked_by: 'coach' | 'client';
-  reminded_day_at: string | null; reminded_hour_at: string | null;
+  reminded_day_at: string | null; reminded_hour_at: string | null; google_synced_at: string | null;
 };
 export type CoachSettingsRow = {
   id: number; google_ical_urls: string[]; booking_open_weekday: number; booking_open_time: string; booking_enabled: boolean; updated_at: string;
   call_details: string; reminder_emails_enabled: boolean; reminder_last_run_at: string | null; reminder_last_error: string | null; booking_notify_enabled: boolean;
+  google_calendar_id: string; google_sync_last_run_at: string | null; google_sync_last_error: string | null;
 };
 export type CoachAvailabilityRow = { id: string; weekday: number; start_time: string; end_time: string };
 
@@ -253,7 +254,7 @@ export type Database = {
       // Coach calendar (0026_coach_calendar.sql).
       coach_calls: Table<
         CoachCallRow,
-        Omit<CoachCallRow, 'id' | 'created_at' | 'updated_at' | 'client_id' | 'contact_id' | 'duration_min' | 'status' | 'note' | 'booked_by' | 'reminded_day_at' | 'reminded_hour_at'> & Partial<CoachCallRow>,
+        Omit<CoachCallRow, 'id' | 'created_at' | 'updated_at' | 'client_id' | 'contact_id' | 'duration_min' | 'status' | 'note' | 'booked_by' | 'reminded_day_at' | 'reminded_hour_at' | 'google_synced_at'> & Partial<CoachCallRow>,
         Partial<CoachCallRow>
       >;
       coach_availability: Table<

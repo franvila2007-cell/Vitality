@@ -20,6 +20,8 @@ export function busyFromIcs(ics: string, from: Date, to: Date): { busy: Busy[]; 
     if (!raw || raw.type !== 'VEVENT') continue;
     const e = raw as VEvent;
     if (e.status === 'CANCELLED' || e.transparency === 'TRANSPARENT') continue;
+    // Events Vitality wrote itself (id "call" + 32 hex) are already known from the database — instantly and exactly — so Google's lagging copy is ignored.
+    if (/^call[0-9a-f]{32}@google\.com$/i.test(String(e.uid ?? ''))) continue;
     let instances;
     try {
       instances = ical.expandRecurringEvent(e, { from, to, expandOngoing: true });

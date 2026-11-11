@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { json, requireClient } from '@/lib/bookingServer';
 import { notifyCoach } from '@/lib/bookingNotify';
+import { googleCalendar, serviceAccountFromEnv } from '@/lib/googleCalendar';
+import { syncGoogleNow } from '@/lib/googleSync';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,7 +23,8 @@ export async function POST(req: Request) {
   const call = data[0];
   after(async () => {
     const { data: p } = await admin.from('profiles').select('full_name, email').eq('id', who.userId).maybeSingle();
-    await notifyCoach(admin, { event: 'cancelled', callId: call.id, clientName: p?.full_name || p?.email || '', kind: call.kind as 'check_in' | 'info', startsAt: call.starts_at }, { replyTo: p?.email });
+    await notifyCoach(admin, { event: 'cancelled', clientName: p?.full_name || p?.email || '', kind: call.kind as 'check_in' | 'info', startsAt: call.starts_at }, { replyTo: p?.email });
+    await syncGoogleNow(admin, () => { const sa = serviceAccountFromEnv(); return sa ? googleCalendar(sa) : null; });
   });
   return json({ ok: true });
 }

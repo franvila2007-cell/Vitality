@@ -326,6 +326,11 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   const [openTime, setOpenTime] = useState('12:00');
   const [emailReminders, setEmailReminders] = useState(true);
   const [notifyMe, setNotifyMe] = useState(true);
+  const [gcalId, setGcalId] = useState('');
+  const [gsync, setGsync] = useState<{ at: string | null; error: string | null }>({ at: null, error: null });
+  const [robot, setRobot] = useState<{ configured: boolean; email: string | null } | null>(null);
+  const [gTesting, setGTesting] = useState(false);
+  const [gMsg, setGMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [callDetails, setCallDetails] = useState('');
@@ -342,15 +347,21 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error: err } = await supabase.from('coach_settings').select('booking_enabled, booking_open_weekday, booking_open_time, call_details, reminder_emails_enabled, reminder_last_run_at, reminder_last_error, booking_notify_enabled').eq('id', 1).maybeSingle();
+      const { data, error: err } = await supabase.from('coach_settings').select('booking_enabled, booking_open_weekday, booking_open_time, call_details, reminder_emails_enabled, reminder_last_run_at, reminder_last_error, booking_notify_enabled, google_calendar_id, google_sync_last_run_at, google_sync_last_error').eq('id', 1).maybeSingle();
       if (cancelled) return;
       if (err || !data) setError("Couldn't load your booking settings — close this and try again.");
       else {
         setEnabled(data.booking_enabled); setWeekday(data.booking_open_weekday); setOpenTime(data.booking_open_time.slice(0, 5));
         setEmailReminders(data.reminder_emails_enabled); setCallDetails(data.call_details); setNotifyMe(data.booking_notify_enabled);
+        setGcalId(data.google_calendar_id); setGsync({ at: data.google_sync_last_run_at, error: data.google_sync_last_error });
         setReminderRun({ at: data.reminder_last_run_at, error: data.reminder_last_error });
       }
       setLoaded(true);
+      try {
+        const r = await fetch('/api/coach/google-sync', { cache: 'no-store' });
+        const b = await r.json();
+        if (!cancelled && r.ok) setRobot({ configured: b.configured, email: b.robotEmail });
+      } catch { /* status stays unknown */ }
       try {
         const res = await fetch('/api/coach/booking-google', { cache: 'no-store' });
         const body = await res.json();
@@ -363,10 +374,26 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   async function save() {
     if (saving) return;
     setSaving(true); setError(null); setSavedMsg(null);
-    const { error: err } = await supabase.from('coach_settings').update({ booking_enabled: enabled, booking_open_weekday: weekday, booking_open_time: openTime, reminder_emails_enabled: emailReminders, booking_notify_enabled: notifyMe, call_details: callDetails.trim().slice(0, 600), updated_at: new Date().toISOString() }).eq('id', 1);
+    const { error: err } = await supabase.from('coach_settings').update({ booking_enabled: enabled, booking_open_weekday: weekday, booking_open_time: openTime, reminder_emails_enabled: emailReminders, booking_notify_enabled: notifyMe, google_calendar_id: gcalId.trim(), call_details: callDetails.trim().slice(0, 600), updated_at: new Date().toISOString() }).eq('id', 1);
     setSaving(false);
     if (err) setError("Couldn't save — try again.");
     else setSavedMsg('Saved ✓');
+  }
+
+  async function testGoogle() {
+    setGTesting(true); setGMsg(null);
+    // Save the address first so the test uses what's typed.
+    const { error: err } = await supabase.from('coach_settings').update({ google_calendar_id: gcalId.trim(), updated_at: new Date().toISOString() }).eq('id', 1);
+    if (err) { setGMsg({ ok: false, text: "Couldn't save the address — try again." }); setGTesting(false); return; }
+    try {
+      const res = await fetch('/api/coach/google-sync', { method: 'POST' });
+      const body = await res.json();
+      setGMsg(res.ok ? { ok: true, text: 'Connected ✓ — a test event was added to your Google Calendar and removed again.' } : { ok: false, text: body.error || "Google didn't accept the test." });
+      if (res.ok) setGsync({ at: new Date().toISOString(), error: null });
+    } catch {
+      setGMsg({ ok: false, text: "Couldn't run the test — check your connection." });
+    }
+    setGTesting(false);
   }
 
   async function sendTest() {
@@ -473,6 +500,22 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
             <p className="text-2xs text-neutral-400 mt-2">That link lets anyone read your whole calendar, so treat it like a password. Vitality keeps it private and never shows it to clients. Google can take a little while to pass on new events.</p>
             {google && google.links > 0 && <button onClick={disconnect} disabled={connecting} className="mt-2 text-xs text-neutral-400 underline py-1">Disconnect Google Calendar</button>}
           </div>
+
+          <div className="mt-6 border-t border-border pt-4">
+            <p className="text-sm font-semibold">Put booked calls in my Google Calendar</p>
+            <GoogleSyncStatus robot={robot} calendarId={gcalId} run={gsync} />
+            {robot?.configured && robot.email && (
+              <ol className="mt-3 text-xs text-neutral-600 list-decimal pl-5 flex flex-col gap-1.5 leading-relaxed">
+                <li>In Google Calendar (on a computer): <b>Settings</b> → click your calendar under “Settings for my calendars” → <b>Share with specific people</b> → <b>Add people</b>.</li>
+                <li>Add this address and choose <b>Make changes to events</b>: <span className="block mt-1 rounded-lg bg-neutral-50 border border-border px-2 py-1.5 font-mono text-[11px] break-all select-all">{robot.email}</span></li>
+                <li>Type your calendar address below (usually your Gmail) and press <b>Save &amp; test</b>.</li>
+              </ol>
+            )}
+            <label className="mt-3 block text-xs font-medium text-neutral-500">Your Google Calendar address</label>
+            <input value={gcalId} onChange={(e) => setGcalId(e.target.value)} placeholder="you@gmail.com" autoCapitalize="none" className={`${field} mt-1.5`} aria-label="Google Calendar address" />
+            <button type="button" onClick={testGoogle} disabled={gTesting || !gcalId.trim()} className="mt-2 w-full rounded-xl border border-brand/40 bg-brand-light text-brand-dark py-2.5 text-sm font-semibold disabled:opacity-40">{gTesting ? 'Testing…' : 'Save & test'}</button>
+            {gMsg && <p className={`mt-2 text-xs ${gMsg.ok ? 'text-status-good-text' : 'text-status-bad-text'}`} role={gMsg.ok ? 'status' : 'alert'}>{gMsg.text}</p>}
+          </div>
         </>
       )}
     </Sheet>
@@ -496,4 +539,13 @@ function ReminderStatus({ enabled, run }: { enabled: boolean; run: { at: string 
 function ago(iso: string): string {
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   return min < 1 ? 'just now' : min < 60 ? `${min} min ago` : `${Math.round(min / 60)} h ago`;
+}
+
+function GoogleSyncStatus({ robot, calendarId, run }: { robot: { configured: boolean; email: string | null } | null; calendarId: string; run: { at: string | null; error: string | null } }) {
+  if (robot === null) return <p className="mt-1 text-xs text-neutral-400">Checking…</p>;
+  if (!robot.configured) return <p className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">Not set up yet — Vitality needs its Google key first. Ask Claude to walk you through it.</p>;
+  if (run.error && run.error !== 'google_no_calendar' && run.error !== 'google_not_configured') return <p className="mt-2 rounded-xl bg-status-bad-bg px-3 py-2.5 text-xs text-status-bad-text" role="alert">Last sync failed: {run.error}</p>;
+  if (!calendarId.trim() || run.error === 'google_no_calendar') return <p className="mt-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800">Almost there — share your calendar with the address below, then add your calendar address and press Save &amp; test.</p>;
+  if (!run.at) return <p className="mt-2 text-2xs text-neutral-400">Booked calls are copied to your calendar every few minutes.</p>;
+  return <p className="mt-2 text-2xs text-status-good-text">✓ Connected · last synced {ago(run.at)}</p>;
 }
