@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchBusy } from '@/lib/googleBusy';
+import { bookingAccess } from '@/lib/bookingAccess';
 import { bookableWeeks, freeSlots, type Avail, type BookingSettings, type Interval } from '@/lib/booking';
 import { weekRangeUtc } from '@/lib/calls';
 import { addDays } from '@/lib/date';
@@ -13,12 +14,16 @@ import type { CoachCallRow } from '@/lib/supabase/database.types';
 export const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 
 /** The signed-in, active client (id) — or an error response to return. */
-export async function requireClient(): Promise<{ userId: string } | { error: NextResponse }> {
+export async function requireClient(opts: { requireAccess?: boolean } = {}): Promise<{ userId: string } | { error: NextResponse }> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: json({ error: 'Please sign in again.' }, 401) };
   const { data: p } = await supabase.from('profiles').select('role, archived_at').eq('id', user.id).maybeSingle();
   if (!p || p.role !== 'client' || p.archived_at) return { error: json({ error: 'Booking is for Vitality clients.' }, 403) };
+  // Only 1-1 clients (or ones the coach switched on) can book. Cancelling an existing call is always allowed.
+  if (opts.requireAccess !== false && !(await bookingAccess(createAdminClient(), user.id)).allowed) {
+    return { error: json({ error: 'Booking calls is for 1-1 coaching clients. Message Francesco if you’d like a call.', code: 'not_eligible' }, 403) };
+  }
   return { userId: user.id };
 }
 

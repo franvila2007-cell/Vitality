@@ -261,6 +261,12 @@ export type Database = {
         { id?: string; weekday: number; start_time: string; end_time: string },
         Partial<CoachAvailabilityRow>
       >;
+      // Who may book calls in the app (0032_client_booking_access.sql): the coach's explicit choice per client.
+      client_booking_access: Table<
+        { client_id: string; allowed: boolean; updated_at: string },
+        { client_id: string; allowed: boolean; updated_at?: string },
+        { client_id?: string; allowed?: boolean; updated_at?: string }
+      >;
       coach_settings: Table<
         CoachSettingsRow,
         Partial<CoachSettingsRow>,

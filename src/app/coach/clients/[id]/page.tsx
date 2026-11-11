@@ -18,6 +18,8 @@ import { HABIT_SCHEDULE_COLUMNS, completionsByDate, habitDay, type Habit } from 
 import { coachToday } from '@/lib/date';
 import { packageContext } from '@/lib/crm/packages';
 import CrmPackageEditor from '@/components/crm/CrmPackageEditor';
+import BookingAccessCard from '@/components/coach/BookingAccessCard';
+import { bookingAccess } from '@/lib/bookingAccess';
 import { computeMicroTotals, type MicronutrientKey } from '@/lib/micronutrients';
 import { getProjections, computeMonthColors, STATUS_META, type GoalType } from '@/lib/progress';
 
@@ -57,6 +59,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
     supabase.from('crm_contacts').select('id, brand, package, package_price, package_list_price, package_start, payment_plan, payment_method').eq('client_id', id).maybeSingle(),
     packageContext(supabase, id),
   ]);
+  const access = await bookingAccess(supabase, id);
   const clientProfile = clientProfileRes.data;
   const targets = targetsRes.data;
   const habits = habitsRes.data || [];
@@ -160,6 +163,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             />
           </div>
         )}
+
+        <BookingAccessCard clientId={id} initial={{ allowed: access.allowed, source: access.source }} />
 
         {clientProfile ? (
           <div className="bg-surface border border-border rounded-2xl p-4 grid grid-cols-3 gap-2 text-center">

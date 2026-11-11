@@ -100,10 +100,10 @@ export function callTitle(kind: CoachCallKind, name: string): string {
 
 // ── iCalendar feed (Google Calendar → "From URL") ─────────────────────────
 
-const icsEscape = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+export const icsEscape = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 
 // RFC 5545 line folding: max 75 octets per line, continuation lines start with a space.
-function fold(line: string): string {
+export function fold(line: string): string {
   const enc = new TextEncoder();
   if (enc.encode(line).length <= 75) return line;
   const out: string[] = [];
@@ -135,5 +135,44 @@ export function buildIcs(calls: { call: CoachCallRow; name: string }[], now = ne
     );
   }
   lines.push('END:VCALENDAR');
+  return lines.map(fold).join('\r\n') + '\r\n';
+}
+
+/**
+ * A calendar invitation (iTIP) for one call, sent by email: Google Calendar
+ * (and Apple/Outlook) add it to the recipient's calendar, and a later REQUEST
+ * with the same UID and a higher SEQUENCE moves it; METHOD:CANCEL removes it.
+ */
+export function buildInviteIcs(o: {
+  method: 'REQUEST' | 'CANCEL';
+  uid: string;
+  sequence: number;
+  title: string;
+  description: string;
+  startsAt: string;
+  minutes: number;
+  organizerEmail: string;
+  attendeeEmail: string;
+  attendeeName?: string;
+  now?: Date;
+}): string {
+  const start = new Date(o.startsAt);
+  const end = new Date(start.getTime() + o.minutes * 60000);
+  const lines = [
+    'BEGIN:VCALENDAR', 'PRODID:-//Vitality//Bookings//EN', 'VERSION:2.0', 'CALSCALE:GREGORIAN', `METHOD:${o.method}`,
+    'BEGIN:VEVENT',
+    `UID:${o.uid}`,
+    `SEQUENCE:${o.sequence}`,
+    `DTSTAMP:${gcalStamp(o.now ?? new Date())}`,
+    `DTSTART:${gcalStamp(start)}`,
+    `DTEND:${gcalStamp(end)}`,
+    `SUMMARY:${icsEscape(o.title)}`,
+    `DESCRIPTION:${icsEscape(o.description)}`,
+    `ORGANIZER;CN=Vitality:mailto:${o.organizerEmail}`,
+    `ATTENDEE;CN=${icsEscape(o.attendeeName ?? 'Francesco')};ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED;RSVP=FALSE:mailto:${o.attendeeEmail}`,
+    `STATUS:${o.method === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED'}`,
+    'TRANSP:OPAQUE',
+    'END:VEVENT', 'END:VCALENDAR',
+  ];
   return lines.map(fold).join('\r\n') + '\r\n';
 }

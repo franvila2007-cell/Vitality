@@ -15,7 +15,7 @@ const TABS = [
   { href: '/milestones', label: 'Milestones' },
 ];
 
-export default function AppNav() {
+export default function AppNav({ showCalls = false }: { showCalls?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -42,7 +42,7 @@ export default function AppNav() {
           page view, not just the one being shown, so this only prefetches
           the tab actually being touched/hovered. */}
       <div className="max-w-2xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto">
-        {TABS.map((t) => (
+        {TABS.filter((t) => t.href !== '/calls' || showCalls).map((t) => (
           <PrefetchOnIntentLink
             key={t.href}
             href={t.href}

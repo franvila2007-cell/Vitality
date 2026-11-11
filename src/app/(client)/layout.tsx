@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import AppNav from '@/components/AppNav';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { bookingAccess } from '@/lib/bookingAccess';
 
 // Persistent shell for the 4 client-facing tabs (Today/Nutrition/Progress/
 // Milestones) — previously each page.tsx rendered its own <AppNav/> plus
@@ -15,9 +17,12 @@ export default async function ClientLayout({ children }: { children: React.React
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
   if (profile?.role === 'coach') redirect('/coach');
 
+  // The Calls tab (booking) is only for 1-1 coaching clients.
+  const showCalls = (await bookingAccess(createAdminClient(), user.id)).allowed;
+
   return (
     <div className="min-h-screen">
-      <AppNav />
+      <AppNav showCalls={showCalls} />
       {children}
     </div>
   );
