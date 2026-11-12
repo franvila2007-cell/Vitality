@@ -57,6 +57,9 @@ const ev = { callId: 'a1b2c3d4-0000-1111-2222-333344445555', title: 'Check-in ·
 
   // ── reconcile against the real database (throwaway client + calls) ──
   const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  // The sync below runs against a FAKE Google but the REAL database, so it would mark real calls as synced.
+  // Remember their state now and put it back at the end.
+  const before = (await sb.from('coach_calls').select('id, google_synced_at')).data ?? [];
   const E = 'zz-gsync@vitality.local';
   const { data: users } = await sb.auth.admin.listUsers({ perPage: 200 });
   const old = users!.users.find((x) => x.email === E); if (old) { await sb.from('coach_calls').delete().eq('client_id', old.id); await sb.auth.admin.deleteUser(old.id); }
@@ -102,6 +105,7 @@ const ev = { callId: 'a1b2c3d4-0000-1111-2222-333344445555', title: 'Check-in ·
   eq('an ordinary Google event still blocks', busyFromIcs(ics('abc123@google.com'), from, to).busy.length, 1);
 
   // cleanup
+  for (const r of before) await sb.from('coach_calls').update({ google_synced_at: r.google_synced_at }).eq('id', r.id);
   await setCal(saved); await sb.from('coach_settings').update({ google_sync_last_error: null, google_sync_last_run_at: null }).eq('id', 1);
   await sb.from('coach_calls').delete().eq('client_id', cid); await sb.auth.admin.deleteUser(cid);
   console.log(fail ? `\n${fail} FAILED` : '\nall passed'); process.exit(fail ? 1 : 0);
