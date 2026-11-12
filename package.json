@@ -15,7 +15,6 @@
     "@zxing/browser": "^0.2.1",
     "next": "16.3.0",
     "node-ical": "^0.27.5",
-    "nodemailer": "^10.5.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^4.4.3"
@@ -23,7 +22,6 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

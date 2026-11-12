@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { json, requireCoach } from '@/lib/bookingServer';
-import { buildCoachBookingEmail, inviteFor } from '@/lib/bookingNotify';
+import { buildCoachBookingEmail } from '@/lib/bookingNotify';
 import { sendEmail } from '@/lib/email';
 
 export const runtime = 'nodejs';
@@ -17,10 +17,10 @@ export async function POST() {
   const to = process.env.BOOKING_NOTIFY_EMAIL || 'franvila2007@gmail.com';
   const start = new Date(Date.now() + 2 * 86400000);
   start.setMinutes(0, 0, 0);
-  const ev = { event: 'booked' as const, callId: `test-${Date.now()}`, clientName: 'Test Client', kind: 'check_in' as const, startsAt: start.toISOString() };
+  const ev = { event: 'booked' as const, clientName: 'Test Client', kind: 'check_in' as const, startsAt: start.toISOString() };
   const mail = buildCoachBookingEmail(ev);
   try {
-    await sendEmail({ from, to, replyTo: me?.email, subject: `[TEST] ${mail.subject}`, html: mail.html, text: mail.text, invite: inviteFor(ev, from) });
+    await sendEmail({ from, to, replyTo: me?.email, subject: `[TEST] ${mail.subject}`, html: mail.html, text: mail.text });
     return json({ ok: true, to });
   } catch {
     return json({ error: 'The test email couldn’t be sent — check the sender in Resend.' }, 502);
