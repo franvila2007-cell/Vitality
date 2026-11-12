@@ -15,7 +15,10 @@ import type { Targets } from './targets';
 export const MASTER_TEMPLATE_ID = 'g_k6cleceikwa2zzb';
 
 /** The template's cover heading — every plan keeps it word for word; the client's name goes only in the welcome line. */
-export const COVER_HEADING = 'VITALITY × IronBody Fit Personal Meal Plan';
+// The gym's name is always spelled "Iron BodyFit" in plans, whatever spelling
+// the template uses.
+export const BRAND = 'Iron BodyFit';
+export const COVER_HEADING = `VITALITY × ${BRAND} Personal Meal Plan`;
 
 export type GammaPlanInput = {
   fullName: string;
@@ -115,8 +118,8 @@ export function buildGammaPrompt(p: GammaPlanInput): { title: string; prompt: st
 
   const sections: string[] = [];
   sections.push(`## Card 1 — Cover (keep the layout, colours, logos and background image)
-Heading: exactly "${COVER_HEADING}" — the template's heading word for word, with its colours. Do not add the client's name or anything else to it.
-First paragraph: "Welcome to your personalised nutrition plan ${firstName}! Created by Vitality in partnership with IronBody Fit, this plan is built specifically for you, based on your individual measurements, goals, food preferences, health considerations, and lifestyle"
+Heading: exactly "${COVER_HEADING}", with the template's heading colours. Do not add the client's name or anything else to it.
+First paragraph: "Welcome to your personalised nutrition plan ${firstName}! Created by Vitality in partnership with ${BRAND}, this plan is built specifically for you, based on your individual measurements, goals, food preferences, health considerations, and lifestyle"
 Second paragraph: unchanged.
 Box "Your Goal": ${t.goalLabel}
 Box "Your Approach": Structured calorie targets, high protein, whole foods, and ${nWord} satisfying meals.`);
@@ -172,6 +175,7 @@ Keep everything word for word, except the "Weeks 3 to 4" step: "Keep the ${nWord
 STRICT RULES
 - Keep the template's design, theme, layout, colours, fonts, logos, branding, icons, buttons and card order exactly as they are.
 - The cover heading stays exactly "${COVER_HEADING}". The client's name appears only in the welcome sentence under it, never in the heading.
+- Always spell the gym's name exactly "${BRAND}". Wherever the template spells it another way (IronBody Fit, IronBodyFit, Ironbody Fit, Iron Body Fit…), write "${BRAND}" instead — this is the only change to the template's own wording.
 - Keep all wording exactly as the template unless it is written out below. Do not rephrase, shorten, summarise or add anything.
 - Copy every number exactly as written below. Do not recalculate, round or change any calories, grams or macros.
 - The plan has exactly ${n} meals: ${t.meals.map((m) => m.label).join(', ')}.${n === 2 ? ' Remove the template\'s breakfast card completely — no breakfast, optional breakfast or snack anywhere.' : ''}
@@ -181,13 +185,13 @@ STRICT RULES
 CARD BY CARD
 ${sections.join('\n\n')}`;
 
-  return { title: `${p.fullName} – Vitality x IronBody Fit Meal Plan`, prompt };
+  return { title: `${p.fullName} – Vitality x ${BRAND} Meal Plan`, prompt };
 }
 
 /** Checks the prompt says what the plan says — run before generating. */
 export function checkGammaPrompt(prompt: string, p: GammaPlanInput): string[] {
   const problems: string[] = [];
-  const must = [COVER_HEADING, p.firstName, String(p.targets.targetKcal), String(p.targets.maintenanceKcal), `${p.targets.protein}g`, `${p.targets.carbs}g`, `${p.targets.fat}g`, 'VITALITY', 'IronBody Fit'];
+  const must = [COVER_HEADING, p.firstName, String(p.targets.targetKcal), String(p.targets.maintenanceKcal), `${p.targets.protein}g`, `${p.targets.carbs}g`, `${p.targets.fat}g`, 'VITALITY', BRAND];
   for (const s of must) if (!prompt.includes(s)) problems.push(`Gamma prompt is missing "${s}".`);
   for (const r of p.recipes) {
     if (!prompt.includes(r.name)) problems.push(`Gamma prompt is missing the recipe "${r.name}".`);

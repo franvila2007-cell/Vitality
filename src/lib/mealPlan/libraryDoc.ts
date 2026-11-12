@@ -43,9 +43,9 @@ export function buildLibraryHtml(p: {
     return `<h2>${esc(m.label)} — about ${m.kcal} kcal</h2>${cards}`;
   }).join('');
 
-  return `<html><head><meta charset="utf-8"><title>${esc(p.fullName)} – IronBodyFit Meal Plan</title></head><body>
-<h1>${esc(p.fullName)} – Vitality × IronBody Fit Meal Plan</h1>
-<p><b>IronBodyFit:</b> ${esc(p.location ?? 'not asked on their form')}<br><b>Plan made:</b> ${esc(day)}<br><b>Gamma:</b> <a href="${GAMMA_URL_PLACEHOLDER}">${GAMMA_URL_PLACEHOLDER}</a></p>
+  return `<html><head><meta charset="utf-8"><title>${esc(p.fullName)} – Iron BodyFit Meal Plan</title></head><body>
+<h1>${esc(p.fullName)} – Vitality × Iron BodyFit Meal Plan</h1>
+<p><b>Iron BodyFit:</b> ${esc(p.location ?? 'not asked on their form')}<br><b>Plan made:</b> ${esc(day)}<br><b>Gamma:</b> <a href="${GAMMA_URL_PLACEHOLDER}">${GAMMA_URL_PLACEHOLDER}</a></p>
 <h2>Targets</h2>
 <p><b>Goal:</b> ${esc(t.goalLabel)}<br><b>Maintenance:</b> ${t.maintenanceKcal} kcal<br><b>Daily target:</b> ${t.targetKcal} kcal${t.deficitApplied ? ' (300 kcal below maintenance)' : ' (no deficit — see checks)'}<br><b>Protein / Carbs / Fat:</b> ${t.protein} g / ${t.carbs} g / ${t.fat} g<br><b>Meals:</b> ${t.meals.map((m) => `${esc(m.label)} ~${m.kcal} kcal`).join(' · ')}</p>
 ${p.exclusionNote ? `<p>${esc(p.exclusionNote)}</p>` : ''}

@@ -38,6 +38,21 @@ export type StageContext = { admin?: Admin; planId?: string; deadline?: number }
 
 const PHOTO_CONCURRENCY = 3;
 
+/**
+ * Every recipe card needs a photo. If a recipe still has none after all the
+ * searches (or its search errored), it shares the stock photo of another
+ * recipe in the plan — one with the same main protein when there is one.
+ */
+function borrowMissingPhotos(recipes: Recipe[], photos: Record<string, ChosenPhoto | null>): void {
+  const withPhoto = recipes.filter((r) => photos[r.name]);
+  if (!withPhoto.length) return;
+  recipes.forEach((r, i) => {
+    if (photos[r.name]) return;
+    const donor = withPhoto.find((d) => d.mainProteinId && d.mainProteinId === r.mainProteinId) ?? withPhoto[i % withPhoto.length];
+    photos[r.name] = photos[donor.name];
+  });
+}
+
 export type StageResult = {
   state: PlanState;
   next: Stage;
@@ -87,6 +102,7 @@ export async function runStage(stage: Stage, state: PlanState, answers: Answers,
         batch.forEach((r, n) => { photos[r.name] = found[n]; });
       }
       const done = state.recipes!.every((r) => r.name in photos);
+      if (done) borrowMissingPhotos(state.recipes!, photos);
       return { state: { ...state, photos, usage }, next: done ? 'checks' : 'photos' };
     }
     case 'checks': {

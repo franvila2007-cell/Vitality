@@ -45,7 +45,7 @@ function emailFor(row: { status: string; gamma_url: string | null; issues: unkno
   if (row.status === 'generated' && row.gamma_url) {
     const lines = [summary(state), note ?? '', ...(review.length ? ['', 'Please check before sending:', ...review.map((r) => `- ${r}`)] : ['', 'All checks passed.'])].filter((l, i) => l || i > 0);
     return {
-      subject: `New IronBody Fit meal plan: ${name}`,
+      subject: `New Iron BodyFit meal plan: ${name}`,
       text: `${name}\n${row.gamma_url}\n\n${lines.join('\n')}\n\nAdjust anything you like in Gamma, then send it to them.`,
       html: `<h2 style="margin:0 0 4px">${esc(name)}</h2><p style="margin:0 0 16px"><a href="${esc(row.gamma_url)}">${esc(row.gamma_url)}</a></p><p>${esc(summary(state))}${note ? `<br>${esc(note)}` : ''}</p>${review.length ? `<p><b>Please check before sending:</b></p><ul>${review.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : '<p>All checks passed.</p>'}<p>Adjust anything you like in Gamma, then send it to them.</p>`,
     };
@@ -90,7 +90,7 @@ export async function notifyPlans(admin: Admin, appUrl: string): Promise<number>
   const ready = parts.filter((p) => p.ready);
   const attention = parts.filter((p) => !p.ready);
   const subject = parts.length === 1 ? parts[0].subject
-    : [ready.length ? `New IronBody Fit meal plans: ${ready.map((p) => p.name).join(', ')}` : '', attention.length ? `${attention.length} need your attention` : ''].filter(Boolean).join(' · ');
+    : [ready.length ? `New Iron BodyFit meal plans: ${ready.map((p) => p.name).join(', ')}` : '', attention.length ? `${attention.length} need your attention` : ''].filter(Boolean).join(' · ');
   const hr = '<hr style="border:none;border-top:1px solid #ddd;margin:24px 0">';
   const html = parts.map((p) => p.html).join(hr);
   const text = parts.map((p) => p.text).join('\n\n────────────\n\n');

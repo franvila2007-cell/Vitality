@@ -21,7 +21,7 @@ export type Recipe = {
   fit: FitResult;
 };
 
-const SYSTEM = `You write recipes for Vitality × IronBody Fit personalised meal plans. The plan's philosophy: fresh whole foods — meat, poultry, fish, eggs and dairy where tolerated, with fruit, vegetables, potatoes, sweet potatoes and rice. Quality ingredients, sensible portions, nothing ultra-processed.
+const SYSTEM = `You write recipes for Vitality × Iron BodyFit personalised meal plans. The plan's philosophy: fresh whole foods — meat, poultry, fish, eggs and dairy where tolerated, with fruit, vegetables, potatoes, sweet potatoes and rice. Quality ingredients, sensible portions, nothing ultra-processed.
 
 Rules for every recipe:
 - Use ONLY ingredient ids from the client's allowed list. Anything not on the list is off-limits, including in sauces, garnishes and "optional" extras.
