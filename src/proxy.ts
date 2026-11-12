@@ -45,6 +45,8 @@ export async function proxy(request: NextRequest) {
     path === '/api/booking/reminders' ||
     // Google Calendar sync worker: called by the database every 5 min; takes no input, returns counts only.
     path === '/api/booking/google-sync' ||
+    // Micronutrient backfill worker: called by the database every 10 min; takes no input, returns counts only.
+    path === '/api/vitto/backfill' ||
     // Coach calendar feed (Google Calendar "From URL"): authenticated by the secret token in the path.
     path.startsWith('/api/calendar/') ||
     // Link-preview image: WhatsApp / Instagram fetch it signed out.

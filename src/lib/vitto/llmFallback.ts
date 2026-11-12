@@ -127,15 +127,22 @@ const INSIGHTS_SYSTEM_PROMPT = `You analyze food/drink log entries for a fitness
 
 Respond with ONLY a JSON object, no other text, in this exact shape:
 {"items": [{"quality_score": number, "fiber_g": number, "sugar_g": number, "sodium_mg": number, "calcium_mg": number, "iron_mg": number, "potassium_mg": number, "magnesium_mg": number, "zinc_mg": number, "vitamin_a_mcg": number, "vitamin_c_mg": number, "vitamin_d_mcg": number, "vitamin_e_mg": number, "vitamin_k_mcg": number, "vitamin_b6_mg": number, "vitamin_b12_mcg": number, "folate_mcg": number}, ...]}
-One object per input item, in the same order given.`;
+Each numbered line is ONE log entry, even if the line lists several foods or drinks: return exactly one object per numbered line, in the same order — for a line with several foods give the overall quality and the SUM of the micronutrients for the whole entry.`;
 
 export { MICRO_KEYS };
 
-export async function llmEstimateFoodInsights(items: { name: string; calories: number }[], apiKey: string): Promise<FoodInsight[] | null> {
-  if (items.length === 0) return null;
+/** Pasted/typed names can carry zero-width characters, line breaks and walls of text — tidy them before the AI sees them. */
+export const tidyFoodName = (s: string): string => s.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').replace(/\s+/g, ' ').trim().slice(0, 300) || 'food';
+
+/** The slice of the Anthropic client the rater needs (so tests can pass a fake). */
+export type InsightsClient = { messages: { create: (args: Anthropic.MessageCreateParamsNonStreaming) => Promise<Anthropic.Message> } };
+
+type Asked = { status: 'ok'; items: Record<string, unknown>[] } | { status: 'unusable' } | { status: 'error' };
+
+async function askInsights(client: InsightsClient, items: { name: string; calories: number }[]): Promise<Asked> {
+  let text: string;
   try {
-    const anthropic = new Anthropic({ apiKey });
-    const msg = await anthropic.messages.create({
+    const msg = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: Math.min(4000, 300 + items.length * 250),
       temperature: 0,
@@ -143,22 +150,61 @@ export async function llmEstimateFoodInsights(items: { name: string; calories: n
       messages: [{ role: 'user', content: items.map((it, i) => `${i + 1}. ${it.name} — ${Math.round(it.calories)} kcal`).join('\n') }],
     });
     const block = msg.content[0];
-    if (!block || block.type !== 'text') return null;
-    const parsed = parseJsonLoose(block.text) as { items?: unknown };
-    if (!Array.isArray(parsed.items) || parsed.items.length !== items.length) return null;
-
-    const clean = (v: unknown) => Math.max(0, Number(v) || 0);
-    const results: FoodInsight[] = parsed.items.map((raw) => {
-      const r = raw as Record<string, unknown>;
-      const insight = { quality_score: Math.max(0, Math.min(100, Math.round(Number(r.quality_score) || 0))) } as FoodInsight;
-      for (const key of MICRO_KEYS) insight[key] = clean(r[key]);
-      return insight;
-    });
-    return results;
+    if (!block || block.type !== 'text') return { status: 'unusable' };
+    text = block.text;
   } catch (err) {
-    console.error('llmEstimateFoodInsights failed', err);
-    return null; // graceful degradation — quality_score/micronutrients stay null, excluded from the rank average
+    console.error('llmEstimateFoodInsights request failed', err);
+    return { status: 'error' }; // the AI service itself failed — retrying right now won't help
   }
+  try {
+    const parsed = parseJsonLoose(text) as { items?: unknown };
+    if (!Array.isArray(parsed.items) || parsed.items.length === 0) return { status: 'unusable' };
+    return { status: 'ok', items: parsed.items as Record<string, unknown>[] };
+  } catch {
+    return { status: 'unusable' };
+  }
+}
+
+const clampMicro = (v: unknown) => Math.max(0, Number(v) || 0);
+
+function toInsight(raw: Record<string, unknown>): FoodInsight {
+  const insight = { quality_score: Math.max(0, Math.min(100, Math.round(Number(raw.quality_score) || 0))) } as FoodInsight;
+  for (const key of MICRO_KEYS) insight[key] = clampMicro(raw[key]);
+  return insight;
+}
+
+/** One entry that came back as several objects (a line listing several foods): average the quality, add up the micronutrients. */
+function combine(raws: Record<string, unknown>[]): FoodInsight {
+  const parts = raws.map(toInsight);
+  if (parts.length === 1) return parts[0];
+  const out = { quality_score: Math.round(parts.reduce((a, p) => a + p.quality_score, 0) / parts.length) } as FoodInsight;
+  for (const key of MICRO_KEYS) out[key] = Math.round(parts.reduce((a, p) => a + p[key], 0) * 10) / 10;
+  return out;
+}
+
+// Rates a batch of entries. If the AI answers with a different number of
+// results than entries sent (it tends to split a long "milk, eggs, muesli…"
+// line into several), the entries are rated one at a time instead — so one
+// awkward entry can never leave the rest of its batch blank. An entry that
+// still can't be rated comes back null (left blank, picked up again later).
+export async function llmEstimateFoodInsights(items: { name: string; calories: number }[], apiKey: string, client?: InsightsClient): Promise<(FoodInsight | null)[] | null> {
+  if (items.length === 0) return null;
+  const anthropic: InsightsClient = client ?? new Anthropic({ apiKey });
+  const named = items.map((it) => ({ name: tidyFoodName(it.name), calories: it.calories }));
+
+  const first = await askInsights(anthropic, named);
+  if (first.status === 'error') return null;
+  if (first.status === 'ok') {
+    if (first.items.length === named.length) return first.items.map(toInsight);
+    if (named.length === 1) return [combine(first.items)];
+  }
+  if (named.length === 1) return null;
+
+  const each = await Promise.all(named.map(async (n) => {
+    const r = await askInsights(anthropic, [n]);
+    return r.status === 'ok' ? combine(r.items) : null;
+  }));
+  return each.some(Boolean) ? each : null;
 }
 
 // Photo-based logging: a client photographs their plate instead of typing
