@@ -1,6 +1,10 @@
 // Checks the coach booking-alert email wording.  npx tsx scripts/booking-notify-test.ts
 import { buildCoachBookingEmail } from '../src/lib/bookingNotify';
 import { maltaToUtc } from '../src/lib/calls';
+import { inviteFor } from '../src/lib/bookingNotify';
+import { mailOptions } from '../src/lib/email';
+import nodemailer from 'nodemailer';
+import ical from 'node-ical';
 let fail = 0;
 const eq = (name: string, got: unknown, want: unknown) => { const ok = JSON.stringify(got) === JSON.stringify(want); if (!ok) fail++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `  got ${JSON.stringify(got)} want ${JSON.stringify(want)}`}`); };
 const a = maltaToUtc('2026-11-10', '10:00').toISOString(), b = maltaToUtc('2026-11-12', '14:00').toISOString();
@@ -15,4 +19,34 @@ eq('cancelled subject', cancelled.subject, '❌ Maria Borg cancelled their check
 eq('cancelled mentions slot free', cancelled.text.includes('The slot is free again.'), true);
 eq('name is escaped in html', buildCoachBookingEmail({ event: 'booked', clientName: '<b>X</b>', kind: 'info', startsAt: a }).html.includes('&lt;b&gt;X&lt;/b&gt;'), true);
 eq('blank name falls back', buildCoachBookingEmail({ event: 'booked', clientName: '  ', kind: 'info', startsAt: a }).subject.startsWith('📅 A client booked'), true);
-console.log(fail ? `\n${fail} FAILED` : '\nall passed'); process.exit(fail ? 1 : 0);
+// ── calendar invitation (must be an INLINE text/calendar part, which is what Gmail needs) ──
+const from = 'Francesco - Vitality <calls@vitalitymalta.com>';
+const inv = (event: 'booked' | 'moved' | 'cancelled') => inviteFor({ event, callId: 'call-123', clientName: 'Maria Borg', kind: 'check_in', startsAt: a }, from)!;
+const parse = (content: string) => Object.values(ical.sync.parseICS(content)).find((v) => v && v.type === 'VEVENT') as any;
+const booked1 = inv('booked'); const ev = parse(booked1.content);
+eq('invite method REQUEST in file', [booked1.method, booked1.content.includes('METHOD:REQUEST')], ['REQUEST', true]);
+eq('invite event title/uid', [ev.summary, ev.uid], ['Check-in · Maria Borg', 'call-123@vitalitymalta.com']);
+eq('invite is the right hour (10:00 Malta = 09:00Z, 60 min)', [ev.start.toISOString(), ev.end.toISOString()], ['2026-11-10T09:00:00.000Z', '2026-11-10T10:00:00.000Z']);
+eq('organizer is the sender, attendee is the coach', [String(ev.organizer?.val ?? ev.organizer).includes('calls@vitalitymalta.com'), String(ev.attendee?.val ?? ev.attendee).includes('franvila2007@gmail.com')], [true, true]);
+const cancel1 = inv('cancelled'); const cev = parse(cancel1.content);
+eq('cancel uses METHOD:CANCEL + STATUS:CANCELLED, same UID', [cancel1.method, cancel1.content.includes('METHOD:CANCEL'), cev.status, cev.uid], ['CANCEL', true, 'CANCELLED', 'call-123@vitalitymalta.com']);
+const seq = (x: string) => Number(/SEQUENCE:(\d+)/.exec(x)![1]);
+eq('a later update has a higher-or-equal SEQUENCE', seq(inv('moved').content) >= seq(booked1.content), true);
+eq('no callId → no invitation', inviteFor({ event: 'booked', clientName: 'x', kind: 'info', startsAt: a }, from), undefined);
+eq('ics lines fit 75 octets', booked1.content.split('\r\n').every((l: string) => new TextEncoder().encode(l).length <= 75), true);
+
+(async () => {
+  const mail = buildCoachBookingEmail({ event: 'booked', clientName: 'Maria Borg', kind: 'check_in', startsAt: a });
+  const info = await nodemailer.createTransport({ streamTransport: true, buffer: true, newline: 'unix' }).sendMail(mailOptions({ from, to: 'franvila2007@gmail.com', subject: mail.subject, html: mail.html, text: mail.text, invite: booked1 }));
+  const raw = (info as any).message.toString() as string;
+  eq('email is multipart/alternative (text, html AND calendar together)', /Content-Type: multipart\/alternative/.test(raw), true);
+  const calIdx = raw.search(/Content-Type: text\/calendar; charset=utf-8; method=REQUEST/i);
+  eq('calendar part has method=REQUEST in its Content-Type', calIdx > 0, true);
+  const alt = /Content-Type: multipart\/alternative;\s*boundary="([^"]+)"/.exec(raw);
+  const altStart = alt ? raw.indexOf(alt[0]) : -1;
+  const altEnd = alt ? raw.indexOf(`--${alt[1]}--`) : -1;
+  eq('the calendar part sits INSIDE the alternative block (not just an attachment)', calIdx > altStart && calIdx < altEnd, true);
+  eq('text/plain and text/html parts are also there', [/Content-Type: text\/plain/.test(raw), /Content-Type: text\/html/.test(raw)], [true, true]);
+  eq('From / To / Reply-To headers', [/From: .*calls@vitalitymalta.com/.test(raw), /To: franvila2007@gmail.com/.test(raw)], [true, true]);
+  console.log(fail ? `\n${fail} FAILED` : '\nall passed'); process.exit(fail ? 1 : 0);
+})();

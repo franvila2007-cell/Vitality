@@ -1,5 +1,5 @@
 import type { createAdminClient } from '@/lib/supabase/admin';
-import { CALL_MINUTES, KIND_META, callTitle, dayLabel, googleEventUrl, maltaParts } from '@/lib/calls';
+import { CALL_MINUTES, KIND_META, buildInviteIcs, callTitle, dayLabel, googleEventUrl, maltaParts } from '@/lib/calls';
 import { sendEmail } from '@/lib/email';
 import { APP_URL } from '@/lib/shareLinks';
 
@@ -14,6 +14,8 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 export type BookingEvent = {
   event: 'booked' | 'moved' | 'cancelled';
+  /** the coach_calls id — the calendar invitation is keyed on it, so a move/cancel updates the same Google event */
+  callId?: string;
   clientName: string;
   kind: 'check_in' | 'info';
   startsAt: string;
@@ -48,6 +50,7 @@ export function buildCoachBookingEmail(e: BookingEvent): { subject: string; html
 <h1 style="margin:0 0 14px;font-size:20px;line-height:1.3;">${esc(headline)}</h1>
 <div style="border-radius:12px;background:${e.event === 'cancelled' ? '#fdecec' : '#e8f7f3'};padding:14px 16px;margin:0 0 16px;font-size:15px;line-height:1.6;">${lines.map(esc).join('<br>')}<br><span style="color:#666;font-size:13px;">Malta time</span></div>
 <a href="${esc(link)}" style="display:inline-block;margin:0 8px 8px 0;padding:11px 18px;border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;background:#12a39a;color:#fff;">Open my calendar</a>${e.event !== 'cancelled' ? `<a href="${esc(googleEventUrl({ title: callTitle(e.kind, name), startsAt: e.startsAt, minutes: CALL_MINUTES, details: KIND_META[e.kind].long }))}" style="display:inline-block;margin:0 8px 8px 0;padding:11px 18px;border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;border:1px solid #d6d6d6;color:#333;">Add to Google Calendar</a>` : ''}
+<p style="margin:12px 0 0;font-size:12px;color:#777;">A calendar invitation is included, so this should appear in your Google Calendar automatically. If it doesn’t, use “Add to Google Calendar”.</p>
 
 </div></body></html>`;
   return { subject, html, text };
@@ -61,8 +64,22 @@ export async function notifyCoach(admin: Admin, e: BookingEvent, opts: { replyTo
     const mail = buildCoachBookingEmail(e);
     const from = process.env.RESEND_REMINDER_FROM;
     if (!process.env.RESEND_API_KEY || !from) { console.info('[booking-notify] not sent (no sender configured):', mail.subject); return; }
-    await sendEmail({ from, to: TO, replyTo: opts.replyTo, subject: mail.subject, html: mail.html, text: mail.text });
+    await sendEmail({ from, to: TO, replyTo: opts.replyTo, subject: mail.subject, html: mail.html, text: mail.text, invite: inviteFor(e, from) });
   } catch (err) {
     console.warn('[booking-notify] failed', err instanceof Error ? err.message : err);
   }
+}
+
+/** The calendar invitation (.ics) that puts the call on the coach's Google Calendar — and moves or removes it later. */
+export function inviteFor(e: BookingEvent, from: string): { method: 'REQUEST' | 'CANCEL'; content: string } | undefined {
+  if (!e.callId) return undefined;
+  const method = e.event === 'cancelled' ? 'CANCEL' : 'REQUEST';
+  const organizerEmail = /<([^>]+)>/.exec(from)?.[1] ?? from;
+  const name = e.clientName.trim() || 'A client';
+  const content = buildInviteIcs({
+    method, uid: `${e.callId}@vitalitymalta.com`, sequence: Math.floor(Date.now() / 1000),
+    title: callTitle(e.kind, name), description: `${KIND_META[e.kind].long}\nBooked by the client in the Vitality app.`,
+    startsAt: e.startsAt, minutes: CALL_MINUTES, organizerEmail, attendeeEmail: TO,
+  });
+  return { method, content };
 }
