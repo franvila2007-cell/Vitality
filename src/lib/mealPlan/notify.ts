@@ -34,7 +34,11 @@ function summary(state: PlanState): string {
   return `${t.meals.length} meals a day · ${t.targetKcal} kcal (maintenance ${t.maintenanceKcal}) · Protein ${t.protein} g · Carbs ${t.carbs} g · Fat ${t.fat} g`;
 }
 
-function emailFor(row: { status: string; gamma_url: string | null; issues: unknown; state: unknown; last_error: string | null; request_id: string }, name: string, appUrl: string) {
+const fmt = (n: number) => n.toLocaleString('en-GB');
+const creditsLine = (r: { gamma_credits_used: number | null; gamma_credits_left: number | null }) =>
+  r.gamma_credits_used == null ? '' : `Gamma credits used: ${fmt(r.gamma_credits_used)}${r.gamma_credits_left == null ? '' : ` (${fmt(r.gamma_credits_left)} left)`}`;
+
+function emailFor(row: { status: string; gamma_url: string | null; gamma_credits_used: number | null; gamma_credits_left: number | null; issues: unknown; state: unknown; last_error: string | null; request_id: string }, name: string, appUrl: string) {
   const state = row.state as PlanState;
   const issues = (row.issues ?? []) as Issue[];
   const review = issues.filter((i) => i.level === 'review').map((i) => i.message);
@@ -43,11 +47,12 @@ function emailFor(row: { status: string; gamma_url: string | null; issues: unkno
   const testPage = `${appUrl}/coach/meal-plans/test/${row.request_id}`;
 
   if (row.status === 'generated' && row.gamma_url) {
-    const lines = [summary(state), note ?? '', ...(review.length ? ['', 'Please check before sending:', ...review.map((r) => `- ${r}`)] : ['', 'All checks passed.'])].filter((l, i) => l || i > 0);
+    const credits = creditsLine(row);
+    const lines = [summary(state), note ?? '', credits, ...(review.length ? ['', 'Please check before sending:', ...review.map((r) => `- ${r}`)] : ['', 'All checks passed.'])].filter((l, i) => l || i > 0);
     return {
       subject: `New Iron BodyFit meal plan: ${name}`,
       text: `${name}\n${row.gamma_url}\n\n${lines.join('\n')}\n\nAdjust anything you like in Gamma, then send it to them.`,
-      html: `<h2 style="margin:0 0 4px">${esc(name)}</h2><p style="margin:0 0 16px"><a href="${esc(row.gamma_url)}">${esc(row.gamma_url)}</a></p><p>${esc(summary(state))}${note ? `<br>${esc(note)}` : ''}</p>${review.length ? `<p><b>Please check before sending:</b></p><ul>${review.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : '<p>All checks passed.</p>'}<p>Adjust anything you like in Gamma, then send it to them.</p>`,
+      html: `<h2 style="margin:0 0 4px">${esc(name)}</h2><p style="margin:0 0 16px"><a href="${esc(row.gamma_url)}">${esc(row.gamma_url)}</a></p><p>${esc(summary(state))}${note ? `<br>${esc(note)}` : ''}${credits ? `<br>${esc(credits)}` : ''}</p>${review.length ? `<p><b>Please check before sending:</b></p><ul>${review.map((r) => `<li>${esc(r)}</li>`).join('')}</ul>` : '<p>All checks passed.</p>'}<p>Adjust anything you like in Gamma, then send it to them.</p>`,
     };
   }
   const reasons = row.status === 'failed' ? [row.last_error ?? 'The build kept failing.'] : blockers.length ? blockers : review;
@@ -66,7 +71,7 @@ function emailFor(row: { status: string; gamma_url: string | null; issues: unkno
  */
 export async function notifyPlans(admin: Admin, appUrl: string): Promise<number> {
   const { data: rows } = await admin.from('meal_plans')
-    .select('id, request_id, status, gamma_url, issues, state, last_error')
+    .select('id, request_id, status, gamma_url, gamma_credits_used, gamma_credits_left, issues, state, last_error')
     .is('notified_at', null).in('status', ['generated', 'needs_review', 'failed'])
     .order('updated_at').limit(10);
   if (!rows?.length) return 0;
@@ -92,8 +97,12 @@ export async function notifyPlans(admin: Admin, appUrl: string): Promise<number>
   const subject = parts.length === 1 ? parts[0].subject
     : [ready.length ? `New Iron BodyFit meal plans: ${ready.map((p) => p.name).join(', ')}` : '', attention.length ? `${attention.length} need your attention` : ''].filter(Boolean).join(' · ');
   const hr = '<hr style="border:none;border-top:1px solid #ddd;margin:24px 0">';
-  const html = parts.map((p) => p.html).join(hr);
-  const text = parts.map((p) => p.text).join('\n\n────────────\n\n');
+  // Several plans in one email: the total credits at the top.
+  const used = claimed.filter((r) => r.gamma_credits_used != null);
+  const left = used.map((r) => r.gamma_credits_left).filter((n): n is number => n != null);
+  const total = used.length > 1 ? `Gamma credits used for these ${used.length} plans: ${fmt(used.reduce((s, r) => s + r.gamma_credits_used!, 0))}${left.length ? ` (${fmt(Math.min(...left))} left)` : ''}` : '';
+  const html = (total ? `<p><b>${esc(total)}</b></p>${hr}` : '') + parts.map((p) => p.html).join(hr);
+  const text = (total ? `${total}\n\n────────────\n\n` : '') + parts.map((p) => p.text).join('\n\n────────────\n\n');
 
   try {
     await sendCoachEmail(subject, html, text);

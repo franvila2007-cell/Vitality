@@ -111,7 +111,7 @@ export function validatePlan(plan: PlanForValidation): Issue[] {
 
   // ── Photos ─────────────────────────────────────────────────────────────
   if (plan.photos) {
-    for (const r of recipes) if (!plan.photos.get(r.name)) review(`No matching stock photo found for "${r.name}" — add one in Gamma.`);
+    for (const r of recipes) if (!plan.photos.get(r.name)) review(`"${r.name}": Gamma picked this photo (no stock match of ours) — check it shows the right dish and nothing they can't eat.`);
   }
 
   return issues;

@@ -52,11 +52,16 @@ export function recipeIngredientsLine(r: Recipe): string {
   return parts.join(', ');
 }
 
-function recipeCard(r: Recipe, photo: string | null, prefix = ''): string {
+/** Marks a recipe whose photo Gamma should find itself (our stock search had no match). */
+export const GAMMA_PHOTO = 'Image (find one in Gamma\'s stock photo library)';
+
+function recipeCard(r: Recipe, photo: string | null, avoid: string, prefix = ''): string {
   const d = r.fit.nutrition.display;
   return [
     `### ${prefix}${r.name}`,
-    photo ? `Image (use this exact photo for this recipe): ${photo}` : 'Image: leave this recipe without a photo.',
+    photo
+      ? `Image (use this exact photo for this recipe): ${photo}`
+      : `${GAMMA_PHOTO}: a free stock photo of "${r.photoQuery || r.name}" — a cooked, plated dish that looks like this recipe${avoid ? `, showing none of: ${avoid}` : ''}, with no text or watermarks. Not AI-generated.`,
     `${recipeIngredientsLine(r)}. ${r.method}`,
     `**${d.kcal} kcal · P: ${d.protein}g · C: ${d.carbs}g · F: ${d.fat}g**`,
   ].join('\n');
@@ -90,6 +95,7 @@ export function buildGammaPrompt(p: GammaPlanInput): { title: string; prompt: st
   const kcalOf = (slot: string) => t.meals.find((m) => m.slot === slot)?.kcal ?? 0;
   const bySlot = (slot: string) => recipes.filter((r) => r.slot === slot);
   const photo = (r: Recipe) => p.photos.get(r.name) ?? null;
+  const avoid = [...rules.excludedTags, ...rules.excludedTerms].join(', ');
 
   const MEAL_LINE: Record<string, string> = {
     breakfast: 'A satisfying morning meal',
@@ -139,19 +145,19 @@ ${t.meals.map((m) => `- ${m.label}: "~${m.kcal} calories · ${MEAL_LINE[m.slot]}
     sections.push(`## Card 4 — Breakfast Options — About ${kcalOf('breakfast')} kcal Each
 Intro: "Four breakfasts at around ${kcalOf('breakfast')} kcal each for ${firstName}. All ingredient quantities are raw grams, and nutrition values are estimates.${note}"
 Four recipe cards (same image-on-top layout as the template), replacing the template's breakfasts and their photos:
-${bySlot('breakfast').map((r) => recipeCard(r, photo(r))).join('\n\n')}`);
+${bySlot('breakfast').map((r) => recipeCard(r, photo(r), avoid)).join('\n\n')}`);
   }
 
   sections.push(`## Card — Meal Examples — Lunch
 Intro: "Lovely nutrient-dense lunches for ${firstName}, built around ${builtAround(bySlot('lunch'))}. Each option provides around ${kcalOf('lunch')} kcal. All ingredient quantities are raw grams; rice is weighed dry, and nutrition values are estimates.${n === 2 ? note : ''}"
 Keep the template's aside box word for word ("These are examples and ideas for fun, varied meals…").
 Four recipe cards, replacing the template's lunches and their photos:
-${bySlot('lunch').map((r) => recipeCard(r, photo(r))).join('\n\n')}`);
+${bySlot('lunch').map((r) => recipeCard(r, photo(r), avoid)).join('\n\n')}`);
 
   sections.push(`## Card — Meal Examples — Dinner (title this card "Meal Examples — Dinner")
 Intro: "Dinner options provide around ${kcalOf('dinner')} kcal. All quantities are raw grams; rice is weighed dry and fruit without peel or cores. Nutrition values are estimates."
 Four recipe cards, replacing the template's dinners and their photos:
-${bySlot('dinner').map((r) => recipeCard(r, photo(r), 'Dinner — ')).join('\n\n')}`);
+${bySlot('dinner').map((r) => recipeCard(r, photo(r), avoid, 'Dinner — ')).join('\n\n')}`);
 
   sections.push(`## Card — Your Dietary Notes
 Intro: "Build your ${nWord} meals around foods you enjoy, with plenty of protein,fruit and vegetables. Use these notes to keep everyday choices simple."
@@ -180,7 +186,7 @@ STRICT RULES
 - Copy every number exactly as written below. Do not recalculate, round or change any calories, grams or macros.
 - The plan has exactly ${n} meals: ${t.meals.map((m) => m.label).join(', ')}.${n === 2 ? ' Remove the template\'s breakfast card completely — no breakfast, optional breakfast or snack anywhere.' : ''}
 - Do not add any meal times or clock times anywhere.
-- Replace every recipe photo with the photo URL given for that recipe. Do not reuse the template's food photos and do not generate AI images.
+- Replace every recipe photo with the photo URL given for that recipe. Where a recipe says "${GAMMA_PHOTO}", search Gamma's free stock photos (Pexels/Unsplash) for that dish instead. Every recipe must end up with a photo. Do not reuse the template's food photos and never generate AI images.
 
 CARD BY CARD
 ${sections.join('\n\n')}`;
