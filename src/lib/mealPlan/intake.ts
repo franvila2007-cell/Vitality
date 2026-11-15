@@ -115,6 +115,7 @@ export async function readIntake(answers: Answers): Promise<Intake> {
     hungriest: str(answers, 'hungriest') || null,
     hasMedicalCondition: yes(answers, 'conditions'),
     takesMedication: yes(answers, 'medications'),
+    fatLossGoal: /lose fat|fat loss/i.test(str(answers, 'goal')),
   };
   if (mealsRaw === 1) flags.push({ code: 'meal_count', message: 'Asked for 1 meal a day — the plan uses 2 meals. Check with the client.' });
 

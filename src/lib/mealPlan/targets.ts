@@ -4,17 +4,19 @@
 // Rules (agreed with the coach, Oct 2026):
 //   BMR   Mifflin-St Jeor from age, sex, height, weight
 //   TDEE  BMR × activity multiplier from weekly exercise sessions
-//   Target = maintenance − 300 kcal, rounded to the nearest 50
+//   Target = maintenance − 400 kcal, rounded to the nearest 50 (coach, Nov 2026:
+//   400 rather than 300 so the deficit is real even if activity is overstated)
 //   Protein 0.7 g/lb, fat 0.5 g/lb, carbs = the remaining calories
-//   No deficit (target = maintenance) and a coach flag for underweight,
-//   under-18s and declared medical conditions.
+//   No deficit (target = maintenance) and a coach flag for underweight and
+//   under-18s. A declared medical condition is flagged for the coach, and only
+//   removes the deficit when the client's goal isn't fat loss.
 // The finished plan only shows maintenance and the target — never BMR,
 // TDEE, BMI, age, height or weight.
 
 export const CALC_VERSION = 'targets-v1';
 
 const LB_PER_KG = 2.20462;
-const DEFICIT = 300;
+export const DEFICIT = 400;
 
 export type Sex = 'Male' | 'Female';
 export type MealSlot = 'breakfast' | 'lunch' | 'dinner';
@@ -31,6 +33,8 @@ export type TargetsInput = {
   hungriest?: string | null;
   hasMedicalCondition: boolean;
   takesMedication: boolean;
+  /** The form's goal includes losing fat — they always get the deficit (except underweight / under 18) */
+  fatLossGoal?: boolean;
 };
 
 export type FlagCode =
@@ -117,7 +121,11 @@ export function calculateTargets(input: TargetsInput): Targets {
   if (input.sessionsPerWeek === null) flags.push({ code: 'activity_unknown', message: 'The form did not ask how often they exercise — calories assume lightly active (1–2 sessions a week). Check with the client.' });
   if (bmi < 18.5) flags.push({ code: 'underweight', message: 'Underweight for their height — no calorie deficit applied. Coach review needed.', noDeficit: true });
   if (age < 18) flags.push({ code: 'under_18', message: 'Under 18 — no calorie deficit applied. Coach review needed.', noDeficit: true });
-  if (input.hasMedicalCondition) flags.push({ code: 'medical_condition', message: 'Declared a medical condition that may affect their diet — no calorie deficit applied. Read their answer before sending.', noDeficit: true });
+  if (input.hasMedicalCondition) {
+    flags.push(input.fatLossGoal
+      ? { code: 'medical_condition', message: `Declared a medical condition that may affect their diet — the ${DEFICIT} kcal deficit is still applied because their goal is fat loss. Read their answer before sending.` }
+      : { code: 'medical_condition', message: 'Declared a medical condition that may affect their diet — no calorie deficit applied. Read their answer before sending.', noDeficit: true });
+  }
   if (input.takesMedication) flags.push({ code: 'medication', message: 'Takes medication — check their answer before sending.' });
 
   const maintenanceKcal = roundTo(tdee, 50);

@@ -9,7 +9,7 @@
 import type { FoodRules } from './intake';
 import { allowedIngredients } from './intake';
 import type { Recipe } from './recipes';
-import type { Targets } from './targets';
+import { DEFICIT, type Targets } from './targets';
 
 /** Master template: https://gamma.app/docs/Vitality-x-IronBody-Fit-Meal-Plan-ga6qb7jmek6n2ty */
 export const MASTER_TEMPLATE_ID = 'g_k6cleceikwa2zzb';
@@ -104,7 +104,7 @@ export function buildGammaPrompt(p: GammaPlanInput): { title: string; prompt: st
   };
 
   const targetsIntro = t.deficitApplied
-    ? `Your maintenance level is ${t.maintenanceKcal} calories. A daily target of ${t.targetKcal} calories creates a 300 calorie deficit for fat loss while supporting muscle with high protein. These macro targets total approximately ${t.targetKcal} calories.`
+    ? `Your maintenance level is ${t.maintenanceKcal} calories. A daily target of ${t.targetKcal} calories creates a ${DEFICIT} calorie deficit for fat loss while supporting muscle with high protein. These macro targets total approximately ${t.targetKcal} calories.`
     : `Your maintenance level is ${t.maintenanceKcal} calories. A daily target of ${t.targetKcal} calories supports muscle with high protein. These macro targets total approximately ${t.targetKcal} calories.`;
 
   // Template protein lists, falling back to egg, dairy and plant proteins for
@@ -134,7 +134,7 @@ Box "Your Approach": Structured calorie targets, high protein, whole foods, and 
 
   sections.push(`## Card 3 — Your Personal Calorie and Macro Targets
 Intro: "${targetsIntro}"
-Stat "${t.targetKcal}" — Daily Calories — "${t.deficitApplied ? 'Daily fat-loss target: 300 calories below maintenance.' : 'Your daily calorie target.'}"
+Stat "${t.targetKcal}" — Daily Calories — "${t.deficitApplied ? `Daily fat-loss target: ${DEFICIT} calories below maintenance.` : 'Your daily calorie target.'}"
 Stat "${t.protein}g" — Protein — "${t.protein}g daily to support muscle and keep meals satisfying."
 Stat "${t.carbs}g" — Carbohydrates — "${t.carbs}g daily to fuel training and daily activity."
 Stat "${t.fat}g" — Fat — "${t.fat}g daily from foods such as ${joinList(keepFoods([['eggs', ['eggs']], ['meat', ['chicken_breast', 'beef_mince_5']], ['avocado', ['avocado']], ['olive oil', ['olive_oil']]], allowed))}."

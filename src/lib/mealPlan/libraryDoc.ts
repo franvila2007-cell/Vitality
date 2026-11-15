@@ -6,7 +6,7 @@
 // swapped in by the database when the hourly task fetches the document
 // (list_meal_plans_for_library, migration 0024, which also names the Doc).
 import type { Recipe } from './recipes';
-import type { Targets } from './targets';
+import { DEFICIT, type Targets } from './targets';
 import type { Issue } from './validate';
 import { recipeIngredientsLine } from './gammaContent';
 
@@ -47,7 +47,7 @@ export function buildLibraryHtml(p: {
 <h1>${esc(p.fullName)} – Vitality × Iron BodyFit Meal Plan</h1>
 <p><b>Iron BodyFit:</b> ${esc(p.location ?? 'not asked on their form')}<br><b>Plan made:</b> ${esc(day)}<br><b>Gamma:</b> <a href="${GAMMA_URL_PLACEHOLDER}">${GAMMA_URL_PLACEHOLDER}</a></p>
 <h2>Targets</h2>
-<p><b>Goal:</b> ${esc(t.goalLabel)}<br><b>Maintenance:</b> ${t.maintenanceKcal} kcal<br><b>Daily target:</b> ${t.targetKcal} kcal${t.deficitApplied ? ' (300 kcal below maintenance)' : ' (no deficit — see checks)'}<br><b>Protein / Carbs / Fat:</b> ${t.protein} g / ${t.carbs} g / ${t.fat} g<br><b>Meals:</b> ${t.meals.map((m) => `${esc(m.label)} ~${m.kcal} kcal`).join(' · ')}</p>
+<p><b>Goal:</b> ${esc(t.goalLabel)}<br><b>Maintenance:</b> ${t.maintenanceKcal} kcal<br><b>Daily target:</b> ${t.targetKcal} kcal${t.deficitApplied ? ` (${DEFICIT} kcal below maintenance)` : ' (no deficit — see checks)'}<br><b>Protein / Carbs / Fat:</b> ${t.protein} g / ${t.carbs} g / ${t.fat} g<br><b>Meals:</b> ${t.meals.map((m) => `${esc(m.label)} ~${m.kcal} kcal`).join(' · ')}</p>
 ${p.exclusionNote ? `<p>${esc(p.exclusionNote)}</p>` : ''}
 ${meals}
 <h2>Checks for the coach</h2>

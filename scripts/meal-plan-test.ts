@@ -18,13 +18,13 @@ check('1–2 sessions → 1.375', activityFor(1).multiplier === 1.375 && activit
 check('3–5 sessions → 1.55', activityFor(3).multiplier === 1.55 && activityFor(5).multiplier === 1.55);
 check('6–7 sessions → 1.725', activityFor(6).multiplier === 1.725 && activityFor(7).multiplier === 1.725);
 
-// ── Standard male: 1880 × 1.55 = 2914 → 2900 maintenance, 2600 target ────
+// ── Standard male: 1880 × 1.55 = 2914 → 2900 maintenance, 2500 target ────
 const m = calculateTargets(base);
 check('maintenance 2900', m.maintenanceKcal === 2900, String(m.maintenanceKcal));
-check('target 2600 (300 below)', m.targetKcal === 2600 && m.deficitApplied);
+check('target 2500 (400 below)', m.targetKcal === 2500 && m.deficitApplied);
 check('protein 0.7 g/lb = 139 g', m.protein === 139, String(m.protein));
 check('fat 0.5 g/lb = 99 g', m.fat === 99, String(m.fat));
-check('carbs = remainder = 288 g', m.carbs === 288, String(m.carbs));
+check('carbs = remainder = 263 g', m.carbs === 263, String(m.carbs));
 check('macros add up to target ±10 kcal', Math.abs(m.working.macroKcal - m.targetKcal) <= 10, String(m.working.macroKcal));
 check('male goal label', m.goalLabel === 'Lose body fat and build muscle');
 check('no flags', m.flags.length === 0, JSON.stringify(m.flags));
@@ -36,9 +36,10 @@ check('dinner is the bigger meal by default', m.meals[1].kcal > m.meals[0].kcal)
 // ── Woman, sedentary: carbs come out low and get flagged, not changed ────
 const f = calculateTargets({ ...base, sex: 'Female', age: 35, heightCm: 165, weightKg: 60, sessionsPerWeek: 0, mealsPerDay: 3 });
 check('female maintenance 1550', f.maintenanceKcal === 1550, String(f.maintenanceKcal));
-check('female target 1250', f.targetKcal === 1250);
+check('female target 1150', f.targetKcal === 1150);
 check('female goal label', f.goalLabel === 'Lose fat and tone muscle');
-check('female carbs 71 g flagged low', f.carbs === 71 && f.flags.some((x) => x.code === 'low_carbs'), String(f.carbs));
+check('female carbs 46 g flagged low', f.carbs === 46 && f.flags.some((x) => x.code === 'low_carbs'), String(f.carbs));
+check('female 1150 kcal flagged very low', f.flags.some((x) => x.code === 'very_low_calories'));
 check('3 meals: breakfast, lunch, dinner', f.meals.map((x) => x.slot).join() === 'breakfast,lunch,dinner');
 
 // ── Safety: no deficit ───────────────────────────────────────────────────
@@ -47,7 +48,9 @@ check('underweight → no deficit', !uw.deficitApplied && uw.targetKcal === uw.m
 const minor = calculateTargets({ ...base, age: 16 });
 check('under 18 → no deficit', !minor.deficitApplied && minor.flags.some((x) => x.code === 'under_18'));
 const med = calculateTargets({ ...base, hasMedicalCondition: true });
-check('medical condition → no deficit', !med.deficitApplied && med.flags.some((x) => x.code === 'medical_condition'));
+check('medical condition (goal not fat loss) → no deficit', !med.deficitApplied && med.flags.some((x) => x.code === 'medical_condition'));
+const medFatLoss = calculateTargets({ ...base, hasMedicalCondition: true, fatLossGoal: true });
+check('medical condition + fat-loss goal → deficit kept, flagged', medFatLoss.deficitApplied && medFatLoss.targetKcal === medFatLoss.maintenanceKcal - 400 && medFatLoss.flags.some((x) => x.code === 'medical_condition'));
 const pills = calculateTargets({ ...base, takesMedication: true });
 check('medication only → deficit kept, flagged', pills.deficitApplied && pills.flags.some((x) => x.code === 'medication'));
 const unknown = calculateTargets({ ...base, sessionsPerWeek: null });
@@ -55,7 +58,7 @@ check('activity not asked → flagged, 1.375 used', unknown.working.multiplier =
 
 // ── Heavy client: 0.7/0.5 g/lb leaves too few carbs → flagged ────────────
 const heavy = calculateTargets({ ...base, weightKg: 130, age: 40, sessionsPerWeek: 0 });
-check('130 kg sedentary: target 2400', heavy.targetKcal === 2400, String(heavy.targetKcal));
+check('130 kg sedentary: target 2300', heavy.targetKcal === 2300, String(heavy.targetKcal));
 check('130 kg: low carbs flagged', heavy.carbs < 100 && heavy.flags.some((x) => x.code === 'low_carbs'), String(heavy.carbs));
 
 // ── Hungriest meal gets the bigger share ─────────────────────────────────
