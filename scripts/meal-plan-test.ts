@@ -4,6 +4,7 @@ import { recipeNutrition, fitPortions, INGREDIENT_BY_ID, KCAL_TOLERANCE } from '
 import { INGREDIENTS } from '../src/lib/mealPlan/ingredients.data';
 import { buildGammaPrompt, checkGammaPrompt, COVER_HEADING } from '../src/lib/mealPlan/gammaContent';
 import type { Recipe } from '../src/lib/mealPlan/recipes';
+import { validatePlan } from '../src/lib/mealPlan/validate';
 
 let fail = 0;
 function check(name: string, ok: boolean, extra = '') { if (!ok) fail++; console.log(`${ok ? 'ok  ' : 'FAIL'} ${name} ${extra}`); }
@@ -140,6 +141,8 @@ check('tolerance is ±7.5%', KCAL_TOLERANCE === 0.075);
   check('eggs-only: no meat in protein box', !/Box "Protein": "[^"]*(steak|mince|Chicken|Fish)/.test(prompt));
   check('eggs-only: food priorities not empty', !/Choose\s+with/.test(prompt));
   check('cover heading locked', prompt.includes(COVER_HEADING));
+  const targetBlockers = validatePlan(input).filter((i) => i.level === 'blocker' && /maintenance|Macros|rounded/.test(i.message));
+  check('validation accepts the current deficit', targetBlockers.length === 0, JSON.stringify(targetBlockers));
   check('eggs-only prompt passes pre-flight', checkGammaPrompt(prompt, input).length === 0, checkGammaPrompt(prompt, input).join('; '));
 }
 

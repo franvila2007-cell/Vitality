@@ -6,7 +6,7 @@
 import { allowedIngredients, type FoodRules } from './intake';
 import { INGREDIENT_BY_ID, recipeNutrition } from './nutrition';
 import { OPTIONS_PER_MEAL, type Recipe } from './recipes';
-import type { Targets } from './targets';
+import { DEFICIT, type Targets } from './targets';
 
 export type Issue = { level: 'blocker' | 'review'; message: string };
 
@@ -38,7 +38,7 @@ export function validatePlan(plan: PlanForValidation): Issue[] {
   // ── Targets ────────────────────────────────────────────────────────────
   const macroKcal = targets.protein * 4 + targets.carbs * 4 + targets.fat * 9;
   if (Math.abs(macroKcal - targets.targetKcal) > 20) blocker(`Macros add up to ${macroKcal} kcal, not ${targets.targetKcal} kcal.`);
-  if (targets.deficitApplied && targets.maintenanceKcal - targets.targetKcal !== 300) blocker('Target is not 300 kcal below maintenance.');
+  if (targets.deficitApplied && targets.maintenanceKcal - targets.targetKcal !== DEFICIT) blocker(`Target is not ${DEFICIT} kcal below maintenance.`);
   if (targets.targetKcal % 50 !== 0) blocker('Target calories are not rounded to the nearest 50.');
   if (targets.meals.reduce((s, m) => s + m.kcal, 0) !== targets.targetKcal) blocker('Meal calories do not add up to the daily target.');
   for (const f of targets.flags) review(f.message);
