@@ -16,16 +16,16 @@ check('BMR male 90kg 180cm 30y = 1880', bmrMifflin('Male', 30, 180, 90) === 1880
 check('BMR female 60kg 165cm 35y = 1295.25', bmrMifflin('Female', 35, 165, 60) === 1295.25);
 check('0 sessions → 1.2', activityFor(0).multiplier === 1.2);
 check('1–2 sessions → 1.375', activityFor(1).multiplier === 1.375 && activityFor(2).multiplier === 1.375);
-check('3–5 sessions → 1.55', activityFor(3).multiplier === 1.55 && activityFor(5).multiplier === 1.55);
-check('6–7 sessions → 1.725', activityFor(6).multiplier === 1.725 && activityFor(7).multiplier === 1.725);
+check('3–5 sessions → capped at 1.375', activityFor(3).multiplier === 1.375 && activityFor(5).multiplier === 1.375);
+check('6–7 sessions → capped at 1.375', activityFor(6).multiplier === 1.375 && activityFor(7).multiplier === 1.375);
 
-// ── Standard male: 1880 × 1.55 = 2914 → 2900 maintenance, 2500 target ────
+// ── Standard male: 1880 × 1.375 (capped) = 2585 → 2600 maintenance, 2200 target ────
 const m = calculateTargets(base);
-check('maintenance 2900', m.maintenanceKcal === 2900, String(m.maintenanceKcal));
-check('target 2500 (400 below)', m.targetKcal === 2500 && m.deficitApplied);
+check('maintenance 2600 (activity capped)', m.maintenanceKcal === 2600, String(m.maintenanceKcal));
+check('target 2200 (400 below)', m.targetKcal === 2200 && m.deficitApplied);
 check('protein 0.7 g/lb = 139 g', m.protein === 139, String(m.protein));
 check('fat 0.5 g/lb = 99 g', m.fat === 99, String(m.fat));
-check('carbs = remainder = 263 g', m.carbs === 263, String(m.carbs));
+check('carbs = remainder = 188 g', m.carbs === 188, String(m.carbs));
 check('macros add up to target ±10 kcal', Math.abs(m.working.macroKcal - m.targetKcal) <= 10, String(m.working.macroKcal));
 check('male goal label', m.goalLabel === 'Lose body fat and build muscle');
 check('no flags', m.flags.length === 0, JSON.stringify(m.flags));

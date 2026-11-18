@@ -172,7 +172,7 @@ Box "Carbohydrates": unchanged.
 Box "Vegetables and Fats": "${fatsBox}"`);
 
   sections.push(`## Card — Your Roadmap
-Keep everything word for word, except the "Weeks 3 to 4" step: "Keep the ${nWord} meals steady."`);
+Keep everything word for word, except: the "Weeks 3 to 4" step: "Keep the ${nWord} meals steady."; and the last step's heading "Month 4" becomes exactly "Month 4+" (its text unchanged).`);
 
   sections.push('## Card — You Have Everything You Need: keep exactly as the template, word for word, including both buttons and links.');
 

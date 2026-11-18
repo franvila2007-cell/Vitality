@@ -3,7 +3,7 @@
 //
 // Rules (agreed with the coach, Oct 2026):
 //   BMR   Mifflin-St Jeor from age, sex, height, weight
-//   TDEE  BMR × activity multiplier from weekly exercise sessions
+//   TDEE  BMR × activity: 0 sessions 1.2, otherwise 1.375 (capped, Nov 2026)
 //   Target = maintenance − 400 kcal, rounded to the nearest 50 (coach, Nov 2026:
 //   400 rather than 300 so the deficit is real even if activity is overstated)
 //   Protein 0.7 g/lb, fat 0.5 g/lb, carbs = the remaining calories
@@ -73,9 +73,9 @@ export function bmrMifflin(sex: Sex, age: number, heightCm: number, weightKg: nu
 export function activityFor(sessions: number | null): { multiplier: number; label: string } {
   if (sessions === null) return { multiplier: 1.375, label: 'Lightly active (assumed — not asked)' };
   if (sessions <= 0) return { multiplier: 1.2, label: 'Sedentary' };
-  if (sessions <= 2) return { multiplier: 1.375, label: 'Lightly active' };
-  if (sessions <= 5) return { multiplier: 1.55, label: 'Moderately active' };
-  return { multiplier: 1.725, label: 'Very active' };
+  // Capped at lightly active (coach, Nov 2026): people overstate their
+  // training, and 1.55/1.725 put fat-loss targets too high.
+  return { multiplier: 1.375, label: sessions <= 2 ? 'Lightly active' : 'Lightly active (capped — trains more often)' };
 }
 
 export function goalLabelFor(sex: Sex): string {
