@@ -99,6 +99,17 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
         ].filter(Boolean).join(' · ')}
       </p>
 
+      {source === 'ironbodyfit' && !error && <NotSentYet people={list.filter((p) => !isSent(p.forms)).map(({ number, forms }) => {
+        const planForm = forms.find((f) => planByRequest.get(f.id)?.gamma_url);
+        return {
+          number,
+          name: forms[0].full_name,
+          location: ibfLocation(forms[0].answers as Answers),
+          added: forms[forms.length - 1].created_at,
+          gammaUrl: planForm ? planByRequest.get(planForm.id)!.gamma_url : null,
+        };
+      })} />}
+
       {error && <p className="text-sm text-status-bad-text">Couldn&apos;t load requests: {error.message}</p>}
       {!error && list.length === 0 && <p className="text-sm text-neutral-400">{emptyText}</p>}
 
@@ -174,5 +185,47 @@ export default async function MealPlanInbox({ source, sections, title, emptyText
         })}
       </div>
     </div>
+  );
+}
+
+// Everyone whose plan hasn't gone out yet, at the top of the IronBodyFit list.
+// "Sent" is the request's "Plan sent" status: set by hand in the app, or by the
+// hourly routine when it finds the person's PDF in an email the coach sent.
+function NotSentYet({ people }: {
+  people: { number: number; name: string; location: 'Sliema' | 'Mriehel' | null; added: string; gammaUrl: string | null }[];
+}) {
+  const ready = people.filter((p) => p.gammaUrl);
+  const notMade = people.filter((p) => !p.gammaUrl);
+  const Group = ({ title, rows, tone }: { title: string; rows: typeof people; tone: string }) => rows.length === 0 ? null : (
+    <div>
+      <div className={`text-2xs font-semibold uppercase tracking-wide mb-1.5 ${tone}`}>{title} ({rows.length})</div>
+      <ul className="flex flex-col divide-y divide-border">
+        {rows.map((p) => (
+          <li key={p.number} className="flex items-center gap-3 py-1.5 text-sm">
+            <span className="w-7 shrink-0 text-2xs tabular-nums text-neutral-400">#{p.number}</span>
+            <span className="min-w-0 flex-1 truncate">{p.name}</span>
+            {p.location && <span className={`text-3xs font-medium uppercase tracking-wide rounded-full border px-2 py-0.5 shrink-0 ${LOCATION_BADGE[p.location]}`}>{p.location}</span>}
+            <span className="text-2xs text-neutral-400 shrink-0 w-24 text-right">{fmtDate(p.added)}</span>
+            {p.gammaUrl
+              ? <a href={p.gammaUrl} target="_blank" rel="noreferrer" className="text-2xs font-medium text-brand-dark hover:underline shrink-0 w-12 text-right">Open →</a>
+              : <span className="w-12 shrink-0" />}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+  return (
+    <section className="bg-surface border border-border rounded-xl px-4 py-4 mb-5">
+      <h2 className="text-sm font-semibold">Not sent yet ({people.length})</h2>
+      <p className="text-2xs text-neutral-400 mb-3">
+        Ticks off on its own within the hour once you email someone&apos;s PDF from your Gmail, or when you mark them &ldquo;Plan sent&rdquo; below.
+      </p>
+      {people.length === 0
+        ? <p className="text-sm text-status-good-text">Everyone&apos;s plan has been sent ✓</p>
+        : <div className="flex flex-col gap-4">
+            <Group title="Ready to send" rows={ready} tone="text-status-warn-text" />
+            <Group title="Not made yet" rows={notMade} tone="text-status-bad-text" />
+          </div>}
+    </section>
   );
 }
