@@ -1,6 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
 import MilestoneProtocol from '@/components/MilestoneProtocol';
 import WorkoutProgress from '@/components/WorkoutProgress';
+import AcademyCourses from '@/components/AcademyCourses';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { hasAcademyAccess } from '@/lib/academy';
 
 // Auth/role guard and <AppNav/> now live in (client)/layout.tsx — this
 // page still needs its own auth call for user.id, just not the redirects.
@@ -12,12 +15,19 @@ export default async function MilestonesPage() {
   // Server component: "now" per request is exactly what we want here.
   // eslint-disable-next-line react-hooks/purity
   const nowMs = Date.now();
-  const { data: cp } = await supabase.from('client_profiles').select('*').eq('user_id', user.id).maybeSingle();
+  const [{ data: cp }, academy, { data: progress }] = await Promise.all([
+    supabase.from('client_profiles').select('*').eq('user_id', user.id).maybeSingle(),
+    // Vitality Academy courses — 1-1 coaching clients only.
+    hasAcademyAccess(createAdminClient(), user.id),
+    supabase.from('academy_progress').select('course_number').eq('client_id', user.id),
+  ]);
+  const academySection = academy ? <AcademyCourses userId={user.id} initialDone={(progress || []).map((p) => p.course_number)} /> : null;
 
   if (!cp) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4 page-fade-in">
         <div className="bg-surface border border-border rounded-2xl p-4 text-sm text-neutral-400">Your coach hasn&rsquo;t set up your program yet.</div>
+        {academySection}
         <WorkoutProgress />
       </div>
     );
@@ -26,6 +36,8 @@ export default async function MilestonesPage() {
   return (
     <div className="max-w-2xl mx-auto px-4 py-5 flex flex-col gap-4 page-fade-in">
       <MilestoneProtocol cp={cp} nowMs={nowMs} />
+
+      {academySection}
 
       <WorkoutProgress />
     </div>

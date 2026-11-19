@@ -92,6 +92,11 @@ export type Database = {
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
     Tables: {
+      academy_progress: Table<
+        { client_id: string; course_number: number; completed_at: string },
+        { client_id: string; course_number: number; completed_at?: string },
+        { client_id?: string; course_number?: number; completed_at?: string }
+      >;
       profiles: Table<
         { id: string; role: 'coach' | 'client'; full_name: string; email: string; created_at: string; archived_at: string | null },
         { id: string; role?: 'coach' | 'client'; full_name?: string; email: string; created_at?: string; archived_at?: string | null },
