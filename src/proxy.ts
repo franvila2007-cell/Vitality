@@ -50,7 +50,7 @@ export async function proxy(request: NextRequest) {
     // Coach calendar feed (Google Calendar "From URL"): authenticated by the secret token in the path.
     path.startsWith('/api/calendar/') ||
     // Link-preview image: WhatsApp / Instagram fetch it signed out.
-    path === '/opengraph-image'
+    path.startsWith('/opengraph-image') || path.startsWith('/twitter-image')
   ) return response;
 
   const { data: { user } } = await supabase.auth.getUser();
