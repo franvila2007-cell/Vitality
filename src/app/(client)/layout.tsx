@@ -4,8 +4,8 @@ import AppNav from '@/components/AppNav';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { bookingAccess } from '@/lib/bookingAccess';
 
-// Persistent shell for the 4 client-facing tabs (Today/Nutrition/Progress/
-// Milestones) — previously each page.tsx rendered its own <AppNav/> plus
+// Persistent shell for the client-facing tabs (Today/Habits/Nutrition/Progress/
+// Training) — previously each page.tsx rendered its own <AppNav/> plus
 // the same auth-guard boilerplate, so the header was unmounted and
 // rebuilt from scratch on every single tab switch. One shell here means
 // AppNav survives navigation between these routes.

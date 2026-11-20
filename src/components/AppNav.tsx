@@ -12,7 +12,7 @@ const TABS = [
   { href: '/habits', label: 'Habits' },
   { href: '/nutrition', label: 'Nutrition' },
   { href: '/progress', label: 'Progress' },
-  { href: '/milestones', label: 'Milestones' },
+  { href: '/training', label: 'Training' },
 ];
 
 export default function AppNav({ showCalls = false }: { showCalls?: boolean }) {

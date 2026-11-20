@@ -13,7 +13,7 @@ export default function CoachViewTabs({ clientId }: { clientId: string }) {
     { href: `${base}/habits`, label: 'Habits' },
     { href: `${base}/nutrition`, label: 'Nutrition' },
     { href: `${base}/progress`, label: 'Progress' },
-    { href: `${base}/milestones`, label: 'Milestones' },
+    { href: `${base}/training`, label: 'Training' },
   ];
   return (
     <div className="max-w-2xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto">

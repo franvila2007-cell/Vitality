@@ -92,6 +92,11 @@ export type Database = {
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
     Tables: {
+      training_sessions: Table<
+        { id: string; user_id: string; date: string; kind: string; title: string | null; duration_min: number | null; distance_km: number | null; effort: number | null; notes: string | null; created_at: string },
+        { id?: string; user_id: string; date: string; kind: string; title?: string | null; duration_min?: number | null; distance_km?: number | null; effort?: number | null; notes?: string | null; created_at?: string },
+        { id?: string; user_id?: string; date?: string; kind?: string; title?: string | null; duration_min?: number | null; distance_km?: number | null; effort?: number | null; notes?: string | null; created_at?: string }
+      >;
       vitality_badges: Table<
         { user_id: string; badge: string; earned_at: string },
         { user_id: string; badge: string; earned_at?: string },
