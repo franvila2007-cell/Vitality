@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import TargetsEditor from '@/components/coach/TargetsEditor';
 import RankOverride from '@/components/coach/RankOverride';
+import BadgeShelf from '@/components/BadgeShelf';
 import CoachNoteEditor from '@/components/coach/CoachNoteEditor';
 import DailyMessageEditor from '@/components/coach/DailyMessageEditor';
 import HabitHistory from '@/components/coach/HabitHistory';
@@ -229,6 +230,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         {rankBreakdown && latestDate && (
           <RankOverride userId={id} date={latestDate} breakdown={rankBreakdown} initialOverride={currentOverride} />
         )}
+
+        <BadgeShelf userId={id} title="Their badges" />
 
         {latestDate && (mealsByDate.get(latestDate)?.length ?? 0) > 0 && (
           <details className="bg-surface border border-border rounded-2xl p-4 group">

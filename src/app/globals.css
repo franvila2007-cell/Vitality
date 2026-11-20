@@ -40,6 +40,22 @@
   --rank-bronze-bg: #ffedd5;
   --rank-bronze-text: #c2410c;
 
+  /* Vitality tiers (Flat → Spark → Charged → Vital) — the client-facing
+     names for the daily rank. Vital is the brand teal with gold trim. */
+  --tier-flat: #b4b2a9;
+  --tier-flat-bg: #f1efe8;
+  --tier-flat-text: #5f5e5a;
+  --tier-spark: #ef9f27;
+  --tier-spark-bg: #faeeda;
+  --tier-spark-text: #854f0b;
+  --tier-charged: #5fd4cf;
+  --tier-charged-bg: #e1f8f6;
+  --tier-charged-text: #0b5f5e;
+  --tier-vital: #0fa8a6;
+  --tier-vital-bg: #0b5f5e;
+  --tier-vital-text: #ffffff;
+  --tier-vital-trim: #fbbf24;
+
   /* Macro bar / calorie-ring colors — consumed via inline style (they scale
      a conic-gradient / are passed as a `color` prop), not Tailwind classes,
      so these stay plain vars rather than @theme entries. Protein was a raw
@@ -82,6 +98,20 @@
   --color-rank-bronze: var(--rank-bronze);
   --color-rank-bronze-bg: var(--rank-bronze-bg);
   --color-rank-bronze-text: var(--rank-bronze-text);
+
+  --color-tier-flat: var(--tier-flat);
+  --color-tier-flat-bg: var(--tier-flat-bg);
+  --color-tier-flat-text: var(--tier-flat-text);
+  --color-tier-spark: var(--tier-spark);
+  --color-tier-spark-bg: var(--tier-spark-bg);
+  --color-tier-spark-text: var(--tier-spark-text);
+  --color-tier-charged: var(--tier-charged);
+  --color-tier-charged-bg: var(--tier-charged-bg);
+  --color-tier-charged-text: var(--tier-charged-text);
+  --color-tier-vital: var(--tier-vital);
+  --color-tier-vital-bg: var(--tier-vital-bg);
+  --color-tier-vital-text: var(--tier-vital-text);
+  --color-tier-vital-trim: var(--tier-vital-trim);
 
   /* Sub-text-xs caption sizes — collapses four arbitrary bracket values
      (text-[9px]/[10px]/[11px]/[13px]) scattered across the app into two
@@ -316,3 +346,14 @@ a, button, input {
 .challenge-range.is-unset::-moz-range-progress { background: transparent; }
 .challenge-range.is-unset::-webkit-slider-thumb { border-color: #B8C2CF; }
 .challenge-range.is-unset::-moz-range-thumb { border-color: #B8C2CF; }
+
+/* Badge unlock celebration: Vitto drops in and settles. */
+@keyframes badge-unlock {
+  0% { transform: scale(0.3) rotate(-12deg); opacity: 0; }
+  60% { transform: scale(1.12) rotate(4deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); }
+}
+@keyframes vitto-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}

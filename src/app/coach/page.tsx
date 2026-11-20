@@ -162,8 +162,8 @@ export default async function CoachPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap pl-[22px]">
-                <span className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${RANK_META.gold.className}`} title={`${weeklyGolds} gold ${weeklyGolds === 1 ? 'day' : 'days'} in the last 7 days`}>
-                  🥇 {weeklyGolds}/7 this week
+                <span className={`flex-shrink-0 text-xs font-medium border rounded-full px-2 py-1 ${RANK_META.gold.className}`} title={`${weeklyGolds} Vital ${weeklyGolds === 1 ? 'day' : 'days'} in the last 7 days`}>
+                  {RANK_META.gold.emoji} {weeklyGolds}/7 Vital
                 </span>
                 {habitsToday.total > 0 && (
                   <span

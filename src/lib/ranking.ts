@@ -15,11 +15,40 @@ export type Rank = 'gold' | 'silver' | 'bronze';
 // is a solid fill for the compact week-history squares — both now come from
 // the same --rank-gold/silver/bronze tokens (globals.css) instead of three
 // independent, mismatched palettes across ranking.ts and two week-pip sites.
+//
+// Clients see these as Vitality tiers: gold = Vital, silver = Charged,
+// bronze = Spark (the stored keys stay gold/silver/bronze so coach overrides
+// and history keep working). A bronze day scoring under FLAT_BELOW shows as a
+// fourth tier, Flat, so a poor day reads as one.
 export const RANK_META: Record<Rank, { label: string; emoji: string; className: string; pipClassName: string }> = {
-  gold: { label: 'Gold', emoji: '🥇', className: 'bg-rank-gold-bg text-rank-gold-text border-rank-gold', pipClassName: 'bg-rank-gold' },
-  silver: { label: 'Silver', emoji: '🥈', className: 'bg-rank-silver-bg text-rank-silver-text border-rank-silver', pipClassName: 'bg-rank-silver' },
-  bronze: { label: 'Bronze', emoji: '🥉', className: 'bg-rank-bronze-bg text-rank-bronze-text border-rank-bronze', pipClassName: 'bg-rank-bronze' },
+  gold: { label: 'Vital', emoji: '💠', className: 'bg-tier-vital-bg text-tier-vital-text border-tier-vital-trim', pipClassName: 'bg-tier-vital ring-1 ring-tier-vital-trim' },
+  silver: { label: 'Charged', emoji: '🔋', className: 'bg-tier-charged-bg text-tier-charged-text border-tier-charged', pipClassName: 'bg-tier-charged' },
+  bronze: { label: 'Spark', emoji: '⚡', className: 'bg-tier-spark-bg text-tier-spark-text border-tier-spark', pipClassName: 'bg-tier-spark' },
 };
+
+export type Tier = 'flat' | 'spark' | 'charged' | 'vital';
+export const FLAT_BELOW = 40;
+export const TIER_ORDER: Tier[] = ['flat', 'spark', 'charged', 'vital'];
+/** Score each tier starts at (Vital = the gold threshold). */
+export const TIER_MIN: Record<Tier, number> = { flat: 0, spark: FLAT_BELOW, charged: 65, vital: 85 };
+
+export const TIER_META: Record<Tier, {
+  label: string; vitto: string; tagline: string;
+  /** Medallion ring + light fill around Vitto. */
+  ring: string; pip: string; text: string; pill: string;
+}> = {
+  flat: { label: 'Flat', vitto: '/vitto/flat.webp', tagline: 'Running on empty — recharge today', ring: 'border-tier-flat bg-tier-flat-bg', pip: 'bg-tier-flat', text: 'text-tier-flat-text', pill: 'bg-tier-flat-bg text-tier-flat-text border-tier-flat' },
+  spark: { label: 'Spark', vitto: '/vitto/spark.webp', tagline: 'You showed up — keep it going', ring: 'border-tier-spark bg-tier-spark-bg', pip: 'bg-tier-spark', text: 'text-tier-spark-text', pill: RANK_META.bronze.className },
+  charged: { label: 'Charged', vitto: '/vitto/charged.webp', tagline: 'Solid day — Vital is close', ring: 'border-tier-charged bg-tier-charged-bg', pip: 'bg-tier-charged', text: 'text-tier-charged-text', pill: RANK_META.silver.className },
+  vital: { label: 'Vital', vitto: '/vitto/vital.webp', tagline: 'You nailed it today', ring: 'border-tier-vital-trim bg-tier-charged-bg', pip: 'bg-tier-vital ring-1 ring-tier-vital-trim', text: 'text-tier-vital', pill: RANK_META.gold.className },
+};
+
+/** The tier a day shows as. A coach override wins (bronze → Spark, never Flat). */
+export function tierOf(rank: Rank, score: number | null, overridden = false): Tier {
+  if (rank === 'gold') return 'vital';
+  if (rank === 'silver') return 'charged';
+  return !overridden && score !== null && score < FLAT_BELOW ? 'flat' : 'spark';
+}
 
 export type RankMealInput = { calories: number; protein_g: number; carbs_g: number; fat_g: number; quality_score: number | null };
 export type RankTargetsInput = { calories: number; protein_g: number; carbs_g: number; fat_g: number };
@@ -30,6 +59,7 @@ export type RankBreakdown = {
   qualityPct: number | null;
   score: number;
   rank: Rank;
+  tier: Tier;
 };
 
 function closeness(actual: number, target: number): number {
@@ -69,5 +99,5 @@ export function computeDayRank(inputs: {
   const score = components.length > 0 ? components.reduce((a, v) => a + v, 0) / components.length : 0;
   const rank: Rank = score >= 85 ? 'gold' : score >= 65 ? 'silver' : 'bronze';
 
-  return { habitsPct, macroPct, qualityPct, score, rank };
+  return { habitsPct, macroPct, qualityPct, score, rank, tier: tierOf(rank, score) };
 }

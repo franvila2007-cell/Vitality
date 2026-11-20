@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { localDateStr, addDays } from '@/lib/date';
 import TodaySkeleton from '@/components/skeletons/TodaySkeleton';
 import GoldStreakMeter from '@/components/GoldStreakMeter';
-import { computeDayRank, RANK_META, type Rank } from '@/lib/ranking';
+import { computeDayRank, tierOf, TIER_META, type Rank, type Tier } from '@/lib/ranking';
 import { computeMicroTotals, MICRONUTRIENT_KEYS, type MicronutrientKey } from '@/lib/micronutrients';
 import MicronutrientPanel from '@/components/MicronutrientPanel';
 import VittoRecommends from '@/components/VittoRecommends';
@@ -59,7 +59,7 @@ export default function TodayClient() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [doneHabitIds, setDoneHabitIds] = useState<Set<string>>(new Set());
   const [streak, setStreak] = useState(0);
-  const [weekHistory, setWeekHistory] = useState<{ date: string; rank: Rank | null }[]>([]);
+  const [weekHistory, setWeekHistory] = useState<{ date: string; tier: Tier | null }[]>([]);
   const [rankOverride, setRankOverride] = useState<Rank | null>(null);
   const [coachNote, setCoachNote] = useState('');
   const [dayMessage, setDayMessage] = useState('');
@@ -124,15 +124,16 @@ export default function TodayClient() {
     const weekDoneByDate = completionsByDate(weekCompletionsRes.data || []);
     const weekOverrideByDate = new Map((weekOverridesRes.data || []).map((r) => [r.date, r.rank]));
 
-    const week: { date: string; rank: Rank | null }[] = [];
+    const week: { date: string; tier: Tier | null }[] = [];
     for (let i = 6; i >= 0; i--) {
       const d = addDays(today, -i);
       const dayMeals = weekMealsByDate.get(d) || [];
       const hasData = dayMeals.length > 0 || weekDoneByDate.has(d) || weekOverrideByDate.has(d);
-      if (!hasData) { week.push({ date: d, rank: null }); continue; }
+      if (!hasData) { week.push({ date: d, tier: null }); continue; }
       const day = habitDay(habitList, weekDoneByDate, d);
-      const rank = weekOverrideByDate.get(d) ?? computeDayRank({ habitsTotal: day.total, habitsDone: day.done, meals: dayMeals, targets: tgt }).rank;
-      week.push({ date: d, rank });
+      const override = weekOverrideByDate.get(d);
+      const tier = override ? tierOf(override, null, true) : computeDayRank({ habitsTotal: day.total, habitsDone: day.done, meals: dayMeals, targets: tgt }).tier;
+      week.push({ date: d, tier });
     }
     setWeekHistory(week);
   }, [supabase, today]);
@@ -556,12 +557,12 @@ export default function TodayClient() {
     }
     return null;
   })();
-  const rank = rankOverride ?? computeDayRank({
+  const todayTier: Tier = rankOverride ? tierOf(rankOverride, null, true) : computeDayRank({
     habitsTotal: dueToday.length,
     habitsDone: doneTodayCount,
     meals: meals.map((m) => ({ calories: m.calories, protein_g: m.protein_g, carbs_g: m.carbs_g, fat_g: m.fat_g, quality_score: m.quality_score })),
     targets,
-  }).rank;
+  }).tier;
 
   if (loading) return <TodaySkeleton />;
 
@@ -574,8 +575,8 @@ export default function TodayClient() {
 
         <div className="relative flex items-start justify-between mb-1">
           <p className="text-xs text-white/70">{greeting} {greetingEmoji}</p>
-          <span className="text-xs font-medium rounded-full px-2.5 py-1 border border-white/20 bg-white/10 flex items-center gap-1" title={rankOverride ? 'Confirmed by your coach' : "Auto — your coach confirms your final rank at day's end"}>
-            {RANK_META[rank].emoji} {RANK_META[rank].label}
+          <span className="text-xs font-medium rounded-full px-2.5 py-1 border border-white/20 bg-white/10 flex items-center gap-1" title={rankOverride ? 'Confirmed by your coach' : "Auto — your coach confirms your final tier at day's end"}>
+            <Image src={TIER_META[todayTier].vitto} alt="" width={18} height={18} className="object-contain" /> {TIER_META[todayTier].label}
             {!rankOverride && <span className="text-white/60 font-normal">· auto</span>}
           </span>
         </div>
@@ -599,7 +600,7 @@ export default function TodayClient() {
         <div className="relative border-t border-white/15 pt-3">
           <p className="text-3xs uppercase text-white/50 mb-1.5">This week</p>
           <div className="flex gap-1.5">
-            {weekHistory.map(({ date, rank }) => {
+            {weekHistory.map(({ date, tier }) => {
               const [y, m, d] = date.split('-').map(Number);
               const label = new Date(y, m - 1, d).toLocaleDateString('en', { weekday: 'narrow' });
               const isToday = date === today;
@@ -608,14 +609,14 @@ export default function TodayClient() {
               // bronze use distinct saturated fills that read against the
               // teal card; a day with no data yet stays translucent (or
               // outlined, if it's today and just hasn't happened yet).
-              const rankBg = rank ? RANK_META[rank].pipClassName : null;
+              const rankBg = tier ? TIER_META[tier].pip : null;
               return (
                 <div key={date} className="flex-1 flex flex-col items-center gap-1">
                   <div
                     className={`w-full aspect-square rounded-lg ${
                       rankBg ? `${rankBg} ${isToday ? 'ring-2 ring-white/70' : ''}` : isToday ? 'border border-white/40' : 'bg-white/10'
                     }`}
-                    title={rank ? RANK_META[rank].label : isToday ? "Today — not ranked yet" : 'No data'}
+                    title={tier ? TIER_META[tier].label : isToday ? "Today — not ranked yet" : 'No data'}
                   />
                   <span className={`text-3xs ${isToday ? 'text-white' : 'text-white/40'}`}>{label}</span>
                 </div>
@@ -624,6 +625,16 @@ export default function TodayClient() {
           </div>
         </div>
       </div>
+
+      {/* Today's Vitality tier — the hero */}
+      <GoldStreakMeter
+        meals={meals}
+        habitsTotal={dueToday.length}
+        habitsDone={doneTodayCount}
+        habits={habits}
+        targets={targets}
+        rankOverride={rankOverride}
+      />
 
       {/* Next call reminder / book-your-calls nudge */}
       <CallsCard />
@@ -663,7 +674,7 @@ export default function TodayClient() {
               </button>
             ))}
           </div>
-          <p className="text-2xs text-neutral-400 mt-2.5">Tap to tick it off — hitting your habits pushes today towards gold.</p>
+          <p className="text-2xs text-neutral-400 mt-2.5">Tap to tick it off — hitting your habits pushes today towards Vital.</p>
         </div>
       )}
 
@@ -674,15 +685,6 @@ export default function TodayClient() {
           <p className="text-sm text-brand-dark leading-relaxed whitespace-pre-line">{dayMessage}</p>
         </div>
       )}
-
-      <GoldStreakMeter
-        meals={meals}
-        habitsTotal={dueToday.length}
-        habitsDone={doneTodayCount}
-        habits={habits}
-        targets={targets}
-        rankOverride={rankOverride}
-      />
 
       {/* Vitto chat */}
       {/* min-w-0: without it, a flex-column child sizes to its widest

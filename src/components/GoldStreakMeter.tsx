@@ -1,41 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Image from 'next/image';
 import { createClient } from '@/lib/supabase/client';
 import { localDateStr, addDays } from '@/lib/date';
-import { computeDayRank, type Rank, type RankMealInput, type RankTargetsInput } from '@/lib/ranking';
+import { computeDayRank, tierOf, TIER_META, TIER_MIN, TIER_ORDER, type Rank, type RankMealInput, type RankTargetsInput, type Tier } from '@/lib/ranking';
 import { completionsByDate, habitDay, type HabitSchedule } from '@/lib/habits';
+import { BADGES, VITAL_WEEK_DAYS, type BadgeKey } from '@/lib/vitalityBadges';
 
-const GOLD_SCORE = 85; // computeDayRank's gold threshold — the bar fills toward this
-const WINDOW_DAYS = 60; // how far back to walk before giving up on an unbroken streak
-
-// Same "hotter as it fills" idea as a real fire: each step swaps in a warmer
-// gradient and glow as today's day gets closer to gold, then the bar turns
-// gold itself the moment the day tips over.
-const TIERS = [
-  { min: 0, barClass: 'bg-neutral-300', glowClass: '' },
-  { min: 15, barClass: 'bg-gradient-to-r from-amber-300 to-amber-400', glowClass: '' },
-  { min: 40, barClass: 'bg-gradient-to-r from-amber-400 via-orange-400 to-orange-500', glowClass: 'shadow-[0_0_10px_rgba(251,146,60,0.55)]' },
-  { min: 70, barClass: 'bg-gradient-to-r from-orange-500 via-red-500 to-red-600', glowClass: 'shadow-[0_0_14px_rgba(239,68,68,0.6)]' },
-  { min: 100, barClass: 'bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400', glowClass: 'shadow-[0_0_18px_rgba(251,191,36,0.85)]' },
-] as const;
-
-function tierFor(pct: number) {
-  let t: (typeof TIERS)[number] = TIERS[0];
-  for (const tier of TIERS) if (pct >= tier.min) t = tier;
-  return t;
-}
-
-// A couple of embers drifting off the bar once it's running hot.
-const EMBERS = [
-  { left: '22%', delay: '0s', duration: '1.6s' },
-  { left: '58%', delay: '0.5s', duration: '1.9s' },
-  { left: '80%', delay: '1s', duration: '1.5s' },
-];
+const WINDOW_DAYS = 70; // enough history for the 60-day badge
 
 type Props = {
   meals: RankMealInput[];
-  /** Today's due habits / ticked — drives the live bar. */
+  /** Today's due habits / ticked — drives the live tier. */
   habitsTotal: number;
   habitsDone: number;
   /** Every habit with its schedule, for judging past days. */
@@ -45,26 +22,40 @@ type Props = {
   rankOverride: Rank | null;
 };
 
-// Fed live from the Today page: every logged meal or ticked habit changes the
-// props, so the bar moves the instant it happens. Only the unbroken run of
-// gold days *before* today is fetched (once) — today's own progress never
-// waits on a round trip.
+type History = {
+  /** Vital days in a row before today. */
+  priorStreak: number;
+  /** Vital days this week (Mon–yesterday). */
+  weekVitalBefore: number;
+  /** Last week's tier counts — shown as a recap on Mondays. */
+  lastWeek: Record<Tier, number> | null;
+  earned: Set<BadgeKey>;
+};
+
+// The Today hero: today's Vitality tier live (Flat → Spark → Charged → Vital)
+// with Vitto in that tier's pose, the bar to the next tier, the Vital streak,
+// this week's progress towards a Vital week, and streak badges that unlock with
+// a celebration. Fed live from the Today page props; only past days are fetched.
 export default function GoldStreakMeter({ meals, habitsTotal, habitsDone, habits, targets, rankOverride }: Props) {
   const [supabase] = useState(() => createClient());
-  const [priorStreak, setPriorStreak] = useState<number | null>(null);
+  const [history, setHistory] = useState<History | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [celebrate, setCelebrate] = useState<BadgeKey | null>(null);
 
-  const loadPrior = useCallback(async () => {
+  const loadHistory = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setPriorStreak(0); return; }
+    if (!user) { setHistory({ priorStreak: 0, weekVitalBefore: 0, lastWeek: null, earned: new Set() }); return; }
+    setUserId(user.id);
 
     const today = localDateStr();
     const yesterday = addDays(today, -1);
     const windowStart = addDays(today, -WINDOW_DAYS);
 
-    const [mealsRes, completionsRes, overridesRes] = await Promise.all([
+    const [mealsRes, completionsRes, overridesRes, badgesRes] = await Promise.all([
       supabase.from('food_log_entries').select('date, calories, protein_g, carbs_g, fat_g, quality_score').eq('user_id', user.id).gte('date', windowStart).lte('date', yesterday),
       supabase.from('habit_completions').select('habit_id, date').eq('user_id', user.id).eq('completed', true).gte('date', windowStart).lte('date', yesterday),
       supabase.from('rank_overrides').select('date, rank').eq('user_id', user.id).gte('date', windowStart).lte('date', yesterday),
+      supabase.from('vitality_badges').select('badge').eq('user_id', user.id),
     ]);
 
     const mealsByDate = new Map<string, RankMealInput[]>();
@@ -76,125 +67,178 @@ export default function GoldStreakMeter({ meals, habitsTotal, habitsDone, habits
     const doneByDate = completionsByDate(completionsRes.data || []);
     const overrideByDate = new Map((overridesRes.data || []).map((r) => [r.date, r.rank]));
 
-    let s = 0;
-    let cursor = yesterday;
-    while (cursor >= windowStart) {
-      const dayMeals = mealsByDate.get(cursor) || [];
-      const hasData = dayMeals.length > 0 || doneByDate.has(cursor) || overrideByDate.has(cursor);
-      if (!hasData) break;
-      const day = habitDay(habits, doneByDate, cursor);
-      const rank = overrideByDate.get(cursor) ?? computeDayRank({ habitsTotal: day.total, habitsDone: day.done, meals: dayMeals, targets }).rank;
-      if (rank !== 'gold') break;
-      s++;
-      cursor = addDays(cursor, -1);
+    // A day with nothing logged has no tier (it breaks a streak, counts as nothing).
+    const tierOn = (d: string): Tier | null => {
+      const dayMeals = mealsByDate.get(d) || [];
+      if (!(dayMeals.length > 0 || doneByDate.has(d) || overrideByDate.has(d))) return null;
+      const override = overrideByDate.get(d);
+      if (override) return tierOf(override, null, true);
+      const day = habitDay(habits, doneByDate, d);
+      return computeDayRank({ habitsTotal: day.total, habitsDone: day.done, meals: dayMeals, targets }).tier;
+    };
+
+    let priorStreak = 0;
+    for (let d = yesterday; d >= windowStart && tierOn(d) === 'vital'; d = addDays(d, -1)) priorStreak++;
+
+    // Weeks start on Monday.
+    const [y, m, dd] = today.split('-').map(Number);
+    const dow = (new Date(y, m - 1, dd).getDay() + 6) % 7; // 0 = Monday
+    const monday = addDays(today, -dow);
+    let weekVitalBefore = 0;
+    for (let d = monday; d < today; d = addDays(d, 1)) if (tierOn(d) === 'vital') weekVitalBefore++;
+
+    let lastWeek: Record<Tier, number> | null = null;
+    if (dow === 0) {
+      lastWeek = { flat: 0, spark: 0, charged: 0, vital: 0 };
+      let any = false;
+      for (let i = 7; i >= 1; i--) { const t = tierOn(addDays(today, -i)); if (t) { lastWeek[t]++; any = true; } }
+      if (!any) lastWeek = null;
     }
-    setPriorStreak(s);
+
+    setHistory({ priorStreak, weekVitalBefore, lastWeek, earned: new Set((badgesRes.data || []).map((b) => b.badge as BadgeKey)) });
     // habits/targets only matter for judging past days; they're stable after load
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
-  useEffect(() => { loadPrior(); }, [loadPrior]);
+  useEffect(() => { loadHistory(); }, [loadHistory]);
 
-  // ── today, computed straight from props ──
+  // ── today, straight from props ──
   const breakdown = computeDayRank({ habitsTotal, habitsDone, meals, targets });
-  const todayGold = (rankOverride ?? breakdown.rank) === 'gold';
-  const pct = todayGold ? 100 : Math.min(99, Math.round((breakdown.score / GOLD_SCORE) * 100));
+  const tier: Tier = rankOverride ? tierOf(rankOverride, null, true) : breakdown.tier;
+  const todayVital = tier === 'vital';
+  const streak = (history?.priorStreak ?? 0) + (todayVital ? 1 : 0);
 
-  // Derived-state pattern: notice the % change during render (no effect, no
-  // ref) so the "+N%" chip and bump replay on exactly the render that moved it.
-  const [prevPct, setPrevPct] = useState(pct);
-  const [gain, setGain] = useState<{ n: number; id: number } | null>(null);
-  if (pct !== prevPct) {
-    setPrevPct(pct);
-    if (pct > prevPct) setGain({ n: pct - prevPct, id: (gain?.id ?? 0) + 1 });
+  // Unlock any streak badge the current streak has reached for the first time
+  // (derived-state pattern: noticed during render, saved by the effect below).
+  const [toSave, setToSave] = useState<BadgeKey[]>([]);
+  if (history && userId) {
+    const newly = BADGES.filter((b) => streak >= b.days && !history.earned.has(b.key));
+    if (newly.length > 0) {
+      const earned = new Set(history.earned);
+      for (const b of newly) earned.add(b.key);
+      setHistory({ ...history, earned });
+      setCelebrate(newly[newly.length - 1].key);
+      setToSave([...toSave, ...newly.map((b) => b.key)]);
+    }
   }
   useEffect(() => {
-    if (!gain) return;
-    const t = setTimeout(() => setGain(null), 1500);
-    return () => clearTimeout(t);
-  }, [gain]);
+    if (!userId || toSave.length === 0) return;
+    supabase.from('vitality_badges')
+      .upsert(toSave.map((badge) => ({ user_id: userId, badge })), { onConflict: 'user_id,badge', ignoreDuplicates: true })
+      .then(() => setToSave([]));
+  }, [toSave, userId, supabase]);
 
-  if (priorStreak === null) {
-    return <div className="rounded-card bg-neutral-100 h-[104px] animate-pulse" />;
-  }
+  if (!history) return <div className="rounded-2xl bg-neutral-100 h-[188px] animate-pulse" />;
 
-  const streak = priorStreak + (todayGold ? 1 : 0);
-  const tier = tierFor(pct);
-  const barPct = pct === 0 ? 0 : Math.max(6, pct);
-  const hot = pct >= 70 && !todayGold;
+  const meta = TIER_META[tier];
+  const next = TIER_ORDER[TIER_ORDER.indexOf(tier) + 1] as Tier | undefined;
+  const score = Math.round(breakdown.score);
+  const barPct = next
+    ? Math.max(4, Math.min(99, Math.round(((breakdown.score - TIER_MIN[tier]) / (TIER_MIN[next] - TIER_MIN[tier])) * 100)))
+    : 100;
+  const weekVital = history.weekVitalBefore + (todayVital ? 1 : 0);
+  const nextBadge = BADGES.find((b) => !history.earned.has(b.key));
 
   return (
-    <div className={`bg-surface border rounded-2xl p-4 transition-colors ${todayGold ? 'border-rank-gold' : 'border-border'} ${gain && todayGold ? 'animate-[gold-pop_0.5s_ease-out]' : ''}`}>
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium">
-          Gold streak{streak > 0 && <span className="text-neutral-400 font-normal"> ({streak} day{streak === 1 ? '' : 's'})</span>}
-        </p>
-        <span className="text-sm font-semibold flex items-center gap-1">
-          <span className={streak > 0 ? 'animate-[flame-flicker_1.4s_ease-in-out_infinite]' : 'opacity-30'}>🔥</span>
-          {streak}
-        </span>
-      </div>
-
-      <div className="relative">
-        <div className="relative h-3 rounded-full bg-neutral-100 overflow-hidden">
-          <div
-            key={gain?.id ?? 0}
-            className={`relative h-full rounded-full transition-[width] duration-700 ease-out bg-[length:200%_100%] origin-left ${tier.barClass} ${tier.glowClass} ${pct > 0 ? 'animate-[flame-shimmer_2.5s_ease-in-out_infinite]' : ''} ${gain ? 'animate-[meter-bump_0.6s_ease-out]' : ''}`}
-            style={{ width: `${barPct}%` }}
-          />
-          {todayGold && (
-            <span className="absolute inset-y-0 left-0 w-1/4 bg-gradient-to-r from-transparent via-white/70 to-transparent pointer-events-none animate-[gold-sweep_2.8s_ease-in-out_infinite]" />
-          )}
-          {hot && EMBERS.map((e, i) => (
-            <span
-              key={i}
-              className="absolute bottom-0.5 text-[8px] pointer-events-none animate-[ember-rise_1.8s_ease-in-out_infinite]"
-              style={{ left: e.left, animationDelay: e.delay, animationDuration: e.duration }}
-            >
-              🔥
-            </span>
-          ))}
+    <>
+      <div className={`relative overflow-hidden rounded-2xl p-4 border-2 ${todayVital ? 'bg-tier-vital-bg border-tier-vital-trim text-white' : 'bg-surface border-border'}`}>
+        <div className="flex items-center gap-4">
+          <div className={`relative h-24 w-24 shrink-0 rounded-full border-4 ${meta.ring} overflow-hidden`}>
+            <Image src={meta.vitto} alt={`Vitto — ${meta.label}`} fill sizes="96px" className="object-contain p-1 animate-[vitto-bob_2.6s_ease-in-out_infinite]" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className={`text-3xs uppercase tracking-wide ${todayVital ? 'text-white/60' : 'text-neutral-400'}`}>
+              Today so far{rankOverride ? ' · confirmed by your coach' : ''}
+            </p>
+            <p className={`text-2xl font-semibold leading-tight ${todayVital ? 'text-white' : meta.text}`}>{meta.label}</p>
+            <p className={`text-xs ${todayVital ? 'text-white/80' : 'text-neutral-500'}`}>{meta.tagline}</p>
+            <p className={`mt-1 text-xs font-medium flex items-center gap-1 ${todayVital ? 'text-tier-vital-trim' : 'text-neutral-700'}`}>
+              <span className={streak > 0 ? 'animate-[flame-flicker_1.4s_ease-in-out_infinite]' : 'opacity-30'}>🔥</span>
+              {streak} Vital day{streak === 1 ? '' : 's'} in a row
+            </p>
+          </div>
         </div>
-        {gain && (
-          <span
-            key={gain.id}
-            className="absolute -top-5 text-2xs font-semibold text-orange-500 pointer-events-none animate-[chip-rise_1.4s_ease-out_forwards]"
-            style={{ left: `clamp(0%, calc(${barPct}% - 14px), 88%)` }}
-          >
-            +{gain.n}%
-          </span>
+
+        {next && (
+          <div className="mt-3">
+            <div className="flex justify-between text-2xs mb-1">
+              <span className={todayVital ? 'text-white/70' : 'text-neutral-500'}>Score {score}</span>
+              <span className={`font-medium ${TIER_META[next].text}`}>{TIER_MIN[next]} → {TIER_META[next].label}</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-neutral-100 overflow-hidden">
+              <div className={`h-full rounded-full transition-[width] duration-700 ease-out ${TIER_META[next].pip}`} style={{ width: `${barPct}%` }} />
+            </div>
+          </div>
+        )}
+
+        <p className={`mt-2 text-2xs ${todayVital ? 'text-white/85' : 'text-neutral-600'}`}>
+          {todayVital
+            ? <>Vital locked in for today.{nextBadge ? ` ${Math.max(0, nextBadge.days - streak)} more to unlock “${nextBadge.name}”.` : ' Every badge earned — legend.'}</>
+            : <>Next: {nextStep(breakdown, habitsTotal, habitsDone, meals.length, next ? TIER_META[next].label : 'Vital')}</>}
+        </p>
+
+        {/* Vital week: 5 of 7 days Vital, Monday to Sunday */}
+        <div className={`mt-3 pt-3 border-t ${todayVital ? 'border-white/15' : 'border-border'} flex items-center gap-3`}>
+          <div className="relative h-10 w-10 shrink-0">
+            <Image src="/vitto/vital-week.webp" alt="" fill sizes="40px" className={`object-contain ${weekVital >= VITAL_WEEK_DAYS ? '' : 'grayscale opacity-50'}`} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className={`text-xs font-medium ${todayVital ? 'text-white' : 'text-neutral-800'}`}>
+              {weekVital >= VITAL_WEEK_DAYS ? 'Vital week earned 👑' : `Vital week: ${weekVital} of ${VITAL_WEEK_DAYS} Vital days`}
+            </p>
+            <div className="mt-1 flex gap-1">
+              {Array.from({ length: VITAL_WEEK_DAYS }, (_, i) => (
+                <span key={i} className={`h-1.5 flex-1 rounded-full ${i < weekVital ? 'bg-tier-vital-trim' : todayVital ? 'bg-white/20' : 'bg-neutral-200'}`} />
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {history.lastWeek && (
+          <p className={`mt-2 text-2xs ${todayVital ? 'text-white/70' : 'text-neutral-500'}`}>
+            Last week: {history.lastWeek.vital} Vital · {history.lastWeek.charged} Charged · {history.lastWeek.spark} Spark{history.lastWeek.flat ? ` · ${history.lastWeek.flat} Flat` : ''}
+          </p>
         )}
       </div>
 
-      <p className="text-2xs text-neutral-500 mt-2">
-        {todayGold ? (
-          <>🥇 <span className="font-medium text-rank-gold-text">Gold locked in for today</span> — your streak is {streak} day{streak === 1 ? '' : 's'}.</>
-        ) : (
-          <>
-            <span className="font-medium text-neutral-700">{pct}% of the way to today&rsquo;s gold</span>
-            {' · '}{nextStep(breakdown, habitsTotal, habitsDone, meals.length, priorStreak)}
-          </>
-        )}
-      </p>
+      {celebrate && <BadgeCelebration badge={celebrate} onClose={() => setCelebrate(null)} />}
+    </>
+  );
+}
+
+function BadgeCelebration({ badge, onClose }: { badge: BadgeKey; onClose: () => void }) {
+  const b = BADGES.find((x) => x.key === badge)!;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" onClick={onClose} role="dialog" aria-modal="true" aria-label={`Badge unlocked: ${b.name}`}>
+      <div className="w-full max-w-xs rounded-3xl bg-surface p-6 text-center shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <p className="text-3xs uppercase tracking-wide text-neutral-400">Badge unlocked</p>
+        <div className={`relative mx-auto my-4 h-40 w-40 rounded-full border-4 ${b.frame} animate-[badge-unlock_0.7s_ease-out]`}>
+          <Image src={b.vitto} alt={`Vitto — ${b.name}`} fill sizes="160px" className="object-contain p-3" />
+          <span className={`absolute -bottom-2 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-sm font-bold ${b.number}`}>{b.days}</span>
+        </div>
+        <p className="text-xl font-semibold text-brand-dark">{b.name}</p>
+        <p className="text-sm text-neutral-500 mt-1">{b.days} Vital days in a row. Vitto&rsquo;s proud of you.</p>
+        <button onClick={onClose} className="mt-5 w-full rounded-full bg-brand py-2.5 text-sm font-medium text-white">Keep going</button>
+      </div>
     </div>
   );
 }
 
-// One concrete nudge: whichever ingredient of the day's score is holding it back.
-function nextStep(b: ReturnType<typeof computeDayRank>, habitsTotal: number, habitsDone: number, mealCount: number, priorStreak: number): string {
+// One concrete nudge: whichever part of the day's score is holding it back.
+function nextStep(b: ReturnType<typeof computeDayRank>, habitsTotal: number, habitsDone: number, mealCount: number, nextLabel: string): string {
   const parts: { key: 'habits' | 'macros' | 'quality'; pct: number }[] = [];
   if (b.habitsPct != null) parts.push({ key: 'habits', pct: b.habitsPct });
   if (b.macroPct != null) parts.push({ key: 'macros', pct: b.macroPct });
   if (b.qualityPct != null) parts.push({ key: 'quality', pct: b.qualityPct });
   const weakest = parts.sort((a, c) => a.pct - c.pct)[0];
-  const keep = priorStreak > 0 ? ` to keep your ${priorStreak}-day streak going` : '';
+  const to = ` to reach ${nextLabel}.`;
 
-  if (mealCount === 0 && (!weakest || weakest.key !== 'habits')) return `log your first meal${keep}.`;
-  if (!weakest) return `log a meal or tick a habit${keep}.`;
+  if (mealCount === 0 && (!weakest || weakest.key !== 'habits')) return `log your first meal${to}`;
+  if (!weakest) return `log a meal or tick a habit${to}`;
   if (weakest.key === 'habits') {
     const left = habitsTotal - habitsDone;
-    return `${left} habit${left === 1 ? '' : 's'} left to tick${keep}.`;
+    return `tick ${left} more habit${left === 1 ? '' : 's'}${to}`;
   }
-  if (weakest.key === 'macros') return `get your macros closer to target${keep}.`;
-  return `pick higher-quality foods${keep}.`;
+  if (weakest.key === 'macros') return `get your macros closer to target${to}`;
+  return `pick higher-quality foods${to}`;
 }

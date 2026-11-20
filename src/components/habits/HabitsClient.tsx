@@ -185,7 +185,7 @@ export default function HabitsClient() {
         <div className="relative flex items-start justify-between gap-3">
           <div>
             <p className="text-xs text-white/70">Your habits</p>
-            <p className="text-2xl font-medium mt-0.5">Plan it. Tick it. Go gold.</p>
+            <p className="text-2xl font-medium mt-0.5">Plan it. Tick it. Go Vital.</p>
           </div>
           <button onClick={() => openNew()} className="flex-shrink-0 rounded-full bg-white text-brand-dark text-sm font-semibold px-4 py-2 transition-transform active:scale-95">+ Add</button>
         </div>
@@ -319,7 +319,7 @@ export default function HabitsClient() {
                 className="w-full rounded-2xl border border-border px-4 h-12 text-base outline-none focus:border-brand mb-3"
               />
             )}
-            <p className="text-2xs text-neutral-400 mb-4">It&rsquo;ll show up on your Today screen on those days, and ticking it off counts towards your daily rank.</p>
+            <p className="text-2xs text-neutral-400 mb-4">It&rsquo;ll show up on your Today screen on those days, and ticking it off counts towards your daily tier.</p>
 
             {error && <p className="text-sm text-red-600 mb-3">{error}</p>}
             <div className="flex gap-2">
