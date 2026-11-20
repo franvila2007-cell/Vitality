@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import AppNav from '@/components/AppNav';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { bookingAccess } from '@/lib/bookingAccess';
+import { hasAcademyAccess } from '@/lib/academy';
 
 // Persistent shell for the client-facing tabs (Today/Habits/Nutrition/Progress/
 // Training) — previously each page.tsx rendered its own <AppNav/> plus
@@ -18,11 +19,14 @@ export default async function ClientLayout({ children }: { children: React.React
   if (profile?.role === 'coach') redirect('/coach');
 
   // The Calls tab (booking) is only for 1-1 coaching clients.
-  const showCalls = (await bookingAccess(createAdminClient(), user.id)).allowed;
+  // The Academy tab: also 1-1 coaching clients only.
+  const admin = createAdminClient();
+  const [booking, showAcademy] = await Promise.all([bookingAccess(admin, user.id), hasAcademyAccess(admin, user.id)]);
+  const showCalls = booking.allowed;
 
   return (
     <div className="min-h-screen">
-      <AppNav showCalls={showCalls} />
+      <AppNav showCalls={showCalls} showAcademy={showAcademy} />
       {children}
     </div>
   );

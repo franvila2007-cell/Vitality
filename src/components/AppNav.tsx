@@ -8,6 +8,7 @@ import PrefetchOnIntentLink from '@/components/PrefetchOnIntentLink';
 
 const TABS = [
   { href: '/', label: 'Today' },
+  { href: '/academy', label: 'Academy' },
   { href: '/calls', label: 'Calls' },
   { href: '/habits', label: 'Habits' },
   { href: '/nutrition', label: 'Nutrition' },
@@ -15,7 +16,7 @@ const TABS = [
   { href: '/training', label: 'Training' },
 ];
 
-export default function AppNav({ showCalls = false }: { showCalls?: boolean }) {
+export default function AppNav({ showCalls = false, showAcademy = false }: { showCalls?: boolean; showAcademy?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -42,7 +43,7 @@ export default function AppNav({ showCalls = false }: { showCalls?: boolean }) {
           page view, not just the one being shown, so this only prefetches
           the tab actually being touched/hovered. */}
       <div className="max-w-2xl mx-auto px-4 pb-3 flex gap-2 overflow-x-auto">
-        {TABS.filter((t) => t.href !== '/calls' || showCalls).map((t) => (
+        {TABS.filter((t) => (t.href !== '/calls' || showCalls) && (t.href !== '/academy' || showAcademy)).map((t) => (
           <PrefetchOnIntentLink
             key={t.href}
             href={t.href}

@@ -10,6 +10,7 @@ export default function CoachViewTabs({ clientId }: { clientId: string }) {
   const base = `/coach/clients/${clientId}/view`;
   const tabs = [
     { href: base, label: 'Today' },
+    { href: `${base}/academy`, label: 'Academy' },
     { href: `${base}/habits`, label: 'Habits' },
     { href: `${base}/nutrition`, label: 'Nutrition' },
     { href: `${base}/progress`, label: 'Progress' },

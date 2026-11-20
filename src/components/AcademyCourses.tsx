@@ -6,11 +6,12 @@ import { ACADEMY_MILESTONES, ACADEMY_COURSE_COUNT } from '@/lib/academy';
 
 // Vitality Academy in the Milestones tab: every course open, grouped by
 // milestone, with a tick the client sets when they've finished one.
-export default function AcademyCourses({ userId, initialDone }: { userId: string; initialDone: number[] }) {
+export default function AcademyCourses({ userId, initialDone, readOnly = false }: { userId: string; initialDone: number[]; readOnly?: boolean }) {
   const [done, setDone] = useState(() => new Set(initialDone));
   const [busy, setBusy] = useState<number | null>(null);
 
   async function toggle(n: number) {
+    if (readOnly) return;
     const supabase = createClient();
     const wasDone = done.has(n);
     setBusy(n);
@@ -50,7 +51,7 @@ export default function AcademyCourses({ userId, initialDone }: { userId: string
                       <button
                         type="button"
                         onClick={() => toggle(c.n)}
-                        disabled={busy === c.n}
+                        disabled={readOnly || busy === c.n}
                         aria-label={isDone ? `Mark course ${c.n} as not done` : `Mark course ${c.n} as done`}
                         className={`h-6 w-6 shrink-0 rounded-full border text-xs flex items-center justify-center transition-colors ${isDone ? 'bg-brand border-brand text-white' : 'border-neutral-300 text-transparent hover:border-brand'}`}
                       >✓</button>
