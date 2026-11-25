@@ -9,7 +9,7 @@ import { BRAND_META, IBF_MEAL_PLAN_PRICE, PACKAGES, PACKAGE_META, PAYMENT_METHOD
 import { buildSchedule } from '@/lib/crm/payments';
 import { euroExact as euro, shortDate } from '@/lib/crm/format';
 
-type Initial = { package: CrmPackage | null; price: number | null; /** price before a discount, if one was applied */ listPrice: number | null; start: string | null; plan: CrmPaymentPlan | null; method: string | null };
+type Initial = { package: CrmPackage | null; /** free (complimentary) client */ isFree?: boolean; price: number | null; /** price before a discount, if one was applied */ listPrice: number | null; start: string | null; plan: CrmPaymentPlan | null; method: string | null };
 
 // What a client bought and how they pay: 1-1 coaching (3-month offer, 6
 // months, 1 year) or a meal plan; paid in full or monthly; and the method.
@@ -42,6 +42,8 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
   const [discMode, setDiscMode] = useState<'pct' | 'eur'>('eur');
   const [discValue, setDiscValue] = useState(hadDiscount ? String(Math.round((initial.listPrice! - initial.price!) * 100) / 100) : '');
   const [discReason, setDiscReason] = useState('');
+  // A free client keeps every perk of their package but has no price and no payments (never counted as revenue).
+  const [free, setFree] = useState(initial.isFree ?? false);
   const [plan, setPlan] = useState<CrmPaymentPlan>(initial.plan ?? 'full');
   const [method, setMethod] = useState(initial.method ?? 'Card');
   const [start, setStart] = useState(initial.start ?? defaultStart);
@@ -73,19 +75,19 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
   }
 
   async function save() {
-    if (!price.trim() || !Number.isFinite(list) || list < 0) { setError('Enter the total price, in €.'); return; }
-    if (discOpen && discValue.trim() && (!Number.isFinite(dv) || dv < 0)) { setError('Enter the discount as a number.'); return; }
-    if (discOpen && discMode === 'pct' && dv > 100) { setError("A discount can't be more than 100%."); return; }
-    if (discOpen && discMode === 'eur' && dv > list) { setError("The discount can't be more than the price."); return; }
-    const n = finalPrice;
+    if (!free && (!price.trim() || !Number.isFinite(list) || list < 0)) { setError('Enter the total price, in €.'); return; }
+    if (!free && discOpen && discValue.trim() && (!Number.isFinite(dv) || dv < 0)) { setError('Enter the discount as a number.'); return; }
+    if (!free && discOpen && discMode === 'pct' && dv > 100) { setError("A discount can't be more than 100%."); return; }
+    if (!free && discOpen && discMode === 'eur' && dv > list) { setError("The discount can't be more than the price."); return; }
+    const n = free ? 0 : finalPrice;
     if (!start) { setError('Pick a start date.'); return; }
     setBusy(true);
     setError(null);
     const today = localDateStr();
 
     const { error: upErr } = await supabase.from('crm_contacts').update({
-      package: pkg, package_price: n, package_list_price: discount > 0 ? list : null, package_start: start,
-      payment_plan: effectivePlan, payment_method: method,
+      package: pkg, package_price: n, package_list_price: !free && discount > 0 ? list : null, package_start: start, is_free: free,
+      payment_plan: free ? 'full' : effectivePlan, payment_method: free ? null : method,
       stage: 'won', lost_reason: null,
     }).eq('id', contactId);
     if (upErr) { setBusy(false); setError("Couldn't save. Try again."); return; }
@@ -94,7 +96,7 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
     const { data: existing } = await supabase.from('crm_payments').select('id, amount, paid_on').eq('contact_id', contactId);
     const paid = (existing || []).filter((p) => p.paid_on);
     await supabase.from('crm_payments').delete().eq('contact_id', contactId).is('paid_on', null);
-    const rows = buildSchedule({
+    const rows = free ? [] : buildSchedule({
       price: n, plan: effectivePlan, months: meta.months, start,
       paidCount: paid.length, paidSum: paid.reduce((a, p) => a + Number(p.amount), 0),
     }).map((r, i) => ({
@@ -108,8 +110,10 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
     const how = effectivePlan === 'monthly' && meta.months ? `${meta.months} × ${euro(n / meta.months)} monthly` : 'paid in full';
     await supabase.from('crm_activities').insert({
       contact_id: contactId, kind: 'system',
-      body: `${initial.package ? 'Package updated' : 'Joined'}: ${packageName(pkg, brand)} · ${euro(n)}${discNote} (${how}, ${method.toLowerCase()}) · starts ${shortDate(start)}`,
-      meta: { package: pkg, price: n, list_price: list, discount, discount_reason: reason || null, start, plan: effectivePlan, method },
+      body: free
+        ? `${initial.package ? 'Package updated' : 'Joined'}: ${packageName(pkg, brand)} · FREE client (no payment, not counted as revenue) · starts ${shortDate(start)}`
+        : `${initial.package ? 'Package updated' : 'Joined'}: ${packageName(pkg, brand)} · ${euro(n)}${discNote} (${how}, ${method.toLowerCase()}) · starts ${shortDate(start)}`,
+      meta: { package: pkg, price: n, list_price: free ? null : list, discount: free ? 0 : discount, discount_reason: free ? null : (reason || null), free, start, plan: free ? 'full' : effectivePlan, method: free ? null : method },
     });
     setBusy(false);
     setEditing(false);
@@ -128,11 +132,11 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
         </span>
         <div className="min-w-0 flex-1 text-sm">
           <p>
-            <b>{initial.price != null ? euro(initial.price) : '–'}</b>
+            {initial.isFree ? <b className="text-[#7c5cd6]">Free</b> : <b>{initial.price != null ? euro(initial.price) : '–'}</b>}
             {initial.listPrice != null && initial.price != null && initial.listPrice > initial.price && (
               <span className="ml-1 text-neutral-300 line-through">{euro(initial.listPrice)}</span>
             )}
-            <span className="text-neutral-400"> · {monthly ? `${m.months} × ${euro(initial.price! / m.months!)}/mo` : 'paid in full'}{initial.method ? ` · ${initial.method}` : ''}</span>
+            <span className="text-neutral-400"> · {initial.isFree ? 'no payments · not in revenue' : monthly ? `${m.months} × ${euro(initial.price! / m.months!)}/mo` : 'paid in full'}{!initial.isFree && initial.method ? ` · ${initial.method}` : ''}</span>
           </p>
           <p className="text-2xs text-neutral-400">{end ? `${shortDate(initial.start)} → ${shortDate(end)} ${end.slice(0, 4)}` : `Bought ${shortDate(initial.start)}`}</p>
         </div>
@@ -145,6 +149,13 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
   const end = start ? packageEnd(start, pkg) : null;
   return (
     <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-2 gap-1 rounded-lg bg-neutral-100 p-1" role="group" aria-label="Paying or free">
+        {([[false, 'Paying client'], [true, 'Free client 🎁']] as const).map(([k, label]) => (
+          <button key={String(k)} type="button" onClick={() => setFree(k)} aria-pressed={free === k}
+            className={`rounded-md py-1.5 text-xs font-semibold ${free === k ? 'bg-surface text-neutral-900 shadow-[0_1px_3px_rgba(0,0,0,0.08)]' : 'text-neutral-500'}`}>{label}</button>
+        ))}
+      </div>
+      {free && <p className="rounded-lg bg-[#f1ecfc] px-3 py-2 text-2xs text-[#4b34a0]">Someone you train for free: they get every perk of the package below (booking calls, Academy, the app), but no price is recorded, no payments are created, and they&rsquo;re never counted in revenue.</p>}
       <div>
         <p className="text-2xs text-neutral-500 mb-1.5">1-1 coaching</p>
         <div className="grid grid-cols-3 gap-2">
@@ -163,17 +174,17 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <label className="flex flex-col gap-1">
+        {!free && <label className="flex flex-col gap-1">
           <span className="text-2xs text-neutral-500">Total price (€)</span>
           <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(',', '.'))} placeholder="e.g. 900" className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand" />
-        </label>
+        </label>}
         <label className="flex flex-col gap-1">
           <span className="text-2xs text-neutral-500">{isMealPlan ? 'Bought on' : meta.kind === 'challenge' ? 'Challenge starts' : 'Start date'}</span>
           <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand" />
         </label>
       </div>
 
-      {meta.prices && (
+      {!free && meta.prices && (
         <div className="flex flex-wrap items-center gap-1.5 -mt-1">
           <span className="text-2xs text-neutral-500">Price:</span>
           {meta.prices.map((o) => (
@@ -189,7 +200,7 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
         </div>
       )}
 
-      {!discOpen ? (
+      {free ? null : !discOpen ? (
         <button type="button" onClick={() => setDiscOpen(true)} className="self-start -mt-1 text-xs font-medium text-brand-dark hover:opacity-70">＋ Apply a discount</button>
       ) : (
         <div className="rounded-xl border border-border p-3 flex flex-col gap-2.5">
@@ -229,6 +240,10 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
         </div>
       )}
 
+      {free ? (
+        <p className="rounded-lg bg-neutral-50 px-3 py-2 text-2xs text-neutral-600">Free client{end ? <> · ends {shortDate(end)} {end.slice(0, 4)}</> : null}</p>
+      ) : (
+        <>
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1">
           <span className="text-2xs text-neutral-500">How they pay</span>
@@ -266,6 +281,9 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
           <input type="checkbox" checked={receivedNow} onChange={(e) => setReceivedNow(e.target.checked)} className="h-4 w-4 accent-[var(--brand)]" />
           {effectivePlan === 'monthly' ? 'First payment received today' : 'Payment received today'}
         </label>
+      )}
+
+        </>
       )}
 
       {error && <p className="text-xs text-red-600">{error}</p>}

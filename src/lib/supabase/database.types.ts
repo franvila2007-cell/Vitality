@@ -39,6 +39,8 @@ export type CrmContactRow = {
   brand: CrmBrand; package: CrmPackage | null; package_price: number | null; package_start: string | null;
   /** price before a discount; package_price is what they actually pay. null = no discount */
   package_list_price: number | null;
+  /** free (complimentary) client: all the perks, no price, no payments, no revenue */
+  is_free: boolean;
   payment_plan: CrmPaymentPlan | null; payment_method: string | null;
   /** list order — IronBodyFit follows the coach's sheet; new contacts go last */
   list_position: number;

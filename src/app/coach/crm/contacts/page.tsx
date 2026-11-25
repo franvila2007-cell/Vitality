@@ -19,6 +19,7 @@ const TYPES = [
   { key: 'leads', label: 'Leads' },
   { key: 'clients', label: 'Clients' },
   { key: 'coaching', label: '1-1 Coaching' },
+  { key: 'free', label: 'Free 🎁' },
   { key: 'challenge', label: '8-Week Challenge' },
   { key: 'meal_plans', label: 'Meal plans' },
   { key: 'past', label: 'Past / lost' },
@@ -36,7 +37,7 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
 
   let query = supabase
     .from('crm_contacts')
-    .select('id, full_name, email, phone, source, stage, tags, last_activity_at, client_id, brand, package, package_price, package_start, payment_plan, list_position')
+    .select('id, full_name, email, phone, source, stage, tags, last_activity_at, client_id, brand, package, package_price, package_start, payment_plan, list_position, is_free')
     .order('last_activity_at', { ascending: false })
     .limit(1000);
   if (STAGES.some((s) => s.key === stage)) query = query.eq('stage', stage as CrmStage);
@@ -53,6 +54,7 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
       case 'leads': return OPEN_STAGES.includes(c.stage);
       case 'clients': return c.stage === 'won';
       case 'coaching': return c.stage === 'won' && t === 'coaching';
+      case 'free': return c.stage === 'won' && c.is_free;
       case 'meal_plans': return c.stage === 'won' && (t === 'vitality_meal_plan' || t === 'ibf_meal_plan');
       case 'challenge': case 'vitality_meal_plan': case 'ibf_meal_plan': return c.stage === 'won' && t === type;
       case 'past': return c.stage === 'past' || c.stage === 'lost';
@@ -155,6 +157,7 @@ export default async function CrmContactsPage({ searchParams }: { searchParams: 
                             ? <>
                                 <span className={`font-semibold ${t === 'ibf_meal_plan' ? 'text-ibf-red' : 'text-brand-dark'}`}>{CLIENT_TYPE_META[t].label}</span>
                                 {c.package && t === 'coaching' && <> · {PACKAGE_META[c.package].label}</>}
+                                {c.is_free && <> · <span className="font-semibold text-[#7c5cd6]">Free 🎁</span></>}
                                 {c.payment_plan === 'monthly' && <> · monthly</>}
                                 {w && <> · <span className={good ? 'text-status-good-text' : ''}>{w.first}→{w.latest}kg</span></>}
                               </>

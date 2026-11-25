@@ -87,7 +87,7 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
             </div>
             <p className="text-2xs text-neutral-400 mt-0.5">
               {SOURCE_META[c.source]?.emoji} {sourceLabel(c.source)} · added {shortDate(c.created_at)} · {STAGE_META[c.stage].label} for {daysSince(c.stage_changed_at, nowMs)}d
-              {c.package_price != null ? <> · <b className="text-neutral-600">{euroExact(Number(c.package_price))}</b>{c.package_list_price != null && Number(c.package_list_price) > Number(c.package_price) ? <span className="text-neutral-300 line-through ml-1">{euroExact(Number(c.package_list_price))}</span> : null}</> : null}
+              {c.is_free ? <> · <b className="text-[#7c5cd6]">Free</b></> : c.package_price != null ? <> · <b className="text-neutral-600">{euroExact(Number(c.package_price))}</b>{c.package_list_price != null && Number(c.package_list_price) > Number(c.package_price) ? <span className="text-neutral-300 line-through ml-1">{euroExact(Number(c.package_list_price))}</span> : null}</> : null}
             </p>
             {c.tags.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
@@ -136,7 +136,7 @@ export default async function CrmContactPage({ params }: { params: Promise<{ id:
         <CrmPackageEditor
           contactId={c.id}
           brand={c.brand}
-          initial={{ package: c.package, price: c.package_price != null ? Number(c.package_price) : null, listPrice: c.package_list_price != null ? Number(c.package_list_price) : null, start: c.package_start, plan: c.payment_plan, method: c.payment_method }}
+          initial={{ package: c.package, isFree: c.is_free, price: c.package_price != null ? Number(c.package_price) : null, listPrice: c.package_list_price != null ? Number(c.package_list_price) : null, start: c.package_start, plan: c.payment_plan, method: c.payment_method }}
           defaultStart={pkgCtx.defaultStart}
           suggestedPrices={pkgCtx.suggestedPrices}
         />

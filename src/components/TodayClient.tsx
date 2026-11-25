@@ -13,6 +13,7 @@ import VittoRecommends from '@/components/VittoRecommends';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import VittoComposer from '@/components/VittoComposer';
 import LoggedMealCard, { type LoggedItem } from '@/components/LoggedMealCard';
+import VittoBadge from '@/components/VittoBadge';
 import CallsCard from '@/components/CallsCard';
 import ManualFoodSheet, { type ManualEntry } from '@/components/ManualFoodSheet';
 import { suggestFoods, applySuggestion } from '@/lib/vitto/suggest';
@@ -604,20 +605,19 @@ export default function TodayClient() {
               const [y, m, d] = date.split('-').map(Number);
               const label = new Date(y, m - 1, d).toLocaleDateString('en', { weekday: 'narrow' });
               const isToday = date === today;
-              // Colored solid, not a checkmark, so the pip itself shows
-              // which rank the day landed on at a glance — gold/silver/
-              // bronze use distinct saturated fills that read against the
-              // teal card; a day with no data yet stays translucent (or
-              // outlined, if it's today and just hasn't happened yet).
-              const rankBg = tier ? TIER_META[tier].pip : null;
+              // Each day is Vitto in the mood of that day's tier (Flat → Vital),
+              // so the row reads at a glance; a day with no data yet is an empty
+              // slot (outlined if it's today and hasn't happened yet).
               return (
                 <div key={date} className="flex-1 flex flex-col items-center gap-1">
                   <div
-                    className={`w-full aspect-square rounded-lg ${
-                      rankBg ? `${rankBg} ${isToday ? 'ring-2 ring-white/70' : ''}` : isToday ? 'border border-white/40' : 'bg-white/10'
+                    className={`w-full aspect-square rounded-xl flex items-center justify-center ${
+                      tier ? `bg-white/10 ${isToday ? 'ring-2 ring-white/70' : ''}` : isToday ? 'border border-white/40 border-dashed' : 'bg-white/5'
                     }`}
                     title={tier ? TIER_META[tier].label : isToday ? "Today — not ranked yet" : 'No data'}
-                  />
+                  >
+                    {tier ? <VittoBadge tier={tier} size={44} className="w-[88%] h-auto" /> : <span className="h-1.5 w-1.5 rounded-full bg-white/20" />}
+                  </div>
                   <span className={`text-3xs ${isToday ? 'text-white' : 'text-white/40'}`}>{label}</span>
                 </div>
               );

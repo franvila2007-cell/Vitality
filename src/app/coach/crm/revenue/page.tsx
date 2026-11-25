@@ -49,7 +49,7 @@ export default async function CrmRevenuePage({ searchParams }: { searchParams: P
     : ['0000-01-01', '9999-12-31'];
 
   const [contactsRes, paymentsRes] = await Promise.all([
-    supabase.from('crm_contacts').select('id, full_name, brand, stage, package, package_price, package_start').not('package', 'is', null).limit(10000),
+    supabase.from('crm_contacts').select('id, full_name, brand, stage, package, package_price, package_start, is_free').not('package', 'is', null).limit(10000),
     supabase.from('crm_payments').select('amount, due_on, paid_on').limit(20000),
   ]);
   const contacts = contactsRes.data || [];
@@ -60,7 +60,7 @@ export default async function CrmRevenuePage({ searchParams }: { searchParams: P
 
   // Every sale with a price and a start date.
   const sales = contacts
-    .filter((c) => c.package && c.package_start && Number(c.package_price) > 0)
+    .filter((c) => !c.is_free && c.package && c.package_start && Number(c.package_price) > 0)
     .map((c) => ({ id: c.id, name: c.full_name, pkg: c.package as CrmPackage, cat: catOf(c), price: Number(c.package_price), date: c.package_start as string }))
     .sort((a, b) => b.date.localeCompare(a.date));
   const inRange = sales.filter((s) => s.date >= from && s.date < to);
@@ -75,6 +75,7 @@ export default async function CrmRevenuePage({ searchParams }: { searchParams: P
 
   // IronBodyFit: how many of their meal-plan clients were charged the €10.
   const ibfClients = contacts.filter((c) => c.brand === 'ironbodyfit' && c.package === 'meal_plan' && c.stage === 'won');
+  const freeCount = contacts.filter((c) => c.is_free && c.stage === 'won').length;
   const ibfCharged = ibfClients.filter((c) => Number(c.package_price) > 0).length;
 
   // Last six months, stacked by category.
@@ -111,7 +112,7 @@ export default async function CrmRevenuePage({ searchParams }: { searchParams: P
         <p className="text-3xs font-semibold uppercase tracking-wider text-neutral-400">Total revenue · {rangeLabel}</p>
         <p className="text-3xl font-semibold tabular-nums mt-1">{euro(total)}</p>
         <p className="text-2xs text-neutral-400">
-          {inRange.length} sale{inRange.length === 1 ? '' : 's'} · {euro(cash)} cash collected
+          {inRange.length} sale{inRange.length === 1 ? '' : 's'} · {euro(cash)} cash collected{freeCount > 0 ? ` · ${freeCount} free client${freeCount === 1 ? '' : 's'} not counted` : ''}
         </p>
         {total > 0 && (
           <>

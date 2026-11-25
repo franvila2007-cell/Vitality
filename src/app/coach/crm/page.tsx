@@ -39,7 +39,7 @@ export default async function CrmOverviewPage() {
   const d90 = new Date(nowMs - 90 * DAY).toISOString();
 
   const [contactsRes, tasksRes, activityRes, clientsRes, paymentsRes] = await Promise.all([
-    supabase.from('crm_contacts').select('id, full_name, source, stage, brand, created_at, client_id, package, package_price, package_start, payment_plan').limit(10000),
+    supabase.from('crm_contacts').select('id, full_name, source, stage, brand, created_at, client_id, package, package_price, package_start, payment_plan, is_free').limit(10000),
     supabase.from('crm_tasks').select('id, title, due_on, done_at, contact_id').is('done_at', null).order('due_on').limit(50),
     // Bulk-import entries (e.g. the IronBodyFit client sheet) would drown out real activity.
     supabase.from('crm_activities').select('id, contact_id, kind, body, meta, created_at').is('meta->>import', null).order('created_at', { ascending: false }).limit(10),
@@ -53,7 +53,7 @@ export default async function CrmOverviewPage() {
   const payments = paymentsRes.data || [];
 
   // ── Money ──
-  const soldThisMonth = contacts.filter((c) => c.package && c.package_start && c.package_start >= monthStart && c.package_start <= today);
+  const soldThisMonth = contacts.filter((c) => !c.is_free && c.package && c.package_start && c.package_start >= monthStart && c.package_start <= today);
   const revenue = soldThisMonth.reduce((a, c) => a + (Number(c.package_price) || 0), 0);
   const collectedThisMonth = payments.filter((p) => p.paid_on && p.paid_on >= monthStart && p.paid_on <= today);
   const cash = collectedThisMonth.reduce((a, p) => a + Number(p.amount), 0);
@@ -84,6 +84,7 @@ export default async function CrmOverviewPage() {
     })
     .sort((a, b) => a.end.localeCompare(b.end));
   const noPackage = current.filter((c) => !c.package);
+  const freeClients = current.filter((c) => c.is_free);
 
   // ── Leads ──
   const isLead = (c: { source: string }) => c.source !== 'existing_client';
@@ -126,6 +127,13 @@ export default async function CrmOverviewPage() {
               <p className="text-2xs text-neutral-400">current</p>
             </Link>
           ))}
+          {freeClients.length > 0 && (
+            <Link href="/coach/crm/contacts?type=free" className="bg-surface border border-border rounded-xl p-3 hover:border-neutral-300">
+              <span className="inline-block rounded-full px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide bg-[#f1ecfc] text-[#7c5cd6]">Free 🎁</span>
+              <p className="text-xl font-semibold tabular-nums mt-1.5">{freeClients.length}</p>
+              <p className="text-2xs text-neutral-400">not in revenue</p>
+            </Link>
+          )}
           <Kpi label={`New · ${monthName}`} value={String(newThisMonth.length)} sub={newThisMonth.length ? newThisMonth.slice(0, 3).map((c) => c.full_name.split(' ')[0]).join(', ') + (newThisMonth.length > 3 ? '…' : '') : 'none yet'} />
         </div>
       </Section>
