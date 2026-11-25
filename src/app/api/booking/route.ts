@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { computeBooking, json, loadContext, requireClient } from '@/lib/bookingServer';
 import { maltaParts, weekStartOf } from '@/lib/calls';
 import { notifyCoach } from '@/lib/bookingNotify';
+import { emailClientBooking } from '@/lib/clientBookingEmail';
 import { googleCalendar, serviceAccountFromEnv } from '@/lib/googleCalendar';
 import { syncGoogleNow } from '@/lib/googleSync';
 
@@ -58,6 +59,7 @@ export async function POST(req: Request) {
       await notifyCoach(admin, {
         event: replaceId ? 'moved' : 'booked', clientName: p?.full_name || p?.email || '', kind, startsAt: new Date(starts_at).toISOString(), previousStartsAt: previous,
       }, { replyTo: p?.email });
+      await emailClientBooking(admin, who.userId, { event: replaceId ? 'moved' : 'booked', kind, startsAt: new Date(starts_at).toISOString(), previousStartsAt: previous });
       await syncGoogleNow(admin, () => { const sa = serviceAccountFromEnv(); return sa ? googleCalendar(sa) : null; });
     });
     return json({ ok: true });

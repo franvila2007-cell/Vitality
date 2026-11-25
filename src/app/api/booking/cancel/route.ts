@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { json, requireClient } from '@/lib/bookingServer';
 import { notifyCoach } from '@/lib/bookingNotify';
+import { emailClientBooking } from '@/lib/clientBookingEmail';
 import { googleCalendar, serviceAccountFromEnv } from '@/lib/googleCalendar';
 import { syncGoogleNow } from '@/lib/googleSync';
 
@@ -24,6 +25,7 @@ export async function POST(req: Request) {
   after(async () => {
     const { data: p } = await admin.from('profiles').select('full_name, email').eq('id', who.userId).maybeSingle();
     await notifyCoach(admin, { event: 'cancelled', clientName: p?.full_name || p?.email || '', kind: call.kind as 'check_in' | 'info', startsAt: call.starts_at }, { replyTo: p?.email });
+    await emailClientBooking(admin, who.userId, { event: 'cancelled', kind: call.kind as 'check_in' | 'info', startsAt: call.starts_at });
     await syncGoogleNow(admin, () => { const sa = serviceAccountFromEnv(); return sa ? googleCalendar(sa) : null; });
   });
   return json({ ok: true });

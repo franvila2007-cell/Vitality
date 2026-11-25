@@ -23,7 +23,7 @@ export async function runReminders(deps: { admin: Admin; send: Sender | null; no
     await admin.from('coach_settings').update({ reminder_last_run_at: now.toISOString(), reminder_last_error: result.error }).eq('id', 1);
   };
 
-  const { data: settings } = await admin.from('coach_settings').select('call_details, reminder_emails_enabled').eq('id', 1).maybeSingle();
+  const { data: settings } = await admin.from('coach_settings').select('call_details, video_link, reminder_emails_enabled').eq('id', 1).maybeSingle();
   if (settings && !settings.reminder_emails_enabled) { await record(); return result; }
   if (!send) { result.error = NOT_CONFIGURED; await record(); return result; }
 
@@ -42,7 +42,7 @@ export async function runReminders(deps: { admin: Admin; send: Sender | null; no
     if (!p || p.role !== 'client' || p.archived_at || !p.email) { result.skipped++; continue; }
     const mail = buildReminderEmail({
       which: d.r_which as 'day' | 'hour', kind: d.r_kind as 'check_in' | 'info', startsAt: d.r_starts_at, minutes: d.r_minutes,
-      name: p.full_name, details: settings?.call_details ?? '', appUrl: APP_URL, now,
+      name: p.full_name, details: settings?.call_details ?? '', videoLink: settings?.video_link ?? '', appUrl: APP_URL, now,
     });
     try {
       await send({ to: p.email, subject: mail.subject, html: mail.html, text: mail.text, idempotencyKey: `call-${d.r_id}-${d.r_which}-${new Date(d.r_starts_at).getTime()}` });

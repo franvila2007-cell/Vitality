@@ -7,7 +7,7 @@ import { addDays } from '@/lib/date';
 type Kind = 'check_in' | 'info';
 type Mine = { id: string; kind: Kind; starts_at: string; duration_min: number };
 type Week = { monday: string; open: boolean; opensAt: string | null; slots: Record<string, string[]> | null; mine: Mine[] };
-type Data = { enabled: boolean; weeks: Week[] };
+type Data = { enabled: boolean; videoLink?: string; weeks: Week[] };
 
 const KINDS: { kind: Kind; title: string; blurb: string; emoji: string }[] = [
   { kind: 'check_in', title: 'Check-in call', blurb: 'Your weekly catch-up: how it’s going and what’s next.', emoji: '✅' },
@@ -120,10 +120,11 @@ export default function CallsClient() {
                     )}
                   </div>
                 </div>
-                <div className="mt-3 flex gap-2">
+                <div className="mt-3 flex flex-wrap gap-2">
                   {!c && hasFreeTimes && <button onClick={() => { setNotice(null); setPicking({ kind }); }} className="flex-1 rounded-xl bg-brand py-3 text-sm font-semibold text-white active:scale-[0.98]">Choose a time</button>}
                   {c && !past && (
                     <>
+                      {data.videoLink && <a href={data.videoLink} target="_blank" rel="noopener noreferrer" className="basis-full rounded-xl bg-brand py-3 text-center text-sm font-semibold text-white active:scale-[0.98]">📹 Join video call</a>}
                       <button onClick={() => { setNotice(null); setPicking({ kind, replaceId: c.id }); }} className="flex-1 rounded-xl border border-border bg-surface py-3 text-sm font-semibold text-neutral-700 active:scale-[0.98]">Change time</button>
                       <button onClick={() => cancelCall(c)} disabled={busyId === c.id} className="rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium text-neutral-500 disabled:opacity-50">{busyId === c.id ? '…' : 'Cancel'}</button>
                     </>

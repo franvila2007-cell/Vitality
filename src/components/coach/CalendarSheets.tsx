@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { cleanVideoLink } from '@/lib/videoLink';
 import type { CoachAvailabilityRow, CoachCallKind, CoachCallRow } from '@/lib/supabase/database.types';
 import { CALL_MINUTES, KIND_META, callEnd, dayLabel, googleCalendarUrl, maltaParts, maltaToUtc, timeRangeLabel, weekRangeUtc, weekStartOf, weekdayOf } from '@/lib/calls';
 
@@ -334,6 +335,8 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   const [testMsg, setTestMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [testing, setTesting] = useState(false);
   const [callDetails, setCallDetails] = useState('');
+  const [videoLink, setVideoLink] = useState('');
+  const [savedVideoLink, setSavedVideoLink] = useState('');
   const [reminderRun, setReminderRun] = useState<{ at: string | null; error: string | null }>({ at: null, error: null });
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
@@ -347,12 +350,12 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data, error: err } = await supabase.from('coach_settings').select('booking_enabled, booking_open_weekday, booking_open_time, call_details, reminder_emails_enabled, reminder_last_run_at, reminder_last_error, booking_notify_enabled, google_calendar_id, google_sync_last_run_at, google_sync_last_error').eq('id', 1).maybeSingle();
+      const { data, error: err } = await supabase.from('coach_settings').select('booking_enabled, booking_open_weekday, booking_open_time, call_details, video_link, reminder_emails_enabled, reminder_last_run_at, reminder_last_error, booking_notify_enabled, google_calendar_id, google_sync_last_run_at, google_sync_last_error').eq('id', 1).maybeSingle();
       if (cancelled) return;
       if (err || !data) setError("Couldn't load your booking settings — close this and try again.");
       else {
         setEnabled(data.booking_enabled); setWeekday(data.booking_open_weekday); setOpenTime(data.booking_open_time.slice(0, 5));
-        setEmailReminders(data.reminder_emails_enabled); setCallDetails(data.call_details); setNotifyMe(data.booking_notify_enabled);
+        setEmailReminders(data.reminder_emails_enabled); setCallDetails(data.call_details); setVideoLink(data.video_link); setSavedVideoLink(data.video_link); setNotifyMe(data.booking_notify_enabled);
         setGcalId(data.google_calendar_id); setGsync({ at: data.google_sync_last_run_at, error: data.google_sync_last_error });
         setReminderRun({ at: data.reminder_last_run_at, error: data.reminder_last_error });
       }
@@ -373,8 +376,16 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
 
   async function save() {
     if (saving) return;
+    const cleanLink = cleanVideoLink(videoLink);
+    if (cleanLink === null) { setError('That video link doesn’t look right — paste the full address, e.g. https://meet.google.com/abc-defg-hij'); return; }
     setSaving(true); setError(null); setSavedMsg(null);
-    const { error: err } = await supabase.from('coach_settings').update({ booking_enabled: enabled, booking_open_weekday: weekday, booking_open_time: openTime, reminder_emails_enabled: emailReminders, booking_notify_enabled: notifyMe, google_calendar_id: gcalId.trim(), call_details: callDetails.trim().slice(0, 600), updated_at: new Date().toISOString() }).eq('id', 1);
+    const { error: err } = await supabase.from('coach_settings').update({ booking_enabled: enabled, booking_open_weekday: weekday, booking_open_time: openTime, reminder_emails_enabled: emailReminders, booking_notify_enabled: notifyMe, google_calendar_id: gcalId.trim(), call_details: callDetails.trim().slice(0, 600), video_link: cleanLink, updated_at: new Date().toISOString() }).eq('id', 1);
+    if (!err && cleanLink !== savedVideoLink) {
+      // The link changed: touch the upcoming calls so the next Google sync rewrites their calendar events with it.
+      await supabase.from('coach_calls').update({ updated_at: new Date().toISOString() }).eq('status', 'scheduled').gte('starts_at', new Date().toISOString());
+      setSavedVideoLink(cleanLink);
+    }
+    if (!err) setVideoLink(cleanLink);
     setSaving(false);
     if (err) setError("Couldn't save — try again.");
     else setSavedMsg('Saved ✓');
@@ -401,7 +412,7 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
     try {
       const res = await fetch('/api/coach/booking-notify-test', { method: 'POST' });
       const body = await res.json();
-      setTestMsg(res.ok ? { ok: true, text: `Sent to ${body.to} — check your inbox (and spam).` } : { ok: false, text: body.error || "Couldn't send the test." });
+      setTestMsg(res.ok ? { ok: true, text: `Sent 2 samples to ${body.to}: the alert you get, and the email a client gets (with your saved video link). Check your inbox (and spam).` } : { ok: false, text: body.error || "Couldn't send the test." });
     } catch {
       setTestMsg({ ok: false, text: "Couldn't send the test — check your connection." });
     }
@@ -466,13 +477,20 @@ export function BookingSheet({ onClose }: { onClose: () => void }) {
           </div>
 
           <div className="mt-5 border-t border-border pt-4">
+            <p className="text-sm font-semibold">Video call link</p>
+            <p className="text-xs text-neutral-500 mt-0.5">One link for all your calls (e.g. a Google Meet room). It goes in the booking and reminder emails, on the client’s Calls screen as a “Join video call” button, and in your Google Calendar events.</p>
+            <input value={videoLink} onChange={(e) => setVideoLink(e.target.value)} inputMode="url" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="https://meet.google.com/abc-defg-hij" className={`${field} mt-2`} aria-label="Video call link" />
+            <p className="text-2xs text-neutral-400 mt-1">In Google Meet: New meeting → Create a meeting for later → copy the link and paste it here, then press Save.</p>
+          </div>
+
+          <div className="mt-5 border-t border-border pt-4">
             <p className="text-sm font-semibold">Reminder emails</p>
             <label className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-3">
-              <span className="text-sm font-medium">Email clients a reminder <span className="font-normal text-neutral-400">(a day before and an hour before)</span></span>
+              <span className="text-sm font-medium">Email clients about their calls <span className="font-normal text-neutral-400">(a confirmation when they book, then a reminder a day before and an hour before)</span></span>
               <input type="checkbox" checked={emailReminders} onChange={(e) => setEmailReminders(e.target.checked)} className="h-5 w-5 flex-shrink-0 accent-[var(--brand)]" />
             </label>
             <label className="mt-3 block text-xs font-medium text-neutral-500">How the call happens <span className="font-normal">(shown in the email — optional)</span></label>
-            <textarea value={callDetails} onChange={(e) => setCallDetails(e.target.value)} rows={2} maxLength={600} placeholder="e.g. I’ll call you on WhatsApp, or paste your Zoom / Meet link" className={`${field} mt-1.5 resize-none`} />
+            <textarea value={callDetails} onChange={(e) => setCallDetails(e.target.value)} rows={2} maxLength={600} placeholder="e.g. Have your food diary open, or I’ll call you on WhatsApp" className={`${field} mt-1.5 resize-none`} />
             <ReminderStatus enabled={emailReminders} run={reminderRun} />
           </div>
 

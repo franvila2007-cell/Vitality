@@ -13,7 +13,7 @@ export async function GET() {
     const ctx = await loadContext();
     const data = await computeBooking(ctx, who.userId);
     if (data.unavailable) return json({ error: 'Booking is paused for a moment — please try again in a few minutes.' }, 503);
-    return json({ enabled: ctx.settings.enabled, weeks: data.weeks.map((w) => ({
+    return json({ enabled: ctx.settings.enabled, videoLink: ctx.videoLink, weeks: data.weeks.map((w) => ({
       monday: w.monday, open: w.open, opensAt: w.opensAt?.toISOString() ?? null, slots: w.slots, mine: w.mine,
     })) });
   } catch {

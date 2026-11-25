@@ -40,18 +40,21 @@ export type BookingContext = {
   settings: BookingSettings;
   googleUrls: string[];
   availability: Avail[];
+  /** the coach's video room, shown to clients on their booked calls ('' = none) */
+  videoLink: string;
 };
 
 export async function loadContext(): Promise<BookingContext> {
   const admin = createAdminClient();
   const [{ data: s }, { data: a }] = await Promise.all([
-    admin.from('coach_settings').select('google_ical_urls, booking_open_weekday, booking_open_time, booking_enabled').eq('id', 1).maybeSingle(),
+    admin.from('coach_settings').select('google_ical_urls, booking_open_weekday, booking_open_time, booking_enabled, video_link').eq('id', 1).maybeSingle(),
     admin.from('coach_availability').select('weekday, start_time, end_time'),
   ]);
   return {
     settings: { enabled: s?.booking_enabled ?? true, openWeekday: s?.booking_open_weekday ?? 5, openTime: s?.booking_open_time ?? '12:00:00' },
     googleUrls: s?.google_ical_urls ?? [],
     availability: a ?? [],
+    videoLink: s?.video_link ?? '',
   };
 }
 

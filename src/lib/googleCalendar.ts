@@ -18,6 +18,8 @@ export type GoogleEvent = {
   startsAt: string;
   minutes: number;
   kind: 'check_in' | 'info';
+  /** the coach's video room; shown as the event's location so it's one tap from the calendar */
+  videoLink?: string;
 };
 
 const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
@@ -69,7 +71,9 @@ function resource(e: GoogleEvent) {
   const start = new Date(e.startsAt);
   return {
     summary: e.title,
-    description: e.description,
+    description: [e.description, e.videoLink ? `Video call: ${e.videoLink}` : ''].filter(Boolean).join('\n'),
+    // Always sent (empty clears it), so removing the link later updates existing events too.
+    location: e.videoLink ?? '',
     start: { dateTime: start.toISOString(), timeZone: 'Europe/Malta' },
     end: { dateTime: new Date(start.getTime() + e.minutes * 60000).toISOString(), timeZone: 'Europe/Malta' },
     transparency: 'opaque',

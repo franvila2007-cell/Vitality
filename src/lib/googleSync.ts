@@ -21,8 +21,9 @@ export async function runGoogleSync(deps: { admin: Admin; google: GoogleCalendar
   const out: SyncResult = { synced: 0, removed: 0, failed: 0, error: null };
   const record = () => admin.from('coach_settings').update({ google_sync_last_run_at: now.toISOString(), google_sync_last_error: out.error }).eq('id', 1);
 
-  const { data: settings } = await admin.from('coach_settings').select('google_calendar_id').eq('id', 1).maybeSingle();
+  const { data: settings } = await admin.from('coach_settings').select('google_calendar_id, video_link').eq('id', 1).maybeSingle();
   const calendarId = settings?.google_calendar_id?.trim() ?? '';
+  const videoLink = settings?.video_link?.trim() ?? '';
   if (!google) { out.error = GOOGLE_NOT_CONFIGURED; await record(); return out; }
   if (!calendarId) { out.error = GOOGLE_NO_CALENDAR; await record(); return out; }
 
@@ -51,7 +52,7 @@ export async function runGoogleSync(deps: { admin: Admin; google: GoogleCalendar
       } else {
         const name = nameOf.get(c.client_id ?? c.contact_id ?? '') || 'Client';
         await google.upsert(calendarId, {
-          callId: c.id, kind: c.kind, title: callTitle(c.kind, name), startsAt: c.starts_at, minutes: c.duration_min,
+          callId: c.id, kind: c.kind, title: callTitle(c.kind, name), startsAt: c.starts_at, minutes: c.duration_min, videoLink,
           description: [KIND_META[c.kind].long, c.note, c.booked_by === 'client' ? 'Booked by the client in the Vitality app.' : ''].filter(Boolean).join('\n'),
         });
         out.synced++;

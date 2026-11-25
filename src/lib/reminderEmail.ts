@@ -14,9 +14,16 @@ export type ReminderInput = {
   name: string;
   /** how the call happens, written by the coach (optional) */
   details: string;
+  /** the coach's video room (Google Meet etc.); empty = none */
+  videoLink?: string;
   appUrl: string;
   now: Date;
 };
+
+/** The "button" row both client emails use. */
+export const emailButton = (href: string, text: string, primary: boolean) =>
+  `<a href="${esc(href)}" style="display:inline-block;margin:0 8px 8px 0;padding:11px 18px;border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;${primary ? 'background:#12a39a;color:#ffffff;' : 'border:1px solid #d6d6d6;color:#333333;'}">${esc(text)}</a>`;
+export { esc as escapeHtml };
 
 export function buildReminderEmail(i: ReminderInput): { subject: string; html: string; text: string } {
   const callName = i.kind === 'check_in' ? 'check-in call' : 'info call';
@@ -34,21 +41,22 @@ export function buildReminderEmail(i: ReminderInput): { subject: string; html: s
     : `Starting soon: your ${callName} with Francesco at ${start.time}`;
   const heading = i.which === 'day' ? `Your ${callName} is ${when}` : `Your ${callName} starts in about an hour`;
   const manageUrl = `${i.appUrl}/calls`;
-  const calUrl = googleEventUrl({ title: `${label} with Francesco (Vitality)`, startsAt: i.startsAt, minutes: i.minutes, details: i.details });
+  const video = (i.videoLink ?? '').trim();
   const details = i.details.trim();
+  const calUrl = googleEventUrl({ title: `${label} with Francesco (Vitality)`, startsAt: i.startsAt, minutes: i.minutes, details: [details, video ? `Video call: ${video}` : ''].filter(Boolean).join('\n') });
 
   const text = [
     `Hi ${first},`, '',
     `${heading}.`, '',
     `${label} with Francesco`, `${dateLong}, ${range} (Malta time)`,
     ...(details ? ['', details] : []),
+    ...(video ? ['', `Join the video call: ${video}`] : []),
     '', `Need a different time? You can change or cancel it in the app: ${manageUrl}`,
     `Add it to your Google Calendar: ${calUrl}`,
     '', '— Vitality',
   ].join('\n');
 
-  const button = (href: string, text: string, primary: boolean) =>
-    `<a href="${esc(href)}" style="display:inline-block;margin:0 8px 8px 0;padding:11px 18px;border-radius:10px;font-weight:600;font-size:14px;text-decoration:none;${primary ? 'background:#12a39a;color:#ffffff;' : 'border:1px solid #d6d6d6;color:#333333;'}">${esc(text)}</a>`;
+  const button = emailButton;
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body style="margin:0;padding:24px;background:#f6f5f2;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#222222;">
 <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;padding:28px;">
 <p style="margin:0 0 4px;font-size:13px;color:#12a39a;font-weight:600;letter-spacing:.04em;text-transform:uppercase;">Vitality</p>
@@ -61,7 +69,7 @@ export function buildReminderEmail(i: ReminderInput): { subject: string; html: s
 </div>
 ${details ? `<p style="margin:0 0 16px;font-size:15px;white-space:pre-line;">${esc(details)}</p>` : ''}
 <p style="margin:0 0 16px;font-size:14px;color:#555555;">Need a different time? You can change or cancel it in the app.</p>
-<p style="margin:0 0 4px;">${button(manageUrl, 'View or change my call', true)}${button(calUrl, 'Add to Google Calendar', false)}</p>
+<p style="margin:0 0 4px;">${video ? button(video, 'Join video call', true) : ''}${button(manageUrl, 'View or change my call', !video)}${button(calUrl, 'Add to Google Calendar', false)}</p>
 </div>
 <p style="max-width:480px;margin:12px auto 0;font-size:12px;color:#888888;text-align:center;">You’re getting this because you booked a call in the Vitality app.</p>
 </body></html>`;
