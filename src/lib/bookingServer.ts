@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchBusy } from '@/lib/googleBusy';
+import { fetchCalendlyBusy } from '@/lib/calendlyBusy';
 import { bookingAccess } from '@/lib/bookingAccess';
 import { bookableWeeks, freeSlots, type Avail, type BookingSettings, type Interval } from '@/lib/booking';
 import { weekRangeUtc } from '@/lib/calls';
@@ -75,12 +76,15 @@ export async function computeBooking(ctx: BookingContext, userId: string, now = 
   const rangeFrom = weekRangeUtc(weeks[0].monday).from;
   const rangeTo = weekRangeUtc(addDays(weeks[1].monday, 0)).to;
 
-  const [callsRes, google] = await Promise.all([
+  const [callsRes, google, calendly] = await Promise.all([
     admin.from('coach_calls').select('id, client_id, kind, starts_at, duration_min, status').in('status', ['scheduled', 'done']).gte('starts_at', rangeFrom).lt('starts_at', rangeTo),
     ctx.googleUrls.length ? fetchBusy(ctx.googleUrls, new Date(rangeFrom), new Date(rangeTo)) : Promise.resolve({ busy: [] as Interval[], errors: [] as string[], events: 0, allDay: 0 }),
+    fetchCalendlyBusy(new Date(rangeFrom), new Date(rangeTo)),
   ]);
   if (callsRes.error) throw new Error('calls');
-  if (google.errors.length) return { unavailable: true as const };
+  // Same rule as Google: if a calendar can't be read, pause booking rather than risk a double booking.
+  if (google.errors.length || calendly.error) return { unavailable: true as const };
+  const busy = [...google.busy, ...calendly.busy];
 
   const calls = callsRes.data ?? [];
   const taken = calls.filter((c) => c.id !== ignoreCallId).map(toInterval);
@@ -88,7 +92,7 @@ export async function computeBooking(ctx: BookingContext, userId: string, now = 
 
   const result = weeks.map((w) => ({
     ...w,
-    slots: w.open ? freeSlots({ monday: w.monday, now, availability: ctx.availability, taken, busy: google.busy }) : null,
+    slots: w.open ? freeSlots({ monday: w.monday, now, availability: ctx.availability, taken, busy }) : null,
     mine: mine.filter((c) => c.starts_at >= weekRangeUtc(w.monday).from && c.starts_at < weekRangeUtc(w.monday).to),
   }));
   return { unavailable: false as const, weeks: result, googleConnected: ctx.googleUrls.length > 0 };
