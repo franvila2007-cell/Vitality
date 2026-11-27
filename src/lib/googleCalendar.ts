@@ -2,7 +2,8 @@ import { createSign } from 'crypto';
 
 // Writes the coach's booked calls into their Google Calendar. Uses a Google
 // "service account" (a robot login) that the coach shares their calendar with
-// ("Make changes to events"); its key lives in the GOOGLE_SERVICE_ACCOUNT_JSON
+// ("Make changes to events"); its key lives in GOOGLE_CALENDAR_KEY_JSON (falls back
+// to the older GOOGLE_SERVICE_ACCOUNT_JSON)
 // environment variable and never reaches the browser. Server-only.
 //
 // One Google event per call, with a stable id derived from the call, so
@@ -25,7 +26,7 @@ export type GoogleEvent = {
 const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
 const API = 'https://www.googleapis.com/calendar/v3/calendars';
 
-export function serviceAccountFromEnv(raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON): ServiceAccount | null {
+export function serviceAccountFromEnv(raw = process.env.GOOGLE_CALENDAR_KEY_JSON || process.env.GOOGLE_SERVICE_ACCOUNT_JSON): ServiceAccount | null {
   if (!raw) return null;
   try {
     const j = JSON.parse(raw) as Partial<ServiceAccount>;
