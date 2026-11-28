@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { localDateStr } from '@/lib/date';
@@ -23,13 +23,13 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
   initial: Initial;
   /** e.g. the day their client account was created */
   defaultStart: string;
-  /** last price used for each package, to pre-fill */
+  /** standard price of each package (set by the coach, else the most common so far), to pre-fill */
   suggestedPrices: Partial<Record<CrmPackage, number>>;
 }) {
   const [supabase] = useState(() => createClient());
   const router = useRouter();
   // IronBodyFit meal plans are €10, not the Vitality meal-plan price.
-  const priceFor = (p: CrmPackage) => (p === 'meal_plan' && brand === 'ironbodyfit' ? IBF_MEAL_PLAN_PRICE : p === '8_week_challenge' ? PACKAGE_META[p].defaultPrice : suggestedPrices[p] ?? PACKAGE_META[p].defaultPrice);
+  const priceFor = (p: CrmPackage) => (p === 'meal_plan' && brand === 'ironbodyfit' ? IBF_MEAL_PLAN_PRICE : suggestedPrices[p] ?? PACKAGE_META[p].defaultPrice);
   const [editing, setEditing] = useState(!initial.package);
   const [pkg, setPkg] = useState<CrmPackage>(initial.package ?? '6_months');
   // `price` is the price before any discount.
@@ -50,6 +50,13 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
   const [receivedNow, setReceivedNow] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [makeStandard, setMakeStandard] = useState(false);
+  const priceRef = useRef<HTMLInputElement>(null);
+  // A price counts as custom when it isn't the package's standard price or one of its listed options (e.g. Early bird).
+  const isCustomPrice = (p: CrmPackage, amount: number | null) => {
+    const std = priceFor(p);
+    return amount != null && std != null && amount !== std && !(PACKAGE_META[p].prices ?? []).some((o) => o.price === amount);
+  };
 
   const meta = PACKAGE_META[pkg];
   const isMealPlan = meta.kind === 'meal_plan';
@@ -80,6 +87,8 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
     if (!free && discOpen && discMode === 'pct' && dv > 100) { setError("A discount can't be more than 100%."); return; }
     if (!free && discOpen && discMode === 'eur' && dv > list) { setError("The discount can't be more than the price."); return; }
     const n = free ? 0 : finalPrice;
+    const stdPrice = priceFor(pkg);
+    const saveStandard = !free && makeStandard && !(pkg === 'meal_plan' && brand === 'ironbodyfit') && Number.isFinite(list) && list > 0 && list !== stdPrice;
     if (!start) { setError('Pick a start date.'); return; }
     setBusy(true);
     setError(null);
@@ -91,6 +100,12 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
       stage: 'won', lost_reason: null,
     }).eq('id', contactId);
     if (upErr) { setBusy(false); setError("Couldn't save. Try again."); return; }
+
+    // "Make this the new standard price": remember it for the next client who picks this package.
+    if (saveStandard) {
+      const { data: cs } = await supabase.from('coach_settings').select('package_prices').eq('id', 1).maybeSingle();
+      await supabase.from('coach_settings').update({ package_prices: { ...(cs?.package_prices ?? {}), [pkg]: list } }).eq('id', 1);
+    }
 
     // Rebuild the unpaid part of the schedule around what's already paid.
     const { data: existing } = await supabase.from('crm_payments').select('id, amount, paid_on').eq('contact_id', contactId);
@@ -106,13 +121,14 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
     if (rows.length) await supabase.from('crm_payments').insert(rows);
 
     const reason = discReason.trim();
+    const customNote = !free && isCustomPrice(pkg, list) ? ` · custom price (standard ${euro(stdPrice ?? 0)})` : '';
     const discNote = discount > 0 ? ` · ${euro(list)} − ${discMode === 'pct' ? `${dv}%` : euro(discount)} discount${reason ? ` (${reason})` : ''}` : '';
     const how = effectivePlan === 'monthly' && meta.months ? `${meta.months} × ${euro(n / meta.months)} monthly` : 'paid in full';
     await supabase.from('crm_activities').insert({
       contact_id: contactId, kind: 'system',
       body: free
         ? `${initial.package ? 'Package updated' : 'Joined'}: ${packageName(pkg, brand)} · FREE client (no payment, not counted as revenue) · starts ${shortDate(start)}`
-        : `${initial.package ? 'Package updated' : 'Joined'}: ${packageName(pkg, brand)} · ${euro(n)}${discNote} (${how}, ${method.toLowerCase()}) · starts ${shortDate(start)}`,
+        : `${initial.package ? 'Package updated' : 'Joined'}: ${packageName(pkg, brand)} · ${euro(n)}${customNote}${discNote} (${how}, ${method.toLowerCase()}) · starts ${shortDate(start)}`,
       meta: { package: pkg, price: n, list_price: free ? null : list, discount: free ? 0 : discount, discount_reason: free ? null : (reason || null), free, start, plan: free ? 'full' : effectivePlan, method: free ? null : method },
     });
     setBusy(false);
@@ -133,6 +149,7 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
         <div className="min-w-0 flex-1 text-sm">
           <p>
             {initial.isFree ? <b className="text-[#7c5cd6]">Free</b> : <b>{initial.price != null ? euro(initial.price) : '–'}</b>}
+            {!initial.isFree && isCustomPrice(initial.package, initial.listPrice ?? initial.price) && <span className="ml-1.5 rounded-full bg-[#f1ecfc] px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-[#7c5cd6]">Custom</span>}
             {initial.listPrice != null && initial.price != null && initial.listPrice > initial.price && (
               <span className="ml-1 text-neutral-300 line-through">{euro(initial.listPrice)}</span>
             )}
@@ -176,7 +193,7 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
       <div className="grid grid-cols-2 gap-2">
         {!free && <label className="flex flex-col gap-1">
           <span className="text-2xs text-neutral-500">Total price (€)</span>
-          <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(',', '.'))} placeholder="e.g. 900" className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand" />
+          <input ref={priceRef} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(',', '.'))} placeholder="e.g. 900" className="rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-brand" />
         </label>}
         <label className="flex flex-col gap-1">
           <span className="text-2xs text-neutral-500">{isMealPlan ? 'Bought on' : meta.kind === 'challenge' ? 'Challenge starts' : 'Start date'}</span>
@@ -184,19 +201,34 @@ export default function CrmPackageEditor({ contactId, brand, initial, defaultSta
         </label>
       </div>
 
-      {!free && meta.prices && (
-        <div className="flex flex-wrap items-center gap-1.5 -mt-1">
-          <span className="text-2xs text-neutral-500">Price:</span>
-          {meta.prices.map((o) => (
+      {!free && (
+        <div className="flex flex-col gap-2 -mt-1">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-2xs text-neutral-500">Price:</span>
+            {(meta.prices ?? (priceFor(pkg) != null ? [{ label: 'Standard', price: priceFor(pkg)! }] : [])).map((o) => (
+              <button
+                key={o.label}
+                type="button"
+                onClick={() => { setPrice(String(o.price)); setMakeStandard(false); }}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${Number(price) === o.price ? 'border-brand bg-brand text-white' : 'border-border text-neutral-600 hover:border-neutral-300'}`}
+              >
+                {o.label} · {euro(o.price)}
+              </button>
+            ))}
             <button
-              key={o.label}
               type="button"
-              onClick={() => setPrice(String(o.price))}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold ${Number(price) === o.price ? 'border-brand bg-brand text-white' : 'border-border text-neutral-600 hover:border-neutral-300'}`}
+              onClick={() => { setPrice(''); setTimeout(() => priceRef.current?.focus(), 0); }}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${isCustomPrice(pkg, Number.isFinite(list) && price.trim() ? list : null) ? 'border-[#7c5cd6] bg-[#7c5cd6] text-white' : 'border-border text-neutral-600 hover:border-neutral-300'}`}
             >
-              {o.label} · {euro(o.price)}
+              ✎ Custom price
             </button>
-          ))}
+          </div>
+          {isCustomPrice(pkg, Number.isFinite(list) && price.trim() ? list : null) && !(pkg === 'meal_plan' && brand === 'ironbodyfit') && (
+            <label className="flex items-start gap-2 text-2xs text-neutral-600">
+              <input type="checkbox" checked={makeStandard} onChange={(e) => setMakeStandard(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--brand)]" />
+              <span>Only for this client. Tick to make {euro(list)} the new standard price for {packageName(pkg, brand)} instead.</span>
+            </label>
+          )}
         </div>
       )}
 
